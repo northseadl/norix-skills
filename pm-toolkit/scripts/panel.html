@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Toolkit — Preview</title>
+  <style>
+    [data-theme="dark"] {
+      --L0: #0e0d0c;
+      --L1: #181716;
+      --L2: #211f1e;
+      --L3: #2b2928;
+      --L4: #353230;
+      --T1: #f0ece8;
+      --T2: #a8a29e;
+      --T3: #736d67;
+      --A: #d4976a;
+      --Ah: #e0a87c;
+      --As: rgba(212, 151, 106, .10);
+      --G: #7ab87a;
+      --R: #c96b5e;
+      --Rs: rgba(201, 107, 94, .08);
+      --S: 0 2px 12px rgba(0, 0, 0, .35);
+      --mt: dark
+    }
+
+    [data-theme="light"] {
+      --L0: #f5f3f0;
+      --L1: #ece9e5;
+      --L2: #e3e0dc;
+      --L3: #d9d5d0;
+      --L4: #cfcbc5;
+      --T1: #1c1a18;
+      --T2: #5c5550;
+      --T3: #8a837c;
+      --A: #b87a4a;
+      --Ah: #a56a3c;
+      --As: rgba(184, 122, 74, .10);
+      --G: #4a8a4a;
+      --R: #b84a3e;
+      --Rs: rgba(184, 74, 62, .06);
+      --S: 0 2px 12px rgba(0, 0, 0, .08);
+      --mt: default
+    }
+
+    :root {
+      --rs: 12px;
+      --rm: 16px;
+      --rl: 20px;
+      --rx: 24px;
+      --e: cubic-bezier(.4, 0, .2, 1);
+      --d: 160ms;
+      --f: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --m: 'JetBrains Mono', 'SF Mono', Monaco, monospace
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    html,
+    body {
+      height: 100%;
+      font-family: var(--f);
+      background: var(--L0);
+      color: var(--T1);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      transition: background .3s var(--e), color .3s var(--e)
+    }
+
+    ::selection {
+      background: var(--As)
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 8px;
+      gap: 6px
+    }
+
+    .tb {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background: var(--L1);
+      border-radius: var(--rx);
+      min-height: 50px;
+      transition: background .3s var(--e)
+    }
+
+    .tb-l {
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .tb-mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--A);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--L0);
+      font-weight: 700
+    }
+
+    .tb-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--T1)
+    }
+
+    .tb-file {
+      font-size: 12px;
+      color: var(--T2);
+      margin-left: 4px;
+      padding: 2px 8px;
+      background: var(--L2);
+      border-radius: 8px
+    }
+
+    .tb-r {
+      display: flex;
+      align-items: center;
+      gap: 5px
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border: none;
+      border-radius: var(--rs);
+      background: var(--L3);
+      color: var(--T2);
+      font-size: 11.5px;
+      font-family: var(--f);
+      cursor: pointer;
+      transition: all var(--d) var(--e);
+      white-space: nowrap;
+      user-select: none;
+      line-height: 1
+    }
+
+    .btn:hover {
+      background: var(--L4);
+      color: var(--T1)
+    }
+
+    .btn:active {
+      transform: scale(.97)
+    }
+
+    .btn-a {
+      background: var(--A);
+      color: var(--L0);
+      font-weight: 500
+    }
+
+    .btn-a:hover {
+      background: var(--Ah);
+      color: var(--L0)
+    }
+
+    .btn-g {
+      background: transparent;
+      color: var(--T3)
+    }
+
+    .btn-g:hover {
+      background: var(--L2);
+      color: var(--T1)
+    }
+
+    .ct {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      gap: 6px
+    }
+
+    .pv {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      background: var(--L1);
+      border-radius: var(--rx);
+      position: relative;
+      transition: background .3s var(--e)
+    }
+
+    .pv::-webkit-scrollbar {
+      width: 0
+    }
+
+    .sw {
+      display: inline-block;
+      transition: transform .15s ease
+    }
+
+    .sw svg {
+      display: block;
+      max-width: none
+    }
+
+    .es {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--T3);
+      font-size: 13px
+    }
+
+    .es .mk {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--rm);
+      background: var(--L2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 4px
+    }
+
+    .es h3 {
+      font-size: 15px;
+      color: var(--T2);
+      font-weight: 600
+    }
+
+    .es p {
+      max-width: 340px;
+      text-align: center;
+      line-height: 1.6;
+      font-size: 12.5px
+    }
+
+    .eb {
+      padding: 32px;
+      text-align: center
+    }
+
+    .eb-t {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--R);
+      margin-bottom: 8px
+    }
+
+    .eb-b {
+      max-width: 540px;
+      margin: 0 auto;
+      padding: 14px;
+      background: var(--Rs);
+      border-radius: var(--rm);
+      font-family: var(--m);
+      font-size: 11.5px;
+      line-height: 1.55;
+      color: var(--T1);
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-word
+    }
+
+    .ed {
+      width: 0;
+      overflow: hidden;
+      background: var(--L1);
+      border-radius: var(--rx);
+      display: flex;
+      flex-direction: column;
+      transition: width .25s var(--e), background .3s var(--e)
+    }
+
+    .ed.open {
+      width: 400px
+    }
+
+    .ed-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 8px
+    }
+
+    .ed-lb {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--T3)
+    }
+
+    .ed textarea {
+      flex: 1;
+      padding: 0 16px 16px;
+      font-family: var(--m);
+      font-size: 12px;
+      line-height: 1.65;
+      color: var(--T1);
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      tab-size: 2
+    }
+
+    .ed textarea::placeholder {
+      color: var(--T3)
+    }
+
+    .ed textarea::-webkit-scrollbar {
+      width: 0
+    }
+
+    .zb {
+      position: absolute;
+      bottom: 14px;
+      right: 14px;
+      display: flex;
+      gap: 2px;
+      background: var(--L2);
+      border-radius: var(--rs);
+      padding: 3px;
+      box-shadow: var(--S);
+      transition: background .3s var(--e)
+    }
+
+    .zb .btn {
+      background: transparent;
+      padding: 4px 7px;
+      font-size: 12px;
+      border-radius: 8px
+    }
+
+    .zb .btn:hover {
+      background: var(--L3)
+    }
+
+    .zv {
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      font-size: 10px;
+      color: var(--T3);
+      font-family: var(--m);
+      min-width: 38px;
+      justify-content: center
+    }
+
+    .sl {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      height: 30px;
+      font-size: 10.5px;
+      color: var(--T3);
+      background: var(--L1);
+      border-radius: var(--rx);
+      transition: background .3s var(--e)
+    }
+
+    .sl-l,
+    .sl-r {
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .toasts {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 5px
+    }
+
+    .toast {
+      padding: 8px 14px;
+      border-radius: var(--rs);
+      background: var(--L3);
+      color: var(--T1);
+      font-size: 11.5px;
+      box-shadow: var(--S);
+      animation: ti .2s ease-out;
+      transition: all .2s ease
+    }
+
+    .toast.error {
+      background: var(--Rs);
+      border-color: var(--R)
+    }
+
+    .toast.info {
+      background: var(--As);
+      border-color: var(--A)
+    }
+
+    .toast.fade {
+      opacity: 0;
+      transform: translateY(6px)
+    }
+
+    @keyframes ti {
+      from {
+        opacity: 0;
+        transform: translateY(6px)
+      }
+
+      to {
+        opacity: 1
+      }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@latest/style.css" rel="stylesheet">
+</head>
+
+<body>
+  <div class="app">
+    <div class="tb">
+      <div class="tb-l">
+        <div class="tb-mark">P</div>
+        <span class="tb-name">PM Toolkit</span>
+        <span class="tb-file" id="fname">—</span>
+      </div>
+      <div class="tb-r">
+        <button class="btn" id="brefresh" title="重新读取文件">⟳ 刷新</button>
+        <button class="btn" id="bedit" title="编辑源码">✎ 编辑</button>
+        <button class="btn" id="bsvg">↓ SVG</button>
+        <button class="btn" id="bpng">↓ PNG</button>
+        <button class="btn btn-a" id="bcopy">复制源码</button>
+        <button class="btn btn-g" id="btheme" title="切换主题">◐</button>
+      </div>
+    </div>
+    <div class="ct">
+      <div class="pv" id="pv">
+        <div class="es" id="es">
+          <div class="mk">◇</div>
+          <h3>加载中…</h3>
+        </div>
+        <div class="zb">
+          <button class="btn" id="zo">−</button>
+          <span class="zv" id="zl">100%</span>
+          <button class="btn" id="zi">+</button>
+          <button class="btn" id="zr">⟲</button>
+        </div>
+      </div>
+      <div class="ed" id="ed">
+        <div class="ed-top">
+          <span class="ed-lb">Mermaid 源码</span>
+          <div>
+            <button class="btn btn-a" id="bsave">保存</button>
+            <button class="btn btn-g" id="bclose" style="margin-left:4px">✕</button>
+          </div>
+        </div>
+        <textarea id="editor" placeholder="Mermaid 代码…" spellcheck="false"></textarea>
+      </div>
+    </div>
+    <div class="sl">
+      <div class="sl-l"><span id="st">就绪</span></div>
+      <div class="sl-r"><span id="ms"></span><span>Mermaid.js</span></div>
+    </div>
+  </div>
+  <div class="toasts" id="ts"></div>
+
+  <script type="module">
+    const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
+
+    const MIN_ZOOM = 25;
+    const MAX_ZOOM = 300;
+    const ZOOM_STEP = 15;
+    const WHEEL_STEP = 10;
+    const FIT_PADDING = 48;
+    const BEST_FIT_FILL_RATIO = 0.8;
+
+    let curSrc = "", curSvg = "", curFile = "", zoom = 100, edOpen = false, renderN = 0, fitRafId = 0;
+    let baseScale = 1;
+    const $ = (id) => document.getElementById(id);
+    const isDark = () => document.documentElement.getAttribute("data-theme") === "dark";
+    const isSecureClipboard = () => Boolean(navigator.clipboard && window.isSecureContext);
+
+    function getMermaidConfig({ exportSafe = false } = {}) {
+      return {
+        startOnLoad: false,
+        look: "handDrawn",
+        theme: isDark() ? "dark" : "neutral",
+        securityLevel: "loose",
+        fontFamily: exportSafe
+          ? '"PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif'
+          : '"Caveat", "LXGW WenKai", "PingFang SC", system-ui, sans-serif',
+        flowchart: {
+          htmlLabels: false,
+          useMaxWidth: false,
+        },
+      };
+    }
+
+    function initMermaid(options = {}) {
+      mermaid.initialize(getMermaidConfig(options));
+    }
+    initMermaid();
+
+    // Theme
+    const saved = localStorage.getItem("pm-toolkit-theme");
+    if (saved) { document.documentElement.setAttribute("data-theme", saved); initMermaid(); }
+    $("btheme").onclick = () => {
+      const next = isDark() ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("pm-toolkit-theme", next);
+      initMermaid();
+      if (curSrc) render(curSrc, { resetZoom: false });
+    };
+
+    // Toast
+    function toast(msg, level = "success") {
+      const icon = level === "error" ? "✗" : level === "info" ? "◌" : "✓";
+      const t = document.createElement("div");
+      t.className = "toast " + level;
+      t.textContent = icon + " " + msg;
+      $("ts").appendChild(t);
+      setTimeout(() => { t.classList.add("fade"); setTimeout(() => t.remove(), 200); }, 2000);
+    }
+
+    function normalizeError(err) {
+      if (!err) return "未知错误";
+      return String(err.message || err).replace(/\s+/g, " ").trim();
+    }
+
+    function escapeHtml(raw) {
+      return String(raw).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+
+    async function requestJson(url, options = {}) {
+      const response = await fetch(url, { cache: "no-store", ...options });
+      const payload = await response.text();
+      if (!response.ok) throw new Error(payload || "HTTP " + response.status);
+      if (!payload) return {};
+      try {
+        return JSON.parse(payload);
+      } catch (_) {
+        throw new Error("服务端返回了非 JSON 响应");
+      }
+    }
+
+    // Render
+    async function render(src, { resetZoom = false } = {}) {
+      curSvg = "";
+      if (!src.trim()) {
+        showEmpty("空文件");
+        $("ms").textContent = "";
+        $("st").textContent = "空文件";
+        return false;
+      }
+      const t0 = performance.now();
+      try {
+        renderN++;
+        const { svg } = await mermaid.render("d" + renderN, src);
+        curSvg = svg;
+        showSvg(svg, { resetZoom });
+        $("ms").textContent = Math.round(performance.now() - t0) + "ms";
+        $("st").textContent = "渲染成功";
+        return true;
+      } catch (e) {
+        showErr(normalizeError(e));
+        $("ms").textContent = "err";
+        $("st").textContent = "语法错误";
+        return false;
+      }
+    }
+
+    // Display
+    function showSvg(svg, { resetZoom = false } = {}) {
+      $("es").style.display = "none";
+      const pv = $("pv");
+      let w = pv.querySelector(".sw");
+      if (!w) { w = document.createElement("div"); w.className = "sw"; pv.insertBefore(w, pv.querySelector(".zb")); }
+      w.innerHTML = svg;
+      w.style.display = "inline-block";
+      const svgEl = w.querySelector("svg");
+      if (svgEl) normalizeRenderedSvg(svgEl);
+      const eb = pv.querySelector(".eb");
+      if (eb) eb.remove();
+      scheduleFit({ resetZoom });
+    }
+
+    function showErr(msg) {
+      $("es").style.display = "none";
+      const pv = $("pv");
+      const sw = pv.querySelector(".sw");
+      if (sw) sw.style.display = "none";
+      let eb = pv.querySelector(".eb");
+      if (!eb) { eb = document.createElement("div"); eb.className = "eb"; pv.insertBefore(eb, pv.querySelector(".zb")); }
+      eb.innerHTML = '<div class="eb-t">语法错误</div><div class="eb-b">' + escapeHtml(msg) + '</div>';
+    }
+
+    function showEmpty(msg) {
+      const pv = $("pv");
+      const sw = pv.querySelector(".sw");
+      if (sw) sw.style.display = "none";
+      const eb = pv.querySelector(".eb");
+      if (eb) eb.remove();
+      $("es").style.display = "flex";
+      $("es").querySelector("h3").textContent = msg || "加载中…";
+    }
+
+    function parseSvgLength(value) {
+      if (typeof value !== "string") return NaN;
+      const normalized = value.trim();
+      if (!normalized) return NaN;
+      if (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(normalized)) return Number(normalized);
+      if (/^[+-]?(?:\d+\.?\d*|\.\d+)px$/i.test(normalized)) return Number(normalized.slice(0, -2));
+      return NaN;
+    }
+
+    function normalizeRenderedSvg(svgEl) {
+      const size = measureSvg(svgEl);
+      const width = Math.max(1, Math.ceil(size.w || 1));
+      const height = Math.max(1, Math.ceil(size.h || 1));
+
+      svgEl.setAttribute("width", String(width));
+      svgEl.setAttribute("height", String(height));
+      svgEl.style.width = width + "px";
+      svgEl.style.height = height + "px";
+      svgEl.style.maxWidth = "none";
+      svgEl.style.maxHeight = "none";
+      svgEl.style.display = "block";
+    }
+
+    // Measure SVG natural size — handles viewBox, width/height attrs, and getBBox fallback
+    function measureSvg(svgEl) {
+      const vb = svgEl.getAttribute("viewBox");
+      if (vb) {
+        const parts = vb.split(/[\s,]+/).map(Number);
+        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) return { w: parts[2], h: parts[3] };
+      }
+      const aw = parseSvgLength(svgEl.getAttribute("width"));
+      const ah = parseSvgLength(svgEl.getAttribute("height"));
+      if (aw > 0 && ah > 0) return { w: aw, h: ah };
+      const baseW = Number(svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value);
+      const baseH = Number(svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value);
+      if (Number.isFinite(baseW) && Number.isFinite(baseH) && baseW > 0 && baseH > 0) return { w: baseW, h: baseH };
+      try {
+        const bbox = svgEl.getBBox();
+        if (bbox.width > 0 && bbox.height > 0) return { w: bbox.width, h: bbox.height };
+      } catch (_) { /* getBBox may throw if not rendered */ }
+      const rect = svgEl.getBoundingClientRect();
+      return { w: rect.width || 400, h: rect.height || 300 };
+    }
+
+    function measureSvgStatic(svgEl) {
+      const vb = svgEl.getAttribute("viewBox");
+      if (vb) {
+        const parts = vb.split(/[\s,]+/).map(Number);
+        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) return { w: parts[2], h: parts[3] };
+      }
+      const aw = parseSvgLength(svgEl.getAttribute("width"));
+      const ah = parseSvgLength(svgEl.getAttribute("height"));
+      if (aw > 0 && ah > 0) return { w: aw, h: ah };
+      return { w: 1200, h: 800 };
+    }
+
+    function normalizeSvgForExport(rawSvg) {
+      const parsed = new DOMParser().parseFromString(rawSvg, "image/svg+xml");
+      const svgNode = parsed.documentElement;
+      if (!svgNode || svgNode.nodeName.toLowerCase() !== "svg") throw new Error("当前图表 SVG 无效");
+      if (!svgNode.getAttribute("xmlns")) svgNode.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+      const size = measureSvgStatic(svgNode);
+      const width = Math.max(1, Math.ceil(size.w || 1200));
+      const height = Math.max(1, Math.ceil(size.h || 800));
+      svgNode.setAttribute("width", String(width));
+      svgNode.setAttribute("height", String(height));
+      svgNode.style.maxWidth = "none";
+      svgNode.style.maxHeight = "none";
+
+      return {
+        svg: new XMLSerializer().serializeToString(svgNode),
+        size: { w: width, h: height },
+      };
+    }
+
+    function scheduleFit({ resetZoom = false } = {}) {
+      if (fitRafId) cancelAnimationFrame(fitRafId);
+      fitRafId = requestAnimationFrame(async () => {
+        fitRafId = 0;
+        fitToViewport({ resetZoom });
+        if (document.fonts && document.fonts.ready) {
+          try {
+            await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 240))]);
+            fitToViewport({ resetZoom: false });
+          } catch (_) { /* font loading is best-effort */ }
+        }
+      });
+    }
+
+    // Zoom — baseScale auto-calculated so 100% = best-fit(80% fill of viewport)
+    function fitToViewport({ resetZoom = false } = {}) {
+      const pv = $("pv");
+      const w = pv.querySelector(".sw");
+      if (!w || w.style.display === "none") return;
+      const svgEl = w.querySelector("svg");
+      if (!svgEl) return;
+      w.style.transform = "none";
+      const vw = Math.max(0, pv.clientWidth - FIT_PADDING * 2);
+      const vh = Math.max(0, pv.clientHeight - FIT_PADDING * 2);
+      const size = measureSvg(svgEl);
+      if (size.w > 0 && size.h > 0 && vw > 0 && vh > 0) {
+        const fitScale = Math.min(vw / size.w, vh / size.h);
+        baseScale = Math.max(0.01, fitScale * BEST_FIT_FILL_RATIO);
+      } else {
+        baseScale = 1;
+      }
+      if (resetZoom) zoom = 100;
+      applyZoom();
+    }
+
+    function applyZoom() {
+      const w = $("pv").querySelector(".sw");
+      const s = baseScale * zoom / 100;
+      if (w) { w.style.transform = "scale(" + s + ")"; w.style.transformOrigin = "center center"; }
+      $("zl").textContent = zoom + "%";
+    }
+
+    function setZoom(nextZoom) {
+      zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(nextZoom)));
+      applyZoom();
+    }
+
+    $("zi").onclick = () => setZoom(zoom + ZOOM_STEP);
+    $("zo").onclick = () => setZoom(zoom - ZOOM_STEP);
+    $("zr").onclick = () => fitToViewport({ resetZoom: true });
+    $("pv").addEventListener("wheel", (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setZoom(zoom + (e.deltaY < 0 ? WHEEL_STEP : -WHEEL_STEP));
+      }
+    }, { passive: false });
+    window.addEventListener("resize", () => scheduleFit({ resetZoom: false }));
+
+    // Editor
+    $("bedit").onclick = () => {
+      edOpen = !edOpen;
+      $("ed").classList.toggle("open", edOpen);
+      if (edOpen) $("editor").value = curSrc;
+    };
+    $("bclose").onclick = () => { edOpen = false; $("ed").classList.remove("open"); };
+    $("ed").addEventListener("transitionend", (e) => {
+      if (e.propertyName === "width") scheduleFit({ resetZoom: false });
+    });
+
+    // File I/O
+    async function loadFile({ resetZoom = true, silent = false } = {}) {
+      try {
+        const r = await requestJson("/api/read?t=" + Date.now());
+        curFile = r.file || curFile;
+        curSrc = typeof r.source === "string" ? r.source : "";
+        $("fname").textContent = curFile || "—";
+        $("editor").value = curSrc;
+        const renderOk = await render(curSrc, { resetZoom });
+        if (!renderOk && !silent) toast("文件已读取，但语法存在错误", "error");
+        return renderOk;
+      } catch (e) {
+        curSvg = "";
+        showEmpty("无法读取文件");
+        $("st").textContent = "读取失败";
+        $("ms").textContent = "";
+        if (!silent) toast("读取失败：" + normalizeError(e), "error");
+        return false;
+      }
+    }
+    $("brefresh").onclick = async () => {
+      const ok = await loadFile({ resetZoom: true });
+      if (ok) toast("已刷新", "info");
+    };
+
+    $("bsave").onclick = async () => {
+      const src = $("editor").value;
+      try {
+        await requestJson("/api/write", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: src }),
+        });
+        curSrc = src;
+        const ok = await render(curSrc, { resetZoom: false });
+        if (ok) toast("已保存");
+      } catch (e) {
+        $("st").textContent = "保存失败";
+        toast("保存失败：" + normalizeError(e), "error");
+      }
+    };
+
+    // Export
+    function getExportName(ext) {
+      const base = (curFile || "diagram").replace(/[<>:"/\\|?*\x00-\x1f]/g, "-").replace(/\.\w+$/, "") || "diagram";
+      return base + "." + ext;
+    }
+
+    function dl(blob, name) {
+      if (!blob) throw new Error("导出数据为空");
+      const a = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function getSvgMarkup() {
+      return normalizeSvgForExport(curSvg).svg;
+    }
+
+    function isCanvasTaintedError(err) {
+      const msg = normalizeError(err);
+      return /tainted|origin-clean|cross-origin|securityerror/i.test(msg);
+    }
+
+    async function renderExportSafeSvg(source) {
+      if (!source.trim()) throw new Error("源码为空，无法导出 PNG");
+      try {
+        initMermaid({ exportSafe: true });
+        renderN++;
+        const { svg } = await mermaid.render("d" + renderN, source);
+        return normalizeSvgForExport(svg).svg;
+      } finally {
+        initMermaid();
+      }
+    }
+
+    async function rasterizeSvgToPng(svgMarkup) {
+      const { svg, size } = normalizeSvgForExport(svgMarkup);
+      let url = "";
+      try {
+        url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+        const img = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error("浏览器无法解码 SVG"));
+          image.src = url;
+        });
+
+        const scale = 2;
+        const width = Math.max(1, Math.ceil(size.w || 1200));
+        const height = Math.max(1, Math.ceil(size.h || 800));
+        const cv = document.createElement("canvas");
+        cv.width = width * scale;
+        cv.height = height * scale;
+        const ctx = cv.getContext("2d");
+        if (!ctx) throw new Error("无法创建 Canvas 上下文");
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--L1").trim() || "#ffffff";
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        return await new Promise((resolve, reject) => {
+          try {
+            cv.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Canvas 导出失败")), "image/png");
+          } catch (e) {
+            reject(e);
+          }
+        });
+      } finally {
+        if (url) URL.revokeObjectURL(url);
+      }
+    }
+
+    function copyViaExecCommand(text) {
+      const t = document.createElement("textarea");
+      t.value = text;
+      t.setAttribute("readonly", "");
+      t.style.position = "fixed";
+      t.style.opacity = "0";
+      document.body.appendChild(t);
+      t.select();
+      const ok = document.execCommand("copy");
+      t.remove();
+      if (!ok) throw new Error("浏览器拒绝复制");
+    }
+
+    $("bsvg").onclick = () => {
+      if (!curSvg) {
+        toast("SVG 导出失败：当前没有可用图表", "error");
+        return;
+      }
+      try {
+        const svg = getSvgMarkup();
+        dl(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), getExportName("svg"));
+        toast("SVG 已下载");
+      } catch (e) {
+        toast("SVG 导出失败：" + normalizeError(e), "error");
+      }
+    };
+
+    $("bpng").onclick = async () => {
+      if (!curSvg) {
+        toast("PNG 导出失败：当前没有可用图表", "error");
+        return;
+      }
+      try {
+        const pngBlob = await rasterizeSvgToPng(curSvg);
+        dl(pngBlob, getExportName("png"));
+        toast("PNG 已下载");
+      } catch (e) {
+        if (isCanvasTaintedError(e)) {
+          try {
+            toast("检测到画布跨域限制，正在启用兼容导出…", "info");
+            const safeSvg = await renderExportSafeSvg(curSrc);
+            const pngBlob = await rasterizeSvgToPng(safeSvg);
+            dl(pngBlob, getExportName("png"));
+            toast("PNG 已下载（兼容模式）");
+            return;
+          } catch (fallbackErr) {
+            toast("PNG 导出失败：" + normalizeError(fallbackErr), "error");
+            return;
+          }
+        }
+        toast("PNG 导出失败：" + normalizeError(e), "error");
+      }
+    };
+
+    $("bcopy").onclick = async () => {
+      if (!curSrc) {
+        toast("暂无源码可复制", "info");
+        return;
+      }
+      try {
+        if (isSecureClipboard()) {
+          await navigator.clipboard.writeText(curSrc);
+        } else {
+          copyViaExecCommand(curSrc);
+        }
+        toast("已复制");
+      } catch (e) {
+        try {
+          copyViaExecCommand(curSrc);
+          toast("已复制");
+        } catch (_) {
+          toast("复制失败：" + normalizeError(e), "error");
+        }
+      }
+    };
+
+    // Keyboard
+    document.addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && key === "s") { e.preventDefault(); $("bsave").click(); }
+      if ((e.ctrlKey || e.metaKey) && key === "r") { e.preventDefault(); $("brefresh").click(); }
+    });
+
+    // Init
+    loadFile({ resetZoom: true, silent: true });
+  </script>
+</body>
+
+</html>

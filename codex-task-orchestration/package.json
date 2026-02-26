@@ -1,0 +1,19 @@
+{
+    "name": "codex-task-orchestration",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Supervised task orchestration with Codex CLI — local service with real-time dashboard",
+    "bin": {
+        "dispatch": "./scripts/dispatch.mjs"
+    },
+    "scripts": {
+        "dispatch": "node scripts/dispatch.mjs"
+    },
+    "dependencies": {
+        "@openai/codex-sdk": "^0.105.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

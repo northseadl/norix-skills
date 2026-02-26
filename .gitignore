@@ -1,0 +1,23 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Credentials & secrets (NEVER commit these)
+credentials.json
+*.pem
+*.key
+.env
+.env.*
+
+# Feishu local data
+~/.feishu/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+skill-creator/

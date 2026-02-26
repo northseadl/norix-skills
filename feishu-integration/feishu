@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# feishu — Unified CLI for Feishu Integration
+# Usage: ./feishu <module> <command> [options]
+#
+# Modules:
+#   doc      Document & Drive operations (docx.py)
+#   task     Task management (task.py)
+#   wiki     Knowledge base (wiki.py)
+#   bitable  Bitable / 多维表格 (bitable.py)
+#   member   Member directory (members.py)
+#   auth     Authentication (auth.py)
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")/scripts" && pwd)"
+
+module="${1:-help}"; shift 2>/dev/null || true
+
+case "$module" in
+  doc|docx|drive)
+    exec python3 "$SCRIPT_DIR/docx.py" "$@" ;;
+  task)
+    exec python3 "$SCRIPT_DIR/task.py" "$@" ;;
+  wiki)
+    exec python3 "$SCRIPT_DIR/wiki.py" "$@" ;;
+  bitable|base)
+    exec python3 "$SCRIPT_DIR/bitable.py" "$@" ;;
+  member|members)
+    exec python3 "$SCRIPT_DIR/members.py" "$@" ;;
+  auth)
+    exec python3 "$SCRIPT_DIR/auth.py" "$@" ;;
+  help|--help|-h)
+    echo "Usage: feishu <module> <command> [options]"
+    echo ""
+    echo "Modules:"
+    echo "  doc      Documents & Drive (list, search, read-raw, create, trash)"
+    echo "  task     Tasks (create, list, get, update, complete, delete)"
+    echo "  wiki     Knowledge base (space-list, node-list, node-read, tree)"
+    echo "  bitable  多维表格 (list-tables, list-records, export, create-record)"
+    echo "  member   Members (scan, find, list, whoami)"
+    echo "  auth     Authentication (login, relogin, refresh, status)"
+    echo ""
+    echo "Examples:"
+    echo "  feishu doc list"
+    echo "  feishu doc read-raw --name \"数据采集\""
+    echo "  feishu task list --keyword \"project-x\""
+    echo "  feishu wiki node-read --token \"xxx\""
+    echo "  feishu bitable list-records --app-token \"xxx\" --table-id \"yyy\""
+    echo "  feishu member find --name \"张三\""
+    echo "  feishu auth status"
+    ;;
+  *)
+    echo "Unknown module: $module" >&2
+    echo "Run 'feishu help' for usage." >&2
+    exit 1 ;;
+esac

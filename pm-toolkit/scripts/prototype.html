@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PM Toolkit — Prototype</title>
+    <style>
+        [data-theme="dark"] {
+            --L0: #0e0d0c;
+            --L1: #181716;
+            --L2: #211f1e;
+            --L3: #2b2928;
+            --L4: #353230;
+            --T1: #f0ece8;
+            --T2: #a8a29e;
+            --T3: #736d67;
+            --A: #d4976a;
+            --Ah: #e0a87c;
+            --As: rgba(212, 151, 106, .10);
+            --G: #7ab87a;
+            --R: #c96b5e;
+            --Rs: rgba(201, 107, 94, .08);
+            --S: 0 2px 12px rgba(0, 0, 0, .35);
+            --mt: dark
+        }
+
+        [data-theme="light"] {
+            --L0: #f5f3f0;
+            --L1: #ece9e5;
+            --L2: #e3e0dc;
+            --L3: #d9d5d0;
+            --L4: #cfcbc5;
+            --T1: #1c1a18;
+            --T2: #5c5550;
+            --T3: #8a837c;
+            --A: #b87a4a;
+            --Ah: #a56a3c;
+            --As: rgba(184, 122, 74, .10);
+            --G: #4a8a4a;
+            --R: #b84a3e;
+            --Rs: rgba(184, 74, 62, .06);
+            --S: 0 2px 12px rgba(0, 0, 0, .08);
+            --mt: default
+        }
+
+        :root {
+            --rs: 12px;
+            --rm: 16px;
+            --rl: 20px;
+            --rx: 24px;
+            --e: cubic-bezier(.4, 0, .2, 1);
+            --d: 160ms;
+            --f: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            --m: 'JetBrains Mono', 'SF Mono', Monaco, monospace
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: var(--f);
+            background: var(--L0);
+            color: var(--T1);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            transition: background .3s var(--e), color .3s var(--e)
+        }
+
+        ::selection {
+            background: var(--As)
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 8px;
+            gap: 6px
+        }
+
+        /* --- Toolbar (matches panel.html .tb) --- */
+        .tb {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 20px;
+            background: var(--L1);
+            border-radius: var(--rx);
+            min-height: 50px;
+            transition: background .3s var(--e)
+        }
+
+        .tb-l {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .tb-mark {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--A);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            color: var(--L0);
+            font-weight: 700
+        }
+
+        .tb-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--T1)
+        }
+
+        .tb-file {
+            font-size: 12px;
+            color: var(--T2);
+            margin-left: 4px;
+            padding: 2px 8px;
+            background: var(--L2);
+            border-radius: 8px
+        }
+
+        .tb-r {
+            display: flex;
+            align-items: center;
+            gap: 5px
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 7px 14px;
+            border: none;
+            border-radius: var(--rs);
+            background: var(--L3);
+            color: var(--T2);
+            font-size: 11.5px;
+            font-family: var(--f);
+            cursor: pointer;
+            transition: all var(--d) var(--e);
+            white-space: nowrap;
+            user-select: none;
+            line-height: 1
+        }
+
+        .btn:hover {
+            background: var(--L4);
+            color: var(--T1)
+        }
+
+        .btn:active {
+            transform: scale(.97)
+        }
+
+        .btn-a {
+            background: var(--A);
+            color: var(--L0);
+            font-weight: 500
+        }
+
+        .btn-a:hover {
+            background: var(--Ah);
+            color: var(--L0)
+        }
+
+        .btn-g {
+            background: transparent;
+            color: var(--T3)
+        }
+
+        .btn-g:hover {
+            background: var(--L2);
+            color: var(--T1)
+        }
+
+        /* --- Device selector --- */
+        .dv {
+            display: flex;
+            gap: 2px;
+            background: var(--L2);
+            border-radius: var(--rs);
+            padding: 3px;
+            margin-left: 8px
+        }
+
+        .dv .btn {
+            background: transparent;
+            padding: 4px 8px;
+            font-size: 10.5px;
+            border-radius: 8px;
+            color: var(--T3);
+            gap: 4px
+        }
+
+        .dv .btn:hover {
+            color: var(--T1)
+        }
+
+        .dv .btn.on {
+            background: var(--L3);
+            color: var(--T1);
+            font-weight: 500
+        }
+
+        .dv-ic {
+            display: inline-block;
+            border: 1.5px solid currentColor;
+            border-radius: 2px
+        }
+
+        .dv-ic.pc {
+            width: 12px;
+            height: 8px;
+            border-bottom-width: 3px
+        }
+
+        .dv-ic.pad {
+            width: 9px;
+            height: 12px;
+            border-radius: 3px
+        }
+
+        .dv-ic.mob {
+            width: 6px;
+            height: 11px;
+            border-radius: 3px
+        }
+
+        .dim {
+            font-size: 10px;
+            color: var(--T3);
+            font-family: var(--m);
+            margin-left: 6px
+        }
+
+        /* --- Preview (matches panel.html .pv) --- */
+        .pv {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            background: var(--L1);
+            border-radius: var(--rx);
+            position: relative;
+            transition: background .3s var(--e)
+        }
+
+        .pv::-webkit-scrollbar {
+            width: 0
+        }
+
+        .frame {
+            background: #fff;
+            overflow: hidden;
+            flex-shrink: 0;
+            transition: width .3s var(--e), height .3s var(--e);
+            box-shadow: var(--S)
+        }
+
+        .frame.f-pc {
+            border-radius: var(--rs)
+        }
+
+        .frame.f-pad {
+            border-radius: var(--rm);
+            box-shadow: 0 0 0 5px var(--L3), var(--S)
+        }
+
+        .frame.f-mob {
+            border-radius: var(--rl);
+            box-shadow: 0 0 0 7px var(--L3), var(--S)
+        }
+
+        .frame iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block
+        }
+
+        /* --- Empty state (matches panel.html .es) --- */
+        .es {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            color: var(--T3);
+            font-size: 13px
+        }
+
+        .es .mk {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--rm);
+            background: var(--L2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 4px
+        }
+
+        .es h3 {
+            font-size: 15px;
+            color: var(--T2);
+            font-weight: 600
+        }
+
+        .es p {
+            max-width: 340px;
+            text-align: center;
+            line-height: 1.6;
+            font-size: 12.5px
+        }
+
+        /* --- Status bar (matches panel.html .sl) --- */
+        .sl {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            height: 30px;
+            font-size: 10.5px;
+            color: var(--T3);
+            background: var(--L1);
+            border-radius: var(--rx);
+            transition: background .3s var(--e)
+        }
+
+        .sl-l,
+        .sl-r {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        /* --- Toast (matches panel.html) --- */
+        .toasts {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 5px
+        }
+
+        .toast {
+            padding: 8px 14px;
+            border-radius: var(--rs);
+            background: var(--L3);
+            color: var(--T1);
+            font-size: 11.5px;
+            box-shadow: var(--S);
+            animation: ti .2s ease-out;
+            transition: all .2s ease
+        }
+
+        .toast.fade {
+            opacity: 0;
+            transform: translateY(6px)
+        }
+
+        @keyframes ti {
+            from {
+                opacity: 0;
+                transform: translateY(6px)
+            }
+
+            to {
+                opacity: 1
+            }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+
+<body>
+    <div class="app">
+        <div class="tb">
+            <div class="tb-l">
+                <div class="tb-mark">P</div>
+                <span class="tb-name">PM Toolkit</span>
+                <span class="tb-file" id="fname">Prototype</span>
+                <div class="dv" id="dv">
+                    <button class="btn on" data-d="pc"><span class="dv-ic pc"></span> PC</button>
+                    <button class="btn" data-d="pad"><span class="dv-ic pad"></span> Pad</button>
+                    <button class="btn" data-d="mob"><span class="dv-ic mob"></span> Mobile</button>
+                </div>
+                <span class="dim" id="dim">1440 x 900</span>
+            </div>
+            <div class="tb-r">
+                <button class="btn" id="bprev" title="Previous page">&#x2190;</button>
+                <span class="dim" id="pager">0 / 0</span>
+                <button class="btn" id="bnext" title="Next page">&#x2192;</button>
+                <button class="btn" id="brefresh" title="Refresh">&#x27f3; Refresh</button>
+                <button class="btn btn-a" id="bexport">Export ZIP</button>
+                <button class="btn btn-g" id="btheme" title="Toggle theme">&#x25d0;</button>
+            </div>
+        </div>
+        <div class="pv" id="pv">
+            <div class="es" id="es">
+                <div class="mk">&#x25c7;</div>
+                <h3>No prototype pages</h3>
+                <p>Agent writes HTML files to the prototype directory. They appear here automatically.</p>
+            </div>
+            <div class="frame f-pc" id="frame" style="display:none">
+                <iframe id="ifr" sandbox="allow-same-origin allow-scripts"></iframe>
+            </div>
+        </div>
+        <div class="sl">
+            <div class="sl-l"><span id="st">Ready</span></div>
+            <div class="sl-r"><span id="pgname">--</span><span>Prototype Preview</span></div>
+        </div>
+    </div>
+    <div class="toasts" id="ts"></div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+        let pages = [], idx = 0, device = "pc";
+
+        const DEVICES = {
+            pc: { w: 1440, h: 900 },
+            pad: { w: 768, h: 1024 },
+            mob: { w: 375, h: 812 },
+        };
+
+        function toast(msg) {
+            const t = document.createElement("div");
+            t.className = "toast"; t.textContent = msg;
+            $("ts").appendChild(t);
+            setTimeout(() => { t.classList.add("fade"); setTimeout(() => t.remove(), 200); }, 2000);
+        }
+
+        // Theme
+        const saved = localStorage.getItem("pm-toolkit-theme");
+        if (saved) document.documentElement.setAttribute("data-theme", saved);
+        $("btheme").onclick = () => {
+            const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+            document.documentElement.setAttribute("data-theme", next);
+            localStorage.setItem("pm-toolkit-theme", next);
+        };
+
+        // Device
+        function setDevice(d) {
+            device = d;
+            const preset = DEVICES[d];
+            const frame = $("frame");
+            frame.style.width = preset.w + "px";
+            frame.style.height = preset.h + "px";
+            frame.className = "frame f-" + d;
+            $("dim").textContent = preset.w + " x " + preset.h;
+            $("dv").querySelectorAll(".btn").forEach((b) => b.classList.toggle("on", b.dataset.d === d));
+        }
+
+        $("dv").onclick = (e) => {
+            const btn = e.target.closest("[data-d]");
+            if (btn) setDevice(btn.dataset.d);
+        };
+
+        // Pages
+        async function loadPages() {
+            try {
+                const r = await fetch("/api/pages", { cache: "no-store" });
+                const data = await r.json();
+                pages = data.pages || [];
+                if (pages.length > 0) {
+                    if (idx >= pages.length) idx = 0;
+                    showPage(idx);
+                } else {
+                    $("es").style.display = "flex";
+                    $("frame").style.display = "none";
+                }
+                updatePager();
+                $("st").textContent = pages.length + " page(s)";
+            } catch (e) {
+                $("st").textContent = "Error: " + e.message;
+            }
+        }
+
+        function showPage(i) {
+            if (i < 0 || i >= pages.length) return;
+            idx = i;
+            const p = pages[idx];
+            $("ifr").src = "/page/" + encodeURIComponent(p.name) + "?t=" + Date.now();
+            $("frame").style.display = "block";
+            $("es").style.display = "none";
+            $("pgname").textContent = p.name;
+            $("fname").textContent = p.file;
+            updatePager();
+        }
+
+        function updatePager() {
+            $("pager").textContent = pages.length > 0 ? (idx + 1) + " / " + pages.length : "0 / 0";
+        }
+
+        $("bprev").onclick = () => { if (idx > 0) showPage(idx - 1); };
+        $("bnext").onclick = () => { if (idx < pages.length - 1) showPage(idx + 1); };
+
+        $("brefresh").onclick = () => { loadPages(); toast("Refreshed"); };
+
+        // Export
+        $("bexport").onclick = async () => {
+            if (pages.length === 0) { toast("No pages"); return; }
+            $("st").textContent = "Exporting...";
+            const zip = new JSZip();
+            for (const p of pages) {
+                try {
+                    const r = await fetch("/page/" + encodeURIComponent(p.name), { cache: "no-store" });
+                    zip.file(p.file, await r.text());
+                } catch (_) { }
+            }
+            const blob = await zip.generateAsync({ type: "blob" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "prototype-" + new Date().toISOString().slice(0, 10) + ".zip";
+            a.click();
+            URL.revokeObjectURL(a.href);
+            toast("ZIP exported");
+            $("st").textContent = "Ready";
+        };
+
+        // Keyboard
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowLeft") $("bprev").click();
+            if (e.key === "ArrowRight") $("bnext").click();
+            if ((e.ctrlKey || e.metaKey) && e.key === "r") { e.preventDefault(); $("brefresh").click(); }
+        });
+
+        // Init
+        setDevice("pc");
+        loadPages();
+    </script>
+</body>
+
+</html>

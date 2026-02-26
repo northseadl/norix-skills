@@ -1,0 +1,77 @@
+{
+  "skill_name": "feishu-integration",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I just broke down a payment module refactor into 5 subtasks. Create a Feishu tasklist called \"Payment Module Sprint-1\" and add these 5 tasks: 1. Integrate WeChat Pay callback 2. Implement order state machine 3. Add refund unit tests 4. Connect payment notifications 5. Write payment docs. First 3 due March 15, last 2 due March 31.",
+      "expected_output": "Agent uses ./feishu task tasklist-create, then batch-create or sequential create with correct due dates, auto-assign, and Agent origin badge",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I wrote a tech spec at /tmp/recommender_plan.md. Publish it to the 'Engineering Docs' wiki space under 'Architecture' directory. Title: 'Vector Recommendation System v1'.",
+      "expected_output": "Agent uses ./feishu wiki space-list, then wiki create-from-markdown --space-id --title --file",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Show me all incomplete Feishu tasks in a clean markdown format.",
+      "expected_output": "Agent uses ./feishu task list --completed false, parses JSON, formats as markdown",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "The search-service migration task is done. Mark it complete in Feishu and comment that it was finished in commit 2f73249.",
+      "expected_output": "Agent uses ./feishu task list --keyword 'search-service', then comment + complete",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Create a Feishu doc called '2026-Q1 Tech Review' with this content: ## Completed\\n- Payment module refactor\\n- Search service migration\\n## Next Quarter\\n- Recommendation system launch\\n- ES upgrade 8.0",
+      "expected_output": "Agent uses ./feishu doc create, then append-markdown with the content",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "List all my Feishu documents and show me a directory tree of my Drive files.",
+      "expected_output": "Agent uses ./feishu doc list and ./feishu doc tree to show file listing and recursive tree",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Find and read the document about 'data collection' from my Feishu Drive.",
+      "expected_output": "Agent uses ./feishu doc read-raw --name 'data collection' to search and read in one step",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "帮我把飞书里面那些空白的无用文档清理一下，移到回收站。",
+      "expected_output": "Agent uses ./feishu doc list to identify empty/low-value docs, then ./feishu doc trash --token for each. May use read-raw to audit content first.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "我需要把一个任务指派给张三和李四，任务标题是'重构用户认证模块'，截止到下周五。",
+      "expected_output": "Agent uses ./feishu task create --summary '重构用户认证模块' --members '张三,李四' --due <next friday ISO>. Members resolved via member cache.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "Check the wiki space for 'Engineering Docs' and read the first document in it.",
+      "expected_output": "Agent uses ./feishu wiki space-list to find space, wiki node-list to get first node, wiki node-read to read content",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "Read all records from the '需求列表' table in bitable basXXXX and show them in a clean format.",
+      "expected_output": "Agent uses ./feishu bitable list-tables to find table_id, then list-records --json to get data, formats as markdown table",
+      "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "Export the data from bitable basXXXX table '项目跟踪' to a CSV file.",
+      "expected_output": "Agent uses ./feishu bitable list-tables, then export --format csv --output to generate CSV file",
+      "files": []
+    }
+  ]
+}
