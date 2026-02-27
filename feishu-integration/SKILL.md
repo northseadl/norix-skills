@@ -30,39 +30,18 @@ description: |
 
 ### 2. 开通权限
 
-进入应用的 **权限管理** 页面，开通以下用户权限（建议全部勾选）：
-
-| 模块 | 所需权限 |
-|------|---------|
-| 任务 | `task:task:read`, `task:task:write`, `task:comment:write` |
-| 文档 | `docx:document:readonly`, `docx:document` |
-| 云空间 | `drive:drive:readonly`, `drive:drive`, `drive:file:readonly` |
-| 知识库 | `wiki:wiki:readonly`, `wiki:wiki` |
-| 多维表格 | `bitable:app:readonly`, `bitable:app` |
-| 离线续期 | `offline_access` |
-
-> `contact:user.base:readonly` 按需自动增量授权（首次使用 `member` 模块时触发）。
+进入应用的 **权限管理** 页面，**全选开通所有用户权限**。OAuth2 登录时会按需请求实际所需的 scope。
 
 ### 3. 配置安全设置 & 发布
 
 - **安全设置** → 重定向 URL → 添加 `http://localhost:9876/callback`
 - **版本管理** → 创建版本 → 发布上线（仅企业内可见即可）
 
-### 4. 复制凭据 & 设置环境变量
+### 4. 设置凭据 & 登录
 
-```bash
-export FEISHU_APP_ID="cli_xxxxxxxx"      # 应用凭证页面 → App ID
-export FEISHU_APP_SECRET="xxxxxxxx"      # 应用凭证页面 → App Secret
-```
+复制应用凭证页面的 App ID 和 App Secret，直接告诉 Agent 即可完成登录。
 
-> 建议写入 `~/.zshrc` 或 `~/.bashrc` 持久化。
-
-### 5. 执行 OAuth2 登录
-
-```bash
-./feishu auth login      # 自动打开浏览器 → 授权 → token 保存到 ~/.feishu/
-./feishu auth status     # 验证认证状态
-```
+Agent 会自动设置环境变量并执行 `./feishu auth login` 完成 OAuth2 授权。
 
 ### 日常使用
 
