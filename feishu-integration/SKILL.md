@@ -1,6 +1,6 @@
 ---
 name: feishu-integration
-version: 0.0.1
+version: 0.1.0
 description: |
   Feishu (Lark) task, document, wiki, bitable, and Drive management skill.
   Zero-dependency Python scripts operating Feishu Open API via user_access_token.
@@ -22,24 +22,54 @@ description: |
 > Unified CLI: `./feishu <module> <command> [options]`
 > Modules: `doc` | `task` | `wiki` | `bitable` | `member` | `auth`
 
-## Setup (one-time)
+## Setup (首次配置)
+
+### 1. 创建飞书自建应用
+
+打开 [飞书开放平台](https://open.feishu.cn/app)，创建一个**自建应用**。
+
+### 2. 开通权限
+
+进入应用的 **权限管理** 页面，开通以下用户权限（建议全部勾选）：
+
+| 模块 | 所需权限 |
+|------|---------|
+| 任务 | `task:task:read`, `task:task:write`, `task:comment:write` |
+| 文档 | `docx:document:readonly`, `docx:document` |
+| 云空间 | `drive:drive:readonly`, `drive:drive`, `drive:file:readonly` |
+| 知识库 | `wiki:wiki:readonly`, `wiki:wiki` |
+| 多维表格 | `bitable:app:readonly`, `bitable:app` |
+| 离线续期 | `offline_access` |
+
+> `contact:user.base:readonly` 按需自动增量授权（首次使用 `member` 模块时触发）。
+
+### 3. 配置安全设置 & 发布
+
+- **安全设置** → 重定向 URL → 添加 `http://localhost:9876/callback`
+- **版本管理** → 创建版本 → 发布上线（仅企业内可见即可）
+
+### 4. 复制凭据 & 设置环境变量
 
 ```bash
-export FEISHU_APP_ID="cli_xxxxxxxx"
-export FEISHU_APP_SECRET="xxxxxxxx"
-
-./feishu auth login      # Authorize core scopes, token saved to ~/.feishu/
-./feishu auth status     # Check auth state
-./feishu auth refresh    # Refresh expired token
-./feishu auth relogin    # Full re-authorization (after scope changes)
+export FEISHU_APP_ID="cli_xxxxxxxx"      # 应用凭证页面 → App ID
+export FEISHU_APP_SECRET="xxxxxxxx"      # 应用凭证页面 → App Secret
 ```
 
-### Scope Model
+> 建议写入 `~/.zshrc` 或 `~/.bashrc` 持久化。
 
-| Tier | Scopes | When |
-|------|--------|------|
-| **Core** | task / docx / drive / wiki / bitable | Granted at `login` |
-| **Feature** | `contact:user.base:readonly` | On-demand when `member` is first used |
+### 5. 执行 OAuth2 登录
+
+```bash
+./feishu auth login      # 自动打开浏览器 → 授权 → token 保存到 ~/.feishu/
+./feishu auth status     # 验证认证状态
+```
+
+### 日常使用
+
+```bash
+./feishu auth refresh    # Token 过期时刷新（通常自动完成）
+./feishu auth relogin    # 权限变更后重新授权
+```
 
 ---
 
@@ -89,7 +119,7 @@ Cached at `~/.feishu/members.json` (7-day TTL). Auto-scans when stale.
 ```bash
 ./feishu member scan
 ./feishu member list
-./feishu member find --name "Zhang"
+./feishu member find --name "Zhang"      # Substring match on name / en_name
 ./feishu member whoami
 ```
 
@@ -194,16 +224,18 @@ Cached at `~/.feishu/members.json` (7-day TTL). Auto-scans when stale.
 
 ```
 feishu-integration/
-├── feishu                ← Unified CLI entry point
+├── feishu                ← Unified CLI entry point (bash)
 ├── SKILL.md              ← This file
 ├── scripts/
 │   ├── feishu_api.py     ← Core engine (auth + HTTP + retry + pagination)
-│   ├── auth.py           ← OAuth2 (login / refresh / relogin)
-│   ├── task.py           ← Task management
+│   ├── auth.py           ← OAuth2 (login / refresh / relogin / incremental)
+│   ├── task.py           ← Task v2 management
 │   ├── docx.py           ← Document & Drive management
 │   ├── wiki.py           ← Knowledge base
 │   ├── bitable.py        ← Bitable (多维表格)
 │   └── members.py        ← Member directory (scan / cache / resolve)
+├── evals/
+│   └── evals.json        ← Test cases for skill evaluation
 └── references/           ← API docs (for advanced parameters)
     ├── task_api.md
     ├── docx_api.md
@@ -222,6 +254,7 @@ Built-in 429/5xx auto-retry (max 3, exponential backoff). 401 auto-refresh.
 | 100003 | Permission denied | Enable scope in dev console + `./feishu auth relogin` |
 | 99991679 | Scope not authorized | Enable + publish + `./feishu auth relogin` |
 | 99991663 | Token expired | `./feishu auth refresh` |
+| 1470400 | Invalid parameter | Check parameter format (e.g., URL must start with http/https) |
 
 ---
 

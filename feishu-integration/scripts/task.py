@@ -24,7 +24,7 @@ AGENT_SIGNATURE = "[Agent] Automated action"
 AGENT_ORIGIN = {
     "platform_i18n_name": {"zh_cn": "🤖 Agent", "en_us": "🤖 Agent"},
     "href": {
-        "url": "https://github.com/norix",
+        "url": "https://github.com/northseadl/norix-skills",
         "title": "Agent Task",
     },
 }
