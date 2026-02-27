@@ -22,9 +22,9 @@ from members import resolve_members
 AGENT_SIGNATURE = "[Agent] Automated action"
 
 AGENT_ORIGIN = {
-    "platform_i18n_name": {"zh_cn": "Agent", "en_us": "Agent"},
+    "platform_i18n_name": {"zh_cn": "🤖 Agent", "en_us": "🤖 Agent"},
     "href": {
-        "url": "#",
+        "url": "https://github.com/norix",
         "title": "Agent Task",
     },
 }
