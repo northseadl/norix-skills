@@ -54,6 +54,10 @@ export FEISHU_APP_SECRET="xxxxxxxx"
 # CRUD
 ./feishu task get --task-id "guid"
 ./feishu task update --task-id "guid" --summary "New title"
+./feishu task update --task-id "guid" --due "2026-04-15T18:00:00+08:00"
+./feishu task update --task-id "guid" --clear-due          # Remove due date
+./feishu task update --task-id "guid" --start "2026-03-01T09:00:00+08:00"
+./feishu task update --task-id "guid" --clear-start        # Remove start date
 ./feishu task complete --task-id "guid"
 ./feishu task delete --task-id "guid"
 

@@ -54,6 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--task-id", required=True)
     p.add_argument("--summary", default="")
     p.add_argument("--description", default="")
+    p.add_argument("--due", default="", help="截止时间 (ISO 8601)")
+    p.add_argument("--start", default="", help="开始时间 (ISO 8601)")
+    p.add_argument("--clear-due", action="store_true", help="清除截止时间")
+    p.add_argument("--clear-start", action="store_true", help="清除开始时间")
 
     # complete
     p = sub.add_parser("complete", help="完成任务")
@@ -182,6 +186,17 @@ def main():
         if args.description:
             task_body["description"] = args.description
             fields.append("description")
+        if args.due:
+            task_body["due"] = {"timestamp": iso_to_timestamp(args.due)}
+            fields.append("due")
+        elif args.clear_due:
+            # Include "due" in update_fields but omit from task body → clears the field
+            fields.append("due")
+        if args.start:
+            task_body["start"] = {"timestamp": iso_to_timestamp(args.start)}
+            fields.append("start")
+        elif args.clear_start:
+            fields.append("start")
         if not fields:
             Log.error("At least one field to update is required.")
             sys.exit(1)
