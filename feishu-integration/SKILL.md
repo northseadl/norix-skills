@@ -20,191 +20,120 @@ description: |
 # Feishu Integration
 
 > Unified CLI: `./feishu <module> <command> [options]`
-> Modules: `doc` | `task` | `wiki` | `bitable` | `member` | `auth`
+> Full command reference: `references/cli_reference.md`
 
-## Setup (首次配置)
+## First-Use Detection
 
-### 1. 创建飞书自建应用
+Before executing any command, check if `./feishu auth status` reports a valid token.
+If not, guide the user through setup:
 
-打开 [飞书开放平台](https://open.feishu.cn/app)，创建一个**自建应用**。
+1. **Create app**: Direct user to [飞书开放平台](https://open.feishu.cn/app) → create 自建应用
+2. **Enable permissions**: Tell user to 全选开通所有用户权限 in 权限管理
+3. **Security & publish**: Add redirect URL `http://localhost:9876/callback`, then publish
+4. **Credentials & login**: Ask user for App ID and App Secret, then:
+   ```bash
+   export FEISHU_APP_ID="<user_provided>"
+   export FEISHU_APP_SECRET="<user_provided>"
+   ./feishu auth login
+   ```
 
-### 2. 开通权限
+After login succeeds, token auto-refreshes. No further user action needed.
 
-进入应用的 **权限管理** 页面，**全选开通所有用户权限**。OAuth2 登录时会按需请求实际所需的 scope。
+## Intent → Command Mapping
 
-### 3. 配置安全设置 & 发布
+When the user expresses intent, map to the right module and command:
 
-- **安全设置** → 重定向 URL → 添加 `http://localhost:9876/callback`
-- **版本管理** → 创建版本 → 发布上线（仅企业内可见即可）
+### Tasks (任务)
 
-### 4. 设置凭据 & 登录
+| User intent | Command |
+|---|---|
+| "查/看任务", "有什么没完成的" | `task list --completed false` |
+| "建/创建任务" + 标题 | `task create --summary "..." [--due "ISO8601"]` |
+| "指派给 XX" | `task create --members "Name1,Name2"` or `task add-member` |
+| "任务完成了" | Find via `task list --keyword`, then `task complete` |
+| "修改截止时间" / "去掉截止时间" | `task update --due "..."` / `task update --clear-due` |
+| "建任务列表/Sprint" | `task tasklist-create`, then `task batch-create` |
+| "加评论" | `task comment --task-id "..." --content "..."` |
 
-复制应用凭证页面的 App ID 和 App Secret，直接告诉 Agent 即可完成登录。
+### Documents (文档)
 
-Agent 会自动设置环境变量并执行 `./feishu auth login` 完成 OAuth2 授权。
+| User intent | Command |
+|---|---|
+| "看看我的文档/文件" | `doc list` or `doc tree` (tree for overview) |
+| "找/读某个文档" | `doc read-raw --name "keyword"` (search + read in one step) |
+| "写个文档" / "从 MD 创建" | `doc create` or `doc create-from-markdown --file path.md` |
+| "往文档里追加内容" | `doc append-markdown --document-id "..." --file content.md` |
+| "清理无用文档" | `doc list` → identify → `doc trash --token "..."` |
+| "共享文件夹" | `doc shared-add --url "..."` (user must provide URL) |
 
-### 日常使用
+### Wiki (知识库)
 
-```bash
-./feishu auth refresh    # Token 过期时刷新（通常自动完成）
-./feishu auth relogin    # 权限变更后重新授权
-```
+| User intent | Command |
+|---|---|
+| "看知识库/空间" | `wiki space-list`, then `wiki tree --space-id "..."` |
+| "读 wiki 页面" | `wiki node-read --token "..."` |
+| "把方案发到 wiki" | `wiki create-from-markdown --space-id "..." --file path.md` |
 
----
+### Bitable (多维表格)
 
-## Task Management
+| User intent | Command |
+|---|---|
+| "看表格数据" | `bitable list-tables` → `bitable list-records --json` |
+| "导出数据" | `bitable export --format csv --output path.csv` |
+| "写入/更新记录" | `bitable create-record` or `bitable update-record` |
+| "批量操作" | `bitable batch-create --file records.json` (auto-chunks at 500) |
 
-```bash
-# Create (auto-assigns current user)
-./feishu task create --summary "Implement payment callback" --due "2026-03-15T18:00:00+08:00"
-./feishu task create --summary "Unassigned task" --no-assign
-./feishu task create --summary "Assign by name" --members "Zhang,Li"
+### Members (成员)
 
-# CRUD
-./feishu task get --task-id "guid"
-./feishu task update --task-id "guid" --summary "New title"
-./feishu task update --task-id "guid" --due "2026-04-15T18:00:00+08:00"
-./feishu task update --task-id "guid" --clear-due          # Remove due date
-./feishu task update --task-id "guid" --start "2026-03-01T09:00:00+08:00"
-./feishu task update --task-id "guid" --clear-start        # Remove start date
-./feishu task complete --task-id "guid"
-./feishu task delete --task-id "guid"
+| User intent | Command |
+|---|---|
+| "找人 / 查成员" | `member find --name "keyword"` (substring match) |
+| "我是谁" | `member whoami` |
 
-# List & search
-./feishu task list --completed false
-./feishu task list --keyword "project-x"
+## Output Formatting
 
-# Comments
-./feishu task comment --task-id "guid" --content "Done"
-./feishu task comment-list --task-id "guid"
+Raw CLI output is JSON. Always transform for the user:
 
-# Members
-./feishu task add-member --task-id "guid" --member-id "ou_xxx"
-./feishu task remove-member --task-id "guid" --member-id "ou_xxx"
+- **Task list** → Markdown table with columns: 状态, 标题, 截止时间, 负责人
+- **Document list** → Numbered list with name, type, date
+- **Bitable records** → Markdown table matching field names
+- **Member lookup** → Inline: "张三 → ou_xxxxx"
+- **Single task/doc created** → Confirm with title and link (from `url` field)
 
-# Tasklist & sections
-./feishu task tasklist-create --name "Sprint Q1"
-./feishu task tasklist-list
-./feishu task tasklist-add-task --tasklist-id "xxx" --task-id "yyy"
-./feishu task batch-create --file tasks.json --tasklist-id "xxx"
-```
+When the JSON response contains a `url` field, always include it as a clickable link.
 
----
+## Error Recovery
 
-## Member Directory
+| Situation | Agent action |
+|---|---|
+| Token expired (99991663) | Auto-handled by engine. If persists: `./feishu auth refresh` |
+| Scope not authorized (99991679) | Auto-handled by incremental auth. If persists: `./feishu auth relogin` |
+| Permission denied (100003) | Tell user to enable scope in dev console, then `./feishu auth relogin` |
+| Invalid parameter (1470400) | Check parameter format — URLs must start with `http://`/`https://` |
+| Member not found | Try `member scan` to refresh cache, retry with shorter keyword |
+| No credentials | Trigger First-Use Detection flow (see above) |
 
-Cached at `~/.feishu/members.json` (7-day TTL). Auto-scans when stale.
+## Member Resolution
 
-```bash
-./feishu member scan
-./feishu member list
-./feishu member find --name "Zhang"      # Substring match on name / en_name
-./feishu member whoami
-```
+When a command needs a member (e.g., `--members "张三"`), the skill resolves names to `open_id` automatically via local cache (`~/.feishu/members.json`, 7-day TTL). The matching is **substring-based** on both `name` and `en_name` fields.
 
-> Requires `contact:user.base:readonly` — auto-prompted on first use.
+If resolution fails, run `./feishu member scan` to refresh cache, then retry.
 
----
+## Key Behaviors
 
-## Document & Drive
-
-```bash
-# Browse files
-./feishu doc list                                # All root files
-./feishu doc list --type docx                    # Filter by type
-./feishu doc list --folder "folder_token"        # List subfolder
-./feishu doc list --shared                       # List cached shared folders
-./feishu doc tree                                # Recursive directory tree
-./feishu doc tree --depth 3                      # Deeper traversal
-./feishu doc tree --shared                       # Tree of all cached shared folders
-./feishu doc search --name "Technical Spec"      # Search by name
-
-# Shared folders (Feishu API cannot discover these — must provide URL)
-./feishu doc shared-add --url "https://xxx.feishu.cn/drive/folder/TOKEN"
-./feishu doc shared-list                         # List cached shared folders
-./feishu doc shared-remove --token "TOKEN"       # Remove one
-./feishu doc shared-remove --all                 # Remove all
-
-# Read
-./feishu doc read-raw --name "Data Collection"   # Find by name + read (recommended)
-./feishu doc read-raw --document-id "token"      # Direct read by token
-./feishu doc read-text --document-id "token"     # Markdown-formatted output
-
-# Create
-./feishu doc create --title "Technical Spec"
-./feishu doc create-from-markdown --title "Plan v1" --file plan.md
-
-# Write
-./feishu doc append-text --document-id "token" --text "Paragraph"
-./feishu doc append-heading --document-id "token" --text "Title" --level 2
-./feishu doc append-code --document-id "token" --code 'print("hi")' --language python
-./feishu doc append-markdown --document-id "token" --file content.md
-
-# Cleanup (moves to _trash folder, user deletes manually in Feishu UI)
-./feishu doc trash --token "file_token"
-./feishu doc trash --token "sheet_token" --type sheet
-```
-
----
-
-## Wiki (Knowledge Base)
-
-```bash
-./feishu wiki space-list
-./feishu wiki space-create --name "Engineering Docs"
-./feishu wiki node-list --space-id "xxxx"
-./feishu wiki node-create --space-id "xxxx" --obj-type docx --title "API Spec"
-./feishu wiki node-read --token "node_token"     # Read wiki page content
-./feishu wiki tree --space-id "xxxx"              # Recursive directory tree
-./feishu wiki tree --space-id "xxxx" --depth 5    # Deeper traversal
-./feishu wiki node-update --space-id "xxxx" --node-token "xxx" --title "New Title"
-./feishu wiki node-move --space-id "xxxx" --node-token "xxx" --target-parent-token "yyy"
-./feishu wiki create-from-markdown --space-id "xxxx" --title "Spec" --file plan.md
-```
-
----
-
-## Bitable (多维表格)
-
-```bash
-# Browse structure
-./feishu bitable get-app --app-token "basXXX"              # App metadata
-./feishu bitable list-tables --app-token "basXXX"           # List data tables
-./feishu bitable list-fields --app-token "basXXX" --table-id "tblXXX"  # Schema
-
-# Read records
-./feishu bitable list-records --app-token "basXXX" --table-id "tblXXX"
-./feishu bitable list-records --app-token "basXXX" --table-id "tblXXX" --json
-./feishu bitable get-record --app-token "basXXX" --table-id "tblXXX" --record-id "recXXX"
-
-# Write records
-./feishu bitable create-record --app-token "basXXX" --table-id "tblXXX" --fields '{"标题": "Bug report"}'
-./feishu bitable update-record --app-token "basXXX" --table-id "tblXXX" --record-id "recXXX" --fields '{"状态": "Fixed"}'
-./feishu bitable delete-record --app-token "basXXX" --table-id "tblXXX" --record-id "recXXX"
-
-# Batch operations (max 500/batch, auto-chunked)
-./feishu bitable batch-create --app-token "basXXX" --table-id "tblXXX" --file records.json
-./feishu bitable batch-update --app-token "basXXX" --table-id "tblXXX" --file updates.json
-./feishu bitable batch-delete --app-token "basXXX" --table-id "tblXXX" --record-ids "rec1,rec2,rec3"
-
-# Export
-./feishu bitable export --app-token "basXXX" --table-id "tblXXX" --format json --output data.json
-./feishu bitable export --app-token "basXXX" --table-id "tblXXX" --format csv --output data.csv
-
-# Create structure
-./feishu bitable create-app --name "Bug Tracker"
-./feishu bitable create-table --app-token "basXXX" --name "Bugs"
-./feishu bitable create-field --app-token "basXXX" --table-id "tblXXX" --name "Priority" --type 3
-```
-
----
+- **Auto-assign**: `task create` automatically assigns the current user unless `--no-assign` is specified
+- **Agent origin badge**: All created tasks show "🤖 Agent" origin in Feishu UI
+- **Date clearing**: To remove a due/start date, use `--clear-due` / `--clear-start` (not timestamp=0)
+- **Shared folders**: Feishu API cannot discover shared folders. User must provide the folder URL via `doc shared-add`
+- **Batch size**: Bitable batch operations auto-chunk at 500 records
+- **Retry**: Built-in 429/5xx auto-retry (max 3, exponential backoff)
 
 ## Structure
 
 ```
 feishu-integration/
 ├── feishu                ← Unified CLI entry point (bash)
-├── SKILL.md              ← This file
+├── SKILL.md              ← This file (Agent execution standard)
 ├── scripts/
 │   ├── feishu_api.py     ← Core engine (auth + HTTP + retry + pagination)
 │   ├── auth.py           ← OAuth2 (login / refresh / relogin / incremental)
@@ -215,47 +144,10 @@ feishu-integration/
 │   └── members.py        ← Member directory (scan / cache / resolve)
 ├── evals/
 │   └── evals.json        ← Test cases for skill evaluation
-└── references/           ← API docs (for advanced parameters)
-    ├── task_api.md
-    ├── docx_api.md
-    ├── wiki_api.md
-    └── bitable_api.md
-```
-
----
-
-## Error Handling
-
-Built-in 429/5xx auto-retry (max 3, exponential backoff). 401 auto-refresh.
-
-| code | Meaning | Fix |
-|------|---------|-----|
-| 100003 | Permission denied | Enable scope in dev console + `./feishu auth relogin` |
-| 99991679 | Scope not authorized | Enable + publish + `./feishu auth relogin` |
-| 99991663 | Token expired | `./feishu auth refresh` |
-| 1470400 | Invalid parameter | Check parameter format (e.g., URL must start with http/https) |
-
----
-
-## Common Workflows
-
-### Sprint Planning
-```bash
-TASKLIST=$(./feishu task tasklist-create --name "Sprint-1" | jq -r '.data.tasklist.guid')
-./feishu task batch-create --file tasks.json --tasklist-id "$TASKLIST"
-```
-
-### Technical Spec to Wiki
-```bash
-./feishu wiki create-from-markdown --space-id "$SPACE" --title "Spec" --file plan.md
-```
-
-### Export Bitable to CSV
-```bash
-./feishu bitable export --app-token "basXXX" --table-id "tblXXX" --format csv --output report.csv
-```
-
-### Daily Standup
-```bash
-./feishu task list --completed false
+└── references/
+    ├── cli_reference.md  ← Full command parameter reference
+    ├── task_api.md       ← Task v2 API details
+    ├── docx_api.md       ← Document API details
+    ├── wiki_api.md       ← Wiki API details
+    └── bitable_api.md    ← Bitable API details
 ```
