@@ -113,7 +113,18 @@ class FeishuClient:
             return token
 
         Log.error("No user_access_token found.")
-        Log.error("  Run: ./feishu auth login")
+        Log.error("")
+        Log.error("  首次使用? 请按以下步骤配置:")
+        Log.error("  ─────────────────────────────────────")
+        Log.error("  1. 打开 https://open.feishu.cn/app → 创建自建应用")
+        Log.error("  2. 复制 App ID 和 App Secret")
+        Log.error("  3. 设置环境变量:")
+        Log.error('     export FEISHU_APP_ID="cli_xxxxxxxx"')
+        Log.error('     export FEISHU_APP_SECRET="xxxxxxxx"')
+        Log.error("  4. 执行登录:")
+        Log.error("     ./feishu auth login")
+        Log.error("")
+        Log.error("  已配置过? 检查状态: ./feishu auth status")
         sys.exit(1)
 
     @property
