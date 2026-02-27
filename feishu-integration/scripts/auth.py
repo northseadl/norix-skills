@@ -7,6 +7,7 @@ Usage via unified CLI:
   ./feishu auth refresh        # Refresh an expired token
   ./feishu auth status         # Check current token status
   ./feishu auth tenant         # Get tenant_access_token
+  ./feishu auth clean          # Delete all stored credentials (~/.feishu/)
 """
 
 import http.server
@@ -21,7 +22,7 @@ import urllib.request
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
-from feishu_api import API_BASE, CREDENTIALS_FILE, Log
+from feishu_api import API_BASE, CREDENTIALS_FILE, DATA_DIR, Log, safe_clean
 
 OAUTH_REDIRECT_PORT = int(os.environ.get("OAUTH_REDIRECT_PORT", "9876"))
 OAUTH_REDIRECT_URI = f"http://localhost:{OAUTH_REDIRECT_PORT}/callback"
@@ -518,6 +519,13 @@ def cmd_relogin():
     _open_browser_and_exchange(app_id, app_secret, ALL_SCOPES)
 
 
+# ─── Safe Data Cleanup ───────────────────────────────────────────────────────
+
+def cmd_clean():
+    """Safely delete ~/.feishu/ with multi-layer validation."""
+    safe_clean(DATA_DIR, "feishu")
+
+
 # ─── CLI Router ──────────────────────────────────────────────────────────────
 
 def main():
@@ -528,6 +536,7 @@ def main():
         "refresh": cmd_refresh,
         "status": cmd_status,
         "tenant": cmd_tenant,
+        "clean": cmd_clean,
     }
 
     if len(sys.argv) < 2 or sys.argv[1] not in commands:
@@ -540,6 +549,7 @@ def main():
         print("  refresh          刷新过期 token")
         print("  status           查看认证状态")
         print("  tenant           获取应用 token")
+        print("  clean            清理所有凭据数据 (~/.feishu/)")
         sys.exit(0)
 
     commands[sys.argv[1]]()

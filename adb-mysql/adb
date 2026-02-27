@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# adb — Unified CLI for ADB Analytics
+# Usage: ./adb <module> <command> [options]
+#
+# Modules:
+#   config   Connection profile management
+#   query    Read-only SQL execution
+#   analyze  Data analysis with cross-validation
+#   schema   Schema documentation generator
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")/scripts" && pwd)"
+
+module="${1:-help}"; shift 2>/dev/null || true
+
+case "$module" in
+  config)
+    python3 "$SCRIPT_DIR/config.py" "$@"
+    ;;
+  query)
+    python3 "$SCRIPT_DIR/query.py" "$@"
+    ;;
+  analyze)
+    python3 "$SCRIPT_DIR/analyze.py" "$@"
+    ;;
+  schema)
+    python3 "$SCRIPT_DIR/schema.py" "$@"
+    ;;
+  help|--help|-h)
+    echo "ADB Analytics — AnalyticDB for MySQL 数据分析技能"
+    echo ""
+    echo "用法: ./adb <module> [command] [options]"
+    echo ""
+    echo "模块:"
+    echo "  config   连接配置管理 (add|list|use|test|remove|clean)"
+    echo "  query    SQL 查询 (只读，自动限制 200 条)"
+    echo "  analyze  数据分析 (计数|聚合|时间序列 + 交叉验证)"
+    echo "  schema   Schema 文档生成"
+    echo ""
+    echo "快速开始:"
+    echo "  pip install pymysql"
+    echo "  ./adb config add prod --host xxx.dms.aliyuncs.com --user id --password secret --database mydb --test"
+    echo "  ./adb query \"SELECT * FROM users LIMIT 10\""
+    echo "  ./adb analyze -t orders -c"
+    echo "  ./adb schema mydb"
+    ;;
+  *)
+    echo "未知模块: $module"
+    echo "运行 ./adb help 查看可用模块"
+    exit 1
+    ;;
+esac

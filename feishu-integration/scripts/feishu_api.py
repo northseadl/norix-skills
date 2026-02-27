@@ -8,6 +8,7 @@ Import this module from other scripts: `from feishu_api import FeishuClient`
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import urllib.error
@@ -341,3 +342,73 @@ def pretty_json(data: Any) -> str:
 def output(data: Any):
     """Print JSON response to stdout."""
     print(pretty_json(data))
+
+
+# ─── Safe Data Cleanup ────────────────────────────────────────────────────────
+
+# Data directory derived from CREDENTIALS_FILE path
+DATA_DIR = os.path.dirname(CREDENTIALS_FILE)
+
+_PROTECTED_DIRS = frozenset({
+    ".ssh", ".gnupg", ".gpg", ".config", ".local", ".cache",
+    ".npm", ".nvm", ".pyenv", ".rbenv", ".rustup", ".cargo",
+    ".docker", ".kube", ".git", ".vim", ".vscode",
+    ".zshrc", ".bashrc", ".profile", ".bash_profile",
+})
+
+def safe_clean(data_dir: str, skill_name: str):
+    """Delete a skill's data directory with multi-layer safety validation.
+
+    Layers: realpath resolve → $HOME direct child → hidden dir → blacklist → double confirm.
+    """
+    home = os.path.expanduser("~")
+    real_path = os.path.realpath(data_dir)
+
+    if not real_path.startswith(home + os.sep):
+        Log.error(f"安全拒绝: 数据目录不在用户主目录下 ({real_path})")
+        sys.exit(1)
+
+    if os.path.dirname(real_path) != home:
+        Log.error(f"安全拒绝: 仅允许删除 $HOME 下的直接子目录 ({real_path})")
+        sys.exit(1)
+
+    basename = os.path.basename(real_path)
+    if not basename.startswith("."):
+        Log.error(f"安全拒绝: 仅允许删除隐藏目录 ({basename})")
+        sys.exit(1)
+
+    if basename in _PROTECTED_DIRS:
+        Log.error(f"安全拒绝: {basename} 是受保护的系统目录")
+        sys.exit(1)
+
+    if not os.path.isdir(real_path):
+        Log.info(f"数据目录不存在，无需清理: {real_path}")
+        return
+
+    if os.path.islink(data_dir):
+        Log.warn(f"数据目录是符号链接 → {real_path}")
+
+    file_count = sum(len(files) for _, _, files in os.walk(real_path))
+    Log.warn(f"即将删除 {skill_name} 数据目录:")
+    Log.warn(f"  路径: {real_path}")
+    Log.warn(f"  文件数: {file_count}")
+
+    try:
+        confirm1 = input(f"  确认删除? 输入 '{skill_name}' 确认: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        confirm1 = ""
+    if confirm1 != skill_name:
+        Log.info("已取消")
+        return
+
+    try:
+        confirm2 = input("  二次确认: 此操作不可恢复，继续? [y/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        confirm2 = ""
+    if confirm2 != "y":
+        Log.info("已取消")
+        return
+
+    shutil.rmtree(real_path)
+    Log.ok(f"已删除: {real_path}")
+
