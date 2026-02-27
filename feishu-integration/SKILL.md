@@ -1,6 +1,6 @@
 ---
 name: feishu-integration
-version: 0.1.0
+version: 0.1.1
 description: |
   Feishu (Lark) task, document, wiki, bitable, and Drive management skill.
   Zero-dependency Python scripts operating Feishu Open API via user_access_token.
@@ -145,9 +145,5 @@ feishu-integration/
 ├── evals/
 │   └── evals.json        ← Test cases for skill evaluation
 └── references/
-    ├── cli_reference.md  ← Full command parameter reference
-    ├── task_api.md       ← Task v2 API details
-    ├── docx_api.md       ← Document API details
-    ├── wiki_api.md       ← Wiki API details
-    └── bitable_api.md    ← Bitable API details
+    └── cli_reference.md  ← Full command parameter reference
 ```

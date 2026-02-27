@@ -277,11 +277,12 @@ def main():
         output(client.get(f"/task/v2/tasklists/{args.tasklist_id}"))
 
     elif args.command == "tasklist-add-task":
-        output(client.post(
-            f"/task/v2/tasklists/{args.tasklist_id}/add_members",
-            {"task_guid": args.task_id},
-        ))
-        Log.ok(f"Task {args.task_id} added to tasklist.")
+        result = client.post(
+            f"/task/v2/tasks/{args.task_id}/add_tasklist",
+            {"tasklist_guid": args.tasklist_id},
+        )
+        output(result)
+        Log.ok(f"Task {args.task_id} added to tasklist {args.tasklist_id}.")
 
     # ── Section ───────────────────────────────────────────────────────────
 
