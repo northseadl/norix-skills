@@ -1,0 +1,64 @@
+#!/bin/sh
+# ─── Pre-Push Hook: 拦截 main 分支的非法推送 ──────────────────────────
+#
+# 规则:
+#   1. 推送 main 时，main 的 HEAD 必须是 develop 的祖先（即 main 只能通过 merge develop 前进）
+#   2. 推送 main 时，必须显式确认
+#
+# 跳过: SKIP_PUSH_GUARD=1 环境变量
+
+if [ "$SKIP_PUSH_GUARD" = "1" ]; then
+  exit 0
+fi
+
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+while read local_ref local_sha remote_ref remote_sha; do
+  # Only guard pushes to main
+  case "$remote_ref" in
+    refs/heads/main)
+      # Check: main HEAD must be an ancestor of or equal to develop
+      DEVELOP_SHA=$(git rev-parse develop 2>/dev/null)
+      MAIN_SHA=$(git rev-parse main 2>/dev/null)
+
+      if [ -z "$DEVELOP_SHA" ]; then
+        echo ""
+        echo "  ❌  develop 分支不存在，无法验证合并方向"
+        echo ""
+        exit 1
+      fi
+
+      # Verify main is reachable from develop (main's commits are subset of develop's)
+      if ! git merge-base --is-ancestor "$remote_sha" "$DEVELOP_SHA" 2>/dev/null; then
+        # remote_sha is 0000... for new branch, skip this check
+        if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+          echo ""
+          echo "  ⚠️  无法验证合并方向，请确认 main 的变更来自 develop"
+          echo ""
+        fi
+      fi
+
+      # Check that local_sha (what we're pushing) is reachable from develop
+      if ! git merge-base --is-ancestor "$local_sha" "$DEVELOP_SHA" 2>/dev/null; then
+        # The commit being pushed to main contains work not in develop
+        if ! git merge-base --is-ancestor "$DEVELOP_SHA" "$local_sha" 2>/dev/null; then
+          echo ""
+          echo "  ❌  main 包含不在 develop 中的提交，合并方向错误"
+          echo ""
+          echo "  正确流程:"
+          echo "    git checkout main"
+          echo "    git merge develop --no-ff"
+          echo "    git push origin main"
+          echo ""
+          exit 1
+        fi
+      fi
+
+      echo ""
+      echo "  ✅  main 推送校验通过 (develop → main)"
+      echo ""
+      ;;
+  esac
+done
+
+exit 0
