@@ -13,23 +13,38 @@ Norix Skills 是 AI Agent 即插即用技能集合，包含两个关联仓库：
 
 ---
 
-## 分支规范
+## 分支规范（⚠️ 严格执行）
 
-| 分支 | 用途 | CI 触发 | 保护规则 |
-|------|------|---------|---------|
-| `main` | 线上稳定版本 | ✅ 自动部署 | 仅通过 PR 合并，禁止直接 push |
-| `develop` | 日常开发 | ❌ 不触发 | 自由 push |
+| 分支 | 用途 | 保护规则 |
+|------|------|---------|
+| `main` | 稳定/发布分支 | **禁止直接 commit 和 push**，仅接受 develop → main 的 `--no-ff` 合并 |
+| `develop` | 日常开发 | 自由 commit 和 push |
 
-### 合并流程
+### 合并方向（不可逆）
 
 ```
-develop → (PR) → main → 自动部署
+develop → main    ✅ 唯一允许的方向
+main → develop    ❌ 绝对禁止
 ```
 
-1. 所有开发工作在 `develop` 分支进行
-2. 功能完成后创建 PR 合并到 `main`
-3. PR 标题遵循 Conventional Commits（见下方）
-4. `main` 合并后自动触发 CI 部署
+### Agent 操作铁律
+
+1. **永远在 develop 分支上工作**
+2. **push 只推 develop**: `git push origin develop`
+3. **禁止** `git push origin develop main`（不要在 push 中附带 main）
+4. **发布到 main 的标准流程**:
+   ```bash
+   git push origin develop
+   git checkout main
+   git merge develop --no-ff -m "merge: develop → main (描述)"
+   git push origin main
+   git checkout develop
+   ```
+
+### Git Hooks 防护
+
+仓库通过 `.githooks/` 提供自动化防护（`pre-commit` + `pre-push`）。
+克隆后需执行: `git config core.hooksPath .githooks`
 
 ### 提交信息规范
 
@@ -47,6 +62,7 @@ develop → (PR) → main → 自动部署
 | `docs` | 文档更新 |
 | `ci` | CI/CD 配置 |
 | `chore` | 依赖、配置等杂项 |
+| `merge` | develop → main 合并 |
 
 ---
 
