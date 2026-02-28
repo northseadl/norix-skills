@@ -46,7 +46,7 @@
         {
             "id": 8,
             "prompt": "把这个 PRD 拆成独立的开发任务，然后用 Codex 并行执行",
-            "expected_output": "应触发 codex-task-orchestration 而非 agent-brainstorm",
+            "expected_output": "应触发 agent-task-orchestration 而非 agent-brainstorm",
             "should_trigger": false
         },
         {

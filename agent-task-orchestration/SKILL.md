@@ -1,5 +1,5 @@
 ---
-name: codex-task-orchestration
+name: agent-task-orchestration
 version: 0.0.2
 description: |
   Supervised task decomposition and multi-agent development orchestration using Codex SDK or Claude Agent SDK.
@@ -132,7 +132,7 @@ T3 + T4        ──→ T5 (集成测试)
 
 ```bash
 # 首次安装依赖
-cd <SKILLS_DIR>/codex-task-orchestration && npm install
+cd <SKILLS_DIR>/agent-task-orchestration && npm install
 
 # 预览执行计划（不实际调度）
 node scripts/dispatch.mjs ./tasks/ --dry-run

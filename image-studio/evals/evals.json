@@ -1,0 +1,23 @@
+{
+    "skill_name": "image-studio",
+    "evals": [
+        {
+            "id": 1,
+            "prompt": "帮我生成一张白底的商品主图，产品是一个黑色真皮手提包，要求高端大气",
+            "expected_output": "Should use generate with --template hero, produce a professional product image with white background",
+            "files": []
+        },
+        {
+            "id": 2,
+            "prompt": "I have a product photo but the background is messy. Can you clean it up and put it on a pure white background for my Shopify store?",
+            "expected_output": "Should use refine with --template bg-white on the user's image file",
+            "files": []
+        },
+        {
+            "id": 3,
+            "prompt": "我需要做一批电商详情页的图片，包括主图、细节图、和一张16:9的Banner，产品是一款蓝牙耳机",
+            "expected_output": "Should run multiple generate commands with different templates (hero, detail, banner) for the bluetooth earbuds",
+            "files": []
+        }
+    ]
+}

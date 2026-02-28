@@ -21,7 +21,7 @@
 
 ```bash
 # 安装依赖
-cd codex-task-orchestration && npm install
+cd agent-task-orchestration && npm install
 
 # 预览执行计划（不实际调度）
 node scripts/dispatch.mjs ./tasks/ --dry-run
@@ -41,7 +41,7 @@ cat ./tasks/.dispatch-logs/{runId}/status.txt
 ## 架构
 
 ```
-codex-task-orchestration/
+agent-task-orchestration/
 ├── SKILL.md                Agent 入口 — 五阶段工作流详细指令
 ├── README.md               人类文档 (本文件)
 ├── package.json            Node.js 依赖 (@openai/codex-sdk)

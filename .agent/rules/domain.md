@@ -16,7 +16,7 @@ norix-skills/
 │   ├── scripts/serve.js        # 单文件 HTTP server（/api/read, /api/write）
 │   └── scripts/panel.html      # 预览/编辑/刷新/复制/SVG-PNG 导出
 ├── feishu-integration/         # 飞书 API CLI 集成（auth/docx/task/wiki/bitable/members）
-├── codex-task-orchestration/   # Codex 多任务拆解与执行调度工具链
+├── agent-task-orchestration/   # Codex 多任务拆解与执行调度工具链
 └── agent-front-design/         # 前端设计与 agent 规范技能
 ```
 

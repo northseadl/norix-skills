@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Nano Banana CLI — Unified entry point for image generation and editing.
+# Usage: ./nanobanana <module> <command> [options]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$SCRIPT_DIR/scripts"
+
+usage() {
+    cat <<EOF
+Nano Banana CLI — AI Image Generation & Editing
+
+Usage: ./nanobanana <module> [options]
+
+Modules:
+  generate    Generate e-commerce product images (text-to-image / image-to-image)
+  refine      Refine and edit existing images (background, style, quality)
+  auth        Manage API credentials (init / status / clean)
+  models      List available models and pricing
+
+Examples:
+  ./nanobanana auth init --api-key <YOUR_KEY>
+  ./nanobanana generate "luxury leather handbag" --template hero
+  ./nanobanana refine product.jpg --template bg-white
+  ./nanobanana models
+
+Environment:
+  NANOBANANA_API_KEY    API key (overrides stored credentials)
+EOF
+    exit 1
+}
+
+[ $# -lt 1 ] && usage
+
+MODULE="$1"
+shift
+
+case "$MODULE" in
+    generate)
+        exec python3 "$SCRIPTS_DIR/generate.py" "$@"
+        ;;
+    refine)
+        exec python3 "$SCRIPTS_DIR/refine.py" "$@"
+        ;;
+    auth)
+        exec python3 "$SCRIPTS_DIR/auth.py" "$@"
+        ;;
+    models)
+        exec python3 -c "
+import sys; sys.path.insert(0, '$SCRIPTS_DIR')
+from nanobanana_api import list_models
+list_models()
+"
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    *)
+        echo "Error: Unknown module '$MODULE'" >&2
+        echo "Run './nanobanana --help' for usage." >&2
+        exit 1
+        ;;
+esac

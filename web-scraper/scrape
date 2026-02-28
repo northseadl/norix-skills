@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Web Scraper — Unified CLI entry point
+# Engine: System Chrome + CDP (Chrome DevTools Protocol)
+# Usage: ./scrape <command> [args...]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS_DIR="$SCRIPT_DIR/scripts"
+
+# Require Node.js 18+
+NODE="${NODE:-$(command -v node 2>/dev/null)}"
+if [[ -z "$NODE" ]]; then
+    echo "ERROR: Node.js not found. Install Node.js 18+ first." >&2
+    exit 1
+fi
+
+# Auto-install npm dependencies on first run
+if [[ ! -d "$SCRIPTS_DIR/node_modules" ]]; then
+    echo "⏳ First run: installing dependencies..." >&2
+    (cd "$SCRIPTS_DIR" && npm install --production --silent 2>/dev/null)
+fi
+
+show_help() {
+    cat <<'EOF'
+Web Scraper — Scrape, analyze & extract content from any website
+
+ENGINE: System Chrome + CDP (Chrome DevTools Protocol)
+        Zero browser downloads. Full SPA/JS rendering support.
+
+USAGE:
+    ./scrape <command> [options]
+
+COMMANDS:
+    discover <url>     Analyze page structure, detect framework, list links
+    fetch <url>        Fetch page(s) and convert to Markdown
+    openapi <url>      Discover and convert OpenAPI/Swagger spec to Markdown
+
+DISCOVER OPTIONS:
+    --links-only       Only list discovered navigation links
+    --framework-only   Only detect the documentation framework
+    --sitemap          Build a directory tree of the site
+    --deep             Follow links to discover more pages (crawl)
+    --max-pages N      Max pages to crawl in deep mode (default: 50)
+    --max-depth N      Max crawl depth (default: 3)
+    --wait MS          Wait time for SPA rendering in ms (default: 2000)
+    --json             Output results as JSON
+
+FETCH OPTIONS:
+    --auto             Auto-discover pages then fetch all
+    --from-file FILE   Read URLs from a file (one per line)
+    -o, --output PATH  Output directory or file path
+    --merge            Merge all pages into a single file
+    --max-lines N      Max lines per page (0 = unlimited)
+    --max-pages N      Max pages in auto mode (default: 50)
+    --wait MS          Wait time for SPA rendering in ms (default: 2000)
+    --summary-only     Only show fetch summary
+    --json             Output results as JSON
+
+OPENAPI OPTIONS:
+    -o, --output FILE  Output markdown file path
+
+EXAMPLES:
+    ./scrape discover https://docs.example.com
+    ./scrape discover https://docs.example.com --deep --max-pages 100
+    ./scrape fetch https://open.feishu.cn/document/server-docs/im-v1/message/create
+    ./scrape fetch https://docs.example.com --auto --merge -o ./docs/all-docs.md
+    ./scrape fetch --from-file urls.txt -o ./docs/
+    ./scrape openapi https://petstore.swagger.io/v2/swagger.json -o api.md
+
+REQUIREMENTS:
+    - Node.js 18+
+    - Google Chrome or Chromium (uses your existing installation)
+EOF
+}
+
+CMD="${1:-help}"
+shift || true
+
+case "$CMD" in
+    discover)
+        exec "$NODE" "$SCRIPTS_DIR/discover.mjs" "$@"
+        ;;
+    fetch)
+        exec "$NODE" "$SCRIPTS_DIR/fetch.mjs" "$@"
+        ;;
+    openapi)
+        exec "$NODE" "$SCRIPTS_DIR/openapi.mjs" "$@"
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "ERROR: Unknown command '$CMD'. Run './scrape help' for usage." >&2
+        exit 1
+        ;;
+esac

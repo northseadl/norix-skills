@@ -1,5 +1,5 @@
 {
-    "skill_name": "codex-task-orchestration",
+    "skill_name": "agent-task-orchestration",
     "evals": [
         {
             "id": 1,

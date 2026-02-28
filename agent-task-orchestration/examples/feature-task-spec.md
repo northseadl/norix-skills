@@ -100,10 +100,10 @@ T3 和 T4 可并行（仅共享 T1 产出）
 # 将上述 Task Spec 保存为 tasks/T1-order-data-layer.md 等文件后:
 
 # 预览执行计划（打开 Dashboard 但不实际调度）
-node <SKILLS_DIR>/codex-task-orchestration/scripts/dispatch.mjs ./tasks/ --dry-run
+node <SKILLS_DIR>/agent-task-orchestration/scripts/dispatch.mjs ./tasks/ --dry-run
 
 # 并行调度（T2 和 T4 同时执行）
-node <SKILLS_DIR>/codex-task-orchestration/scripts/dispatch.mjs ./tasks/ \
+node <SKILLS_DIR>/agent-task-orchestration/scripts/dispatch.mjs ./tasks/ \
   --parallel --approval-mode full-auto --cwd .
 
 # Dashboard 会自动打开浏览器，显示:

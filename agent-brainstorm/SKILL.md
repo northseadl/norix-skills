@@ -14,7 +14,7 @@ description: |
   "让 AI 从不同角度", "混合 agent", "codex 和 claude 一起",
   or any mention of having multiple AI agents debate or discuss a topic.
   Supports mixed engine mode: some agents can use Codex while others use Claude Code.
-  NOT for: single-agent code review, task decomposition (use codex-task-orchestration instead),
+  NOT for: single-agent code review, task decomposition (use agent-task-orchestration instead),
   simple document writing, or diagram generation.
 ---
 
@@ -43,7 +43,7 @@ description: |
   └── 讨论结束后生成 synthesis.md 综合报告
 ```
 
-**与 codex-task-orchestration 的区别**:
+**与 agent-task-orchestration 的区别**:
 
 | 维度 | 任务编排 | 头脑风暴 |
 |:---|:---|:---|

@@ -1,0 +1,47 @@
+{
+    "skill_name": "web-scraper",
+    "evals": [
+        {
+            "id": 1,
+            "prompt": "我需要把 Petstore 的 Swagger 页面转成 Markdown 文档，URL 是 https://petstore.swagger.io",
+            "expected_output": "Agent uses web-scraper openapi command to discover and convert the OpenAPI spec from Swagger UI to structured Markdown with endpoints, parameters, and schemas",
+            "files": []
+        },
+        {
+            "id": 2,
+            "prompt": "帮我分析一下 https://cn.vuejs.org 这个文档站的结构，看看有哪些页面",
+            "expected_output": "Agent uses web-scraper discover command to detect VitePress framework and list all navigation links",
+            "files": []
+        },
+        {
+            "id": 3,
+            "prompt": "I need to pull down all the API docs from https://docs.example.com and save them as a single markdown file",
+            "expected_output": "Agent uses web-scraper fetch command with --auto --merge flags to discover all pages and merge into a single markdown file",
+            "files": []
+        },
+        {
+            "id": 4,
+            "prompt": "帮我把飞书开放平台的这个 API 文档读取出来 https://open.feishu.cn/document/server-docs/im-v1/message/create",
+            "expected_output": "Agent recognizes this is a SPA page and uses web-scraper fetch command. Output should contain API parameters, request/response schemas, and Chinese content",
+            "files": []
+        },
+        {
+            "id": 5,
+            "prompt": "I tried reading https://open.feishu.cn/document/server-docs/application-scope/scope-list with read_url_content but got almost nothing back. Can you help me get the actual content?",
+            "expected_output": "Agent recognizes read_url_content failure as SPA signal and falls back to web-scraper fetch command for full JS-rendered content extraction",
+            "files": []
+        },
+        {
+            "id": 6,
+            "prompt": "这个文档站用的什么框架？https://docusaurus.io/docs",
+            "expected_output": "Agent uses web-scraper discover --framework-only to detect Docusaurus framework",
+            "files": []
+        },
+        {
+            "id": 7,
+            "prompt": "把这几个页面的内容都抓下来合并成一个文件：https://cn.vuejs.org/api/composition-api-setup.html 和 https://cn.vuejs.org/api/reactivity-core.html",
+            "expected_output": "Agent creates a URL list file, then uses web-scraper fetch --from-file with --merge to batch fetch and merge the pages",
+            "files": []
+        }
+    ]
+}

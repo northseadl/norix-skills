@@ -123,7 +123,7 @@ python3 -m py_compile feishu-integration/scripts/*.py
 
 # Node.js 语法检查
 node --check pm-toolkit/scripts/serve.js
-node --check codex-task-orchestration/scripts/dispatch.mjs
+node --check agent-task-orchestration/scripts/dispatch.mjs
 ```
 
 ### 文档仓库
