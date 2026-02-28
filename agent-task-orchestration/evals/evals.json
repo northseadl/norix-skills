@@ -9,7 +9,7 @@
         },
         {
             "id": 2,
-            "query": "I have a large feature spec in docs/feature-auth.md — can you break it down into smaller tasks and run them in parallel?",
+            "query": "I have a large feature spec in docs/feature-auth.md — can you break it down into smaller tasks and run them in parallel using multiple AI agents?",
             "should_trigger": true,
             "rationale": "Implicit task decomposition + parallel orchestration, no explicit Codex mention"
         },
@@ -27,9 +27,9 @@
         },
         {
             "id": 5,
-            "query": "dispatch.mjs 跑完了，帮我检查一下 status.txt 看看进度",
+            "query": "dispatch.mjs 跑了一半挂了，帮我恢复一下继续跑",
             "should_trigger": true,
-            "rationale": "Reference to dispatch.mjs status polling — direct skill artifact usage"
+            "rationale": "Recovery/resume scenario — directly references dispatch tool failure"
         },
         {
             "id": 6,
@@ -51,75 +51,75 @@
         },
         {
             "id": 9,
-            "query": "分解需求给 Agent 执行，一些基础任务用 Codex 跑，复杂架构任务用 Claude Code",
+            "query": "上次编排的任务 T3 和 T5 失败了，帮我只重新跑这两个，其他已完成的不要动",
             "should_trigger": true,
-            "rationale": "Mixed engine + task decomposition + explicit Agent roles"
+            "rationale": "Resume with selective retry — key v2 recovery feature"
         },
         {
             "id": 10,
-            "query": "let's brainstorm about the best approach for our authentication system, get 3 different AI perspectives on it",
-            "should_trigger": false,
-            "rationale": "Multi-agent brainstorming → agent-brainstorm skill, not task orchestration"
-        },
-        {
-            "id": 11,
-            "query": "帮我建 3 个飞书任务，分别是前端开发、后端 API、数据库迁移",
-            "should_trigger": false,
-            "rationale": "Creating Feishu tasks → feishu-integration skill, not task decomposition/orchestration"
-        },
-        {
-            "id": 12,
-            "query": "review this pull request and suggest improvements to the code quality",
-            "should_trigger": false,
-            "rationale": "Code review request, no task decomposition or orchestration"
-        },
-        {
-            "id": 13,
-            "query": "让几个 Agent 从不同角度讨论一下这个技术方案的优劣",
-            "should_trigger": false,
-            "rationale": "Multi-agent discussion/debate → agent-brainstorm, not orchestration"
-        },
-        {
-            "id": 14,
-            "query": "I want to deploy my Next.js app to Vercel and set up CI/CD",
-            "should_trigger": false,
-            "rationale": "Deployment task, not PRD decomposition or multi-agent orchestration"
-        },
-        {
-            "id": 15,
-            "query": "generate a Mermaid flowchart showing the task dependency tree for sprint 4",
-            "should_trigger": false,
-            "rationale": "Mermaid diagram → pm-toolkit, the mention of 'task' is coincidental"
-        },
-        {
-            "id": 16,
-            "query": "帮我用 Codex 写一个 Python 脚本来处理 CSV 数据",
-            "should_trigger": false,
-            "rationale": "Single Codex task, not decomposition/orchestration — should use Codex directly"
-        },
-        {
-            "id": 17,
-            "query": "读取 Coding.net 上的 CI 构建日志，看看最近一次构建是否通过",
-            "should_trigger": false,
-            "rationale": "Coding.net CI → coding-net skill, mentions build but not task orchestration"
-        },
-        {
-            "id": 18,
             "query": "help me set up a supervised workflow where Codex handles each module independently and I review the results",
             "should_trigger": true,
             "rationale": "Supervised workflow with modular independence — core orchestration pattern"
         },
         {
-            "id": 19,
-            "query": "我要设计一个前端页面原型，包括登录、注册、仪表盘三个页面",
+            "id": 11,
+            "query": "let's brainstorm about the best approach for our authentication system, get 3 different AI perspectives on it",
             "should_trigger": false,
-            "rationale": "Front-end design → agent-front-design skill, not task orchestration"
+            "rationale": "Multi-agent brainstorming → agent-brainstorm skill, not task orchestration"
+        },
+        {
+            "id": 12,
+            "query": "帮我建 3 个飞书任务，分别是前端开发、后端 API、数据库迁移，设好截止日期",
+            "should_trigger": false,
+            "rationale": "Creating Feishu tasks with deadlines → feishu-integration skill, not AI agent task decomposition"
+        },
+        {
+            "id": 13,
+            "query": "review this pull request and suggest improvements to the code quality, focus on the auth module changes",
+            "should_trigger": false,
+            "rationale": "Code review request, no task decomposition or orchestration"
+        },
+        {
+            "id": 14,
+            "query": "让几个 Agent 从不同角度讨论一下这个技术方案的优劣，帮我做个技术选型",
+            "should_trigger": false,
+            "rationale": "Multi-agent discussion/debate → agent-brainstorm, not orchestration"
+        },
+        {
+            "id": 15,
+            "query": "I want to deploy my Next.js app to Vercel and set up CI/CD with GitHub Actions",
+            "should_trigger": false,
+            "rationale": "Deployment + CI/CD task, not PRD decomposition or multi-agent orchestration"
+        },
+        {
+            "id": 16,
+            "query": "generate a Mermaid flowchart showing the task dependency tree for sprint 4",
+            "should_trigger": false,
+            "rationale": "Mermaid diagram → pm-toolkit, the mention of 'task' is coincidental"
+        },
+        {
+            "id": 17,
+            "query": "帮我用 Codex 写一个 Python 脚本来处理 CSV 数据，就这一个任务",
+            "should_trigger": false,
+            "rationale": "Single Codex task, explicitly says 'just this one task' — should use Codex directly"
+        },
+        {
+            "id": 18,
+            "query": "读取 Coding.net 上的 CI 构建日志，看看最近一次构建是否通过",
+            "should_trigger": false,
+            "rationale": "Coding.net CI → coding-net skill, mentions build but not task orchestration"
+        },
+        {
+            "id": 19,
+            "query": "我要设计一个前端页面原型，包括登录、注册、仪表盘三个页面的交互稿",
+            "should_trigger": false,
+            "rationale": "Front-end design/prototyping → agent-front-design skill, not task orchestration"
         },
         {
             "id": 20,
-            "query": "长时间调度模式，在后台持续监控 Agent 执行进度，自动处理失败任务",
+            "query": "长时间调度模式，在后台持续监控 Agent 执行进度，自动处理失败任务并恢复",
             "should_trigger": true,
-            "rationale": "Long-running supervision + auto-retry — exact trigger phrase"
+            "rationale": "Long-running supervision + auto-retry + resume — exact trigger phrase combination"
         }
     ]
 }

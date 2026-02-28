@@ -1,60 +1,27 @@
 #!/usr/bin/env node
 
-// Codex Orchestrator — 本地编排服务 + 实时 Dashboard
-// Usage: node dispatch.mjs <task-dir> [options]
+// Task Orchestrator — CLI entry point
+// Delegates to modular lib/ components for DAG scheduling, engine bridging,
+// retry resilience, checkpoint persistence, and tiered reporting.
 
-import { createServer, request as httpRequest } from "node:http";
 import { readdir, readFile, mkdir, writeFile, rm } from "node:fs/promises";
-import { join, basename, dirname, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { EventEmitter } from "node:events";
-import { exec } from "node:child_process";
+import { request as httpRequest } from "node:http";
+import { execSync } from "node:child_process";
+
+import { log, fatal } from "./lib/logger.mjs";
+import { loadTasks, topologicalBatches, buildEdges, resolveEngines } from "./lib/dag.mjs";
+import { StateStore, writeSummary } from "./lib/store.mjs";
+import { loadSdks, runSequential, runParallel } from "./lib/engines.mjs";
+import { startServer, openBrowser } from "./lib/server.mjs";
+import { writeReports } from "./lib/reporter.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// ─── Constants ───
-
 const VALID_MODES = ["suggest", "auto-edit", "full-auto"];
 const VALID_ENGINES = ["codex", "claude"];
-
-const CODEX_MODE_MAP = {
-  suggest: { approvalPolicy: "on-request", sandboxMode: "workspace-write" },
-  "auto-edit": { approvalPolicy: "on-failure", sandboxMode: "workspace-write" },
-  "full-auto": { approvalPolicy: "never", sandboxMode: "workspace-write" },
-};
-
-const CLAUDE_MODE_MAP = {
-  suggest: "default",
-  "auto-edit": "acceptEdits",
-  "full-auto": "bypassPermissions",
-};
-
-// Keep legacy alias for dry-run display
-const MODE_TO_SDK = CODEX_MODE_MAP;
-
-function generateRunId() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-}
-
-// ─── Logging ───
-
-function log(level, ...args) {
-  const time = new Date().toTimeString().slice(0, 8);
-  const prefix = `[${time}] [${level}]`;
-  if (level === "ERROR" || level === "FATAL") {
-    console.error(prefix, ...args);
-  } else {
-    console.log(prefix, ...args);
-  }
-}
-
-function fatal(msg) {
-  log("FATAL", msg);
-  process.exit(1);
-}
+const LOGS_ROOT = ".dispatch-logs";
 
 // ─── CLI Parsing ───
 
@@ -74,6 +41,11 @@ function parseArgs(argv) {
     list: false,
     status: false,
     statusRunId: "",
+    // Resume support
+    resume: false,
+    resumeRunId: "",
+    retryFailed: false,
+    retryIds: [],
   };
 
   let i = 2;
@@ -95,7 +67,8 @@ function parseArgs(argv) {
       case "--engine":
         if (i + 1 >= argv.length) fatal("--engine requires a value");
         config.engine = argv[++i];
-        if (!VALID_ENGINES.includes(config.engine)) fatal(`Invalid engine '${config.engine}', use: ${VALID_ENGINES.join(", ")}`);
+        if (!VALID_ENGINES.includes(config.engine))
+          fatal(`Invalid engine '${config.engine}', use: ${VALID_ENGINES.join(", ")}`);
         i++;
         break;
       case "--concurrency":
@@ -135,12 +108,32 @@ function parseArgs(argv) {
         }
         i++;
         break;
+      case "--resume":
+        config.resume = true;
+        if (i + 1 < argv.length && !argv[i + 1].startsWith("-")) {
+          config.resumeRunId = argv[++i];
+        }
+        i++;
+        break;
+      case "--retry-failed":
+        config.retryFailed = true;
+        i++;
+        break;
+      case "--retry":
+        if (i + 1 >= argv.length) fatal("--retry requires task IDs (e.g. T2,T5)");
+        config.retryIds = argv[++i]
+          .replace(/T/gi, "")
+          .split(",")
+          .map((s) => parseInt(s.trim(), 10))
+          .filter((n) => !isNaN(n));
+        i++;
+        break;
       case "-h":
       case "--help":
         printUsage();
         process.exit(0);
       default:
-        if (argv[i].startsWith("-")) fatal(`未知选项: ${argv[i]}`);
+        if (argv[i].startsWith("-")) fatal(`Unknown option: ${argv[i]}`);
         config.taskDir = argv[i];
         i++;
     }
@@ -150,62 +143,86 @@ function parseArgs(argv) {
 
 function printUsage() {
   console.log(`
-Task Orchestrator — 本地任务编排服务 + 实时监控面板
+Task Orchestrator — Resilient multi-agent task scheduling with real-time dashboard
 
-用法: node dispatch.mjs <task-dir> [选项]
+Usage: node dispatch.mjs <task-dir> [options]
 
-参数:
-  task-dir                包含任务规格文件 (T*.md) 的目录
+Arguments:
+  task-dir                Directory containing task spec files (T*.md)
 
-选项:
-  --dry-run               预览执行计划，不实际调度
-  --parallel              并行执行无依赖的任务 (默认: 顺序)
-  --approval-mode MODE    suggest|auto-edit|full-auto (默认: suggest)
-  --engine ENGINE         默认引擎: codex|claude (默认: codex)
-                          每个 T*.md 可通过 engine: 行覆盖
-  --concurrency N         最大并行会话数 (默认: 4)
-  --cwd DIR               Agent 的工作目录 (默认: 当前目录)
-  --port PORT             Dashboard 端口 (默认: 随机)
-  --no-open               不自动打开浏览器
+Execution:
+  --dry-run               Preview execution plan without dispatching
+  --parallel              Run independent tasks in parallel (default: sequential)
+  --approval-mode MODE    suggest|auto-edit|full-auto (default: suggest)
+  --engine ENGINE         Default engine: codex|claude (default: codex)
+                          Each T*.md can override via engine: line
+  --concurrency N         Max parallel sessions (default: 4)
+  --cwd DIR               Agent working directory (default: current)
+  --port PORT             Dashboard port (default: random)
+  --no-open               Don't auto-open browser
 
-监督:
-  --status [RUN-ID]       查询运行状态 (默认: 最近一次)
+Recovery:
+  --resume [RUN-ID]       Resume from last checkpoint (default: latest run)
+  --retry-failed          When resuming, retry all failed tasks
+  --retry T2,T5           When resuming, retry only specified tasks
 
-管理:
-  --list                  列出所有历史运行记录
-  --clean [N]             清理历史记录 (保留最近 N 条，默认全清)
-  -h, --help              显示帮助
+Monitoring:
+  --status [RUN-ID]       Query run status (default: latest)
 
-示例:
+Management:
+  --list                  List all historical runs
+  --clean [N]             Clean history (keep latest N, default: all)
+  -h, --help              Show this help
+
+Signal files (for Agent polling):
+  cat {dir}/.dispatch-logs/{runId}/signal       # 1-line status (~20 tokens)
+  cat {dir}/.dispatch-logs/{runId}/digest.txt   # 5-line summary (~80 tokens)
+  cat {dir}/.dispatch-logs/{runId}/status.txt   # Full status (~500 tokens)
+
+Examples:
   node dispatch.mjs ./tasks/ --dry-run
-  node dispatch.mjs ./tasks/ --parallel --engine claude
+  node dispatch.mjs ./tasks/ --parallel --engine claude --approval-mode full-auto
+  node dispatch.mjs ./tasks/ --resume --retry-failed
   node dispatch.mjs ./tasks/ --status
-  node dispatch.mjs ./tasks/ --list
 `);
 }
 
 // ─── Run Management ───
 
-const LOGS_ROOT = ".dispatch-logs";
+function generateRunId() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+async function findLatestRun(taskDir) {
+  const logsDir = join(taskDir, LOGS_ROOT);
+  if (!existsSync(logsDir)) return null;
+  const entries = await readdir(logsDir, { withFileTypes: true });
+  const runs = entries
+    .filter((e) => e.isDirectory())
+    .sort((a, b) => b.name.localeCompare(a.name));
+  return runs.length > 0 ? runs[0].name : null;
+}
 
 async function listRuns(taskDir) {
   const logsDir = join(taskDir, LOGS_ROOT);
   if (!existsSync(logsDir)) {
-    log("INFO", "无历史运行记录");
+    log("INFO", "No run history");
     return;
   }
-
   const entries = await readdir(logsDir, { withFileTypes: true });
-  const runs = entries.filter((e) => e.isDirectory()).sort((a, b) => b.name.localeCompare(a.name));
-
+  const runs = entries
+    .filter((e) => e.isDirectory())
+    .sort((a, b) => b.name.localeCompare(a.name));
   if (runs.length === 0) {
-    log("INFO", "无历史运行记录");
+    log("INFO", "No run history");
     return;
   }
-
-  console.log(`\n  共 ${runs.length} 条运行记录 (${logsDir})\n`);
+  console.log(`\n  ${runs.length} runs (${logsDir})\n`);
   for (const run of runs) {
     const summaryPath = join(logsDir, run.name, "summary.json");
+    const checkpointPath = join(logsDir, run.name, "checkpoint.json");
     let info = "";
     if (existsSync(summaryPath)) {
       try {
@@ -216,7 +233,8 @@ async function listRuns(taskDir) {
         info = `  ${summary.phase || "?"}  ${summary.duration || "?"}  ✓${s} ✗${f}  ${summary.config?.approvalMode || ""}`;
       } catch { }
     }
-    console.log(`  ${run.name}${info}`);
+    const resumable = existsSync(checkpointPath) ? " [resumable]" : "";
+    console.log(`  ${run.name}${info}${resumable}`);
   }
   console.log("");
 }
@@ -224,582 +242,161 @@ async function listRuns(taskDir) {
 async function cleanRuns(taskDir, keep) {
   const logsDir = join(taskDir, LOGS_ROOT);
   if (!existsSync(logsDir)) {
-    log("INFO", "无需清理");
+    log("INFO", "Nothing to clean");
     return;
   }
-
   const entries = await readdir(logsDir, { withFileTypes: true });
-  const runs = entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
-
-  const toRemove = keep > 0 ? runs.slice(0, Math.max(0, runs.length - keep)) : runs;
-
+  const runs = entries
+    .filter((e) => e.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const toRemove =
+    keep > 0 ? runs.slice(0, Math.max(0, runs.length - keep)) : runs;
   if (toRemove.length === 0) {
-    log("INFO", "无需清理");
+    log("INFO", "Nothing to clean");
     return;
   }
-
   for (const run of toRemove) {
     await rm(join(logsDir, run.name), { recursive: true, force: true });
-    log("INFO", `已删除: ${run.name}`);
+    log("INFO", `Removed: ${run.name}`);
   }
-  log("INFO", `清理完成: 删除 ${toRemove.length} 条，保留 ${runs.length - toRemove.length} 条`);
+  log("INFO", `Cleaned: ${toRemove.length} removed, ${runs.length - toRemove.length} kept`);
 }
 
-// ─── Compact Status ───
-
-const STATUS_ICONS = { pending: "⏳", queued: "📋", running: "🔄", success: "✅", failed: "❌", skipped: "⏭" };
-
-function formatElapsed(ms) {
-  if (!ms || ms < 0) return "—";
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return s % 60 > 0 ? `${m}m${s % 60}s` : `${m}m`;
-}
-
-function formatTokens(usage) {
-  if (!usage) return "";
-  const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n);
-  return `${fmt(usage.input)}/${fmt(usage.output)}`;
-}
-
-function renderCompactStatus(state) {
-  const now = Date.now();
-  const elapsed = formatElapsed((state.endTime || now) - state.startTime);
-  const tasks = Object.values(state.tasks);
-  const done = tasks.filter((t) => t.status === "success" || t.status === "failed" || t.status === "skipped").length;
-
-  const lines = [];
-  lines.push(`run=${state.runId} phase=${state.phase} elapsed=${elapsed}`);
-  for (const t of tasks) {
-    const icon = STATUS_ICONS[t.status] || "?";
-    const dur = t.startTime ? formatElapsed((t.endTime || now) - t.startTime) : "—";
-    const tok = formatTokens(t.usage);
-    const err = t.error ? ` err=${t.error.slice(0, 60)}` : "";
-    lines.push(`T${t.id} ${icon} ${t.status.padEnd(7)} ${dur.padEnd(6)} ${tok}${err}`);
-  }
-  lines.push(`progress=${done}/${tasks.length} (${tasks.length ? Math.round((done / tasks.length) * 100) : 0}%)`);
-  return lines.join("\n");
-}
+// ─── Status Query ───
 
 function httpGetJson(port, path) {
   return new Promise((resolve, reject) => {
-    const req = httpRequest({ hostname: "127.0.0.1", port, path, timeout: 2000 }, (res) => {
-      let data = "";
-      res.on("data", (c) => (data += c));
-      res.on("end", () => {
-        try { resolve(JSON.parse(data)); } catch { reject(new Error("invalid json")); }
-      });
-    });
+    const req = httpRequest(
+      { hostname: "127.0.0.1", port, path, timeout: 2000 },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            reject(new Error("invalid json"));
+          }
+        });
+      },
+    );
     req.on("error", reject);
-    req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("timeout"));
+    });
     req.end();
   });
-}
-
-async function findLatestRun(taskDir) {
-  const logsDir = join(taskDir, LOGS_ROOT);
-  if (!existsSync(logsDir)) return null;
-  const entries = await readdir(logsDir, { withFileTypes: true });
-  const runs = entries.filter((e) => e.isDirectory()).sort((a, b) => b.name.localeCompare(a.name));
-  return runs.length > 0 ? runs[0].name : null;
 }
 
 async function showStatus(taskDir, runId) {
   if (!runId) {
     runId = await findLatestRun(taskDir);
-    if (!runId) { log("INFO", "无运行记录"); return; }
+    if (!runId) {
+      log("INFO", "No run history");
+      return;
+    }
+  }
+  const runDir = join(taskDir, LOGS_ROOT, runId);
+  if (!existsSync(runDir)) {
+    log("ERROR", `Run ${runId} not found`);
+    return;
   }
 
-  const runDir = join(taskDir, LOGS_ROOT, runId);
-  if (!existsSync(runDir)) { log("ERROR", `运行 ${runId} 不存在`); return; }
-
-  // Strategy 1: try live HTTP API via port file
+  // Strategy 1: live HTTP via port file
   const portFile = join(runDir, "port");
   if (existsSync(portFile)) {
     try {
       const port = parseInt(await readFile(portFile, "utf-8"), 10);
       const state = await httpGetJson(port, "/api/state");
-      const status = renderCompactStatus(state);
-      console.log(status);
+      // Reconstruct a temporary store just for rendering
+      const tmpStore = new StateStore(
+        state.config,
+        Object.values(state.tasks),
+        state.dag.batches,
+        state.dag.edges,
+        state.runId,
+        runDir,
+      );
+      // Sync state
+      for (const [id, t] of Object.entries(state.tasks)) {
+        tmpStore.updateTask(parseInt(id, 10), t);
+      }
+      console.log(tmpStore.renderCompactStatus());
       console.log(`dashboard=http://localhost:${port}`);
       return;
-    } catch { /* server not running, fall through */ }
+    } catch {
+      /* server not running, fall through */
+    }
   }
 
-  // Strategy 2: read status.txt (written periodically during run)
+  // Strategy 2: status.txt
   const statusFile = join(runDir, "status.txt");
   if (existsSync(statusFile)) {
     console.log(await readFile(statusFile, "utf-8"));
     return;
   }
 
-  // Strategy 3: reconstruct from state.json
-  const stateFile = join(runDir, "state.json");
-  if (existsSync(stateFile)) {
-    const state = JSON.parse(await readFile(stateFile, "utf-8"));
-    console.log(renderCompactStatus(state));
+  // Strategy 3: signal + digest
+  const signalFile = join(runDir, "signal");
+  if (existsSync(signalFile)) {
+    console.log(await readFile(signalFile, "utf-8"));
+    const digestFile = join(runDir, "digest.txt");
+    if (existsSync(digestFile)) {
+      console.log("---");
+      console.log(await readFile(digestFile, "utf-8"));
+    }
     return;
   }
 
-  log("INFO", `运行 ${runId} 无状态数据`);
+  log("INFO", `Run ${runId} has no status data`);
 }
 
-async function writeStatusFile(store, runDir, port) {
-  const status = renderCompactStatus(store.getState());
-  const withDash = port ? `${status}\ndashboard=http://localhost:${port}` : status;
-  await writeFile(join(runDir, "status.txt"), withDash, "utf-8").catch(() => { });
-}
+// ─── Pre-flight Checks ───
 
-// ─── Task Parsing ───
+/**
+ * Validate environment before dispatch to surface preventable failures early.
+ * @param {object} config
+ * @param {{needsCodex: boolean, needsClaude: boolean}} engineInfo
+ * @returns {Array<{level: "warn"|"fatal", msg: string}>}
+ */
+function preflight(config, engineInfo) {
+  const issues = [];
 
-function extractId(filename) {
-  const m = basename(filename).match(/^T(\d+)/);
-  return m ? parseInt(m[1], 10) : null;
-}
-
-function extractDeps(content) {
-  const line = content.split("\n").find((l) => l.includes("← T"));
-  if (!line) return [];
-  return [...line.matchAll(/T(\d+)/g)].map((m) => parseInt(m[1], 10));
-}
-
-function extractEngine(content) {
-  // Match "engine: codex" or "engine: claude" in task spec (case-insensitive)
-  const m = content.match(/^\s*[-*]?\s*\*{0,2}engine\*{0,2}\s*[:：]\s*(codex|claude)/im);
-  return m ? m[1].toLowerCase() : null;
-}
-
-async function loadTasks(taskDir, defaultEngine) {
-  const entries = await readdir(taskDir);
-  const files = entries.filter((f) => /^T\d+.*\.md$/.test(f)).sort();
-  const tasks = [];
-  for (const file of files) {
-    const filePath = join(taskDir, file);
-    const content = await readFile(filePath, "utf-8");
-    const id = extractId(file);
-    if (id === null) {
-      log("WARN", `跳过无法解析 ID 的文件: ${file}`);
-      continue;
-    }
-    const engine = extractEngine(content) || defaultEngine;
-    tasks.push({ id, file, filePath, content, deps: extractDeps(content), engine });
-  }
-  return tasks;
-}
-
-function resolveEngines(tasks) {
-  const codexCount = tasks.filter((t) => t.engine === "codex").length;
-  const claudeCount = tasks.filter((t) => t.engine === "claude").length;
-  return { needsCodex: codexCount > 0, needsClaude: claudeCount > 0, codexCount, claudeCount };
-}
-
-async function loadSdks(engineInfo, dryRun) {
-  const sdks = { codex: null, claude: null };
-  if (dryRun) return sdks;
-  if (engineInfo.needsCodex) {
-    try {
-      const mod = await import("@openai/codex-sdk");
-      sdks.codex = new mod.Codex();
-    } catch (err) {
-      fatal(`Cannot load @openai/codex-sdk: ${err.message}\n  Run: cd ${resolve(__dirname, "..")} && npm install`);
-    }
-  }
-  if (engineInfo.needsClaude) {
-    try {
-      sdks.claude = await import("@anthropic-ai/claude-agent-sdk");
-    } catch (err) {
-      fatal(`Cannot load @anthropic-ai/claude-agent-sdk: ${err.message}\n  Run: cd ${resolve(__dirname, "..")} && npm install`);
-    }
-  }
-  return sdks;
-}
-
-// ─── DAG ───
-
-function topologicalBatches(tasks) {
-  const taskMap = new Map(tasks.map((t) => [t.id, t]));
-  const completed = new Set();
-  const remaining = new Set(tasks.map((t) => t.id));
-  const batches = [];
-
-  for (const task of tasks) {
-    for (const dep of task.deps) {
-      if (!taskMap.has(dep)) {
-        log("WARN", `T${task.id} 依赖不存在的 T${dep}，视为已满足`);
-        completed.add(dep);
-      }
-    }
-  }
-
-  while (remaining.size > 0) {
-    const batch = [];
-    for (const id of remaining) {
-      if (taskMap.get(id).deps.every((d) => completed.has(d))) batch.push(id);
-    }
-    if (batch.length === 0) {
-      throw new Error(`死锁: ${[...remaining].map((id) => `T${id}`).join(", ")} 存在循环依赖`);
-    }
-    batches.push(batch);
-    for (const id of batch) {
-      completed.add(id);
-      remaining.delete(id);
-    }
-  }
-  return batches;
-}
-
-function buildEdges(tasks) {
-  const edges = [];
-  for (const task of tasks) {
-    for (const dep of task.deps) edges.push([dep, task.id]);
-  }
-  return edges;
-}
-
-// ─── State Store ───
-
-class StateStore extends EventEmitter {
-  #state;
-
-  constructor(config, tasks, batches, edges, runId) {
-    super();
-    this.#state = {
-      runId,
-      config: {
-        approvalMode: config.approvalMode,
-        parallel: config.parallel,
-        concurrency: config.concurrency,
-        cwd: config.cwd,
-        dryRun: config.dryRun,
-      },
-      phase: "initializing",
-      startTime: Date.now(),
-      endTime: null,
-      tasks: Object.fromEntries(
-        tasks.map((t) => [
-          t.id,
-          {
-            id: t.id,
-            file: t.file,
-            deps: t.deps,
-            status: "pending",
-            startTime: null,
-            endTime: null,
-            threadId: null,
-            events: [],
-            usage: null,
-            error: null,
-          },
-        ]),
-      ),
-      dag: { batches, edges },
-    };
-  }
-
-  getState() {
-    return this.#state;
-  }
-
-  setPhase(phase) {
-    this.#state.phase = phase;
-    if (phase === "completed" || phase === "failed") {
-      this.#state.endTime = Date.now();
-    }
-    this.emit("update", { type: "phase", phase, endTime: this.#state.endTime });
-  }
-
-  updateTask(taskId, updates) {
-    const task = this.#state.tasks[taskId];
-    if (!task) return;
-    Object.assign(task, updates);
-    this.emit("update", { type: "task_update", taskId, updates });
-  }
-
-  addTaskEvent(taskId, event) {
-    const task = this.#state.tasks[taskId];
-    if (!task) return;
-    task.events.push(event);
-    this.emit("update", { type: "task_event", taskId, event });
-  }
-}
-
-// ─── HTTP Server + SSE ───
-
-async function startServer(store, port) {
-  const dashboardPath = join(__dirname, "dashboard.html");
-  let dashboardHtml = "<html><body><h1>dashboard.html not found</h1></body></html>";
-  if (existsSync(dashboardPath)) {
-    dashboardHtml = await readFile(dashboardPath, "utf-8");
-  } else {
-    log("WARN", "dashboard.html 未找到 — 使用占位页面");
-  }
-
-  return new Promise((res) => {
-    const server = createServer((req, resp) => {
-      if (req.url === "/" || req.url === "/index.html") {
-        resp.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        resp.end(dashboardHtml);
-      } else if (req.url === "/api/state") {
-        resp.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-        resp.end(JSON.stringify(store.getState()));
-      } else if (req.url === "/api/events") {
-        resp.writeHead(200, {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "Access-Control-Allow-Origin": "*",
-        });
-        resp.flushHeaders();
-        resp.write(`data: ${JSON.stringify({ type: "snapshot", state: store.getState() })}\n\n`);
-
-        const onUpdate = (event) => resp.write(`data: ${JSON.stringify(event)}\n\n`);
-        store.on("update", onUpdate);
-        const hb = setInterval(() => resp.write(": ping\n\n"), 15000);
-        req.on("close", () => {
-          clearInterval(hb);
-          store.off("update", onUpdate);
-        });
-      } else {
-        resp.writeHead(404);
-        resp.end("Not Found");
-      }
-    });
-
-    server.listen(port, () => res({ server, port: server.address().port }));
-  });
-}
-
-function openBrowser(url) {
-  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-  exec(`${cmd} ${url}`);
-}
-
-// ─── Codex Dispatcher ───
-
-function formatEvent(event) {
-  switch (event.type) {
-    case "item.started":
-      if (event.item.type === "command_execution") return { icon: "▶", text: `cmd: ${event.item.command}` };
-      if (event.item.type === "file_change") {
-        const f = event.item.changes?.map((c) => `${c.kind} ${c.path}`).join(", ");
-        return f ? { icon: "✏", text: f } : null;
-      }
-      if (event.item.type === "agent_message") return { icon: "💬", text: event.item.text.slice(0, 150) };
-      if (event.item.type === "reasoning") return { icon: "·", text: "推理中..." };
-      return null;
-    case "item.completed":
-      if (event.item.type === "command_execution") return { icon: "✓", text: `exit=${event.item.exit_code ?? "?"}` };
-      if (event.item.type === "file_change") return { icon: "✓", text: `patch ${event.item.status}` };
-      return null;
-    case "turn.completed":
-      return {
-        icon: "▪",
-        text: `tokens: in=${event.usage.input_tokens} cached=${event.usage.cached_input_tokens} out=${event.usage.output_tokens}`,
-      };
-    case "turn.failed":
-      return { icon: "✗", text: event.error.message };
-    default:
-      return null;
-  }
-}
-
-async function dispatchTask(sdks, task, config, store) {
-  store.updateTask(task.id, { status: "running", startTime: Date.now() });
-  log("INFO", `T${task.id}: ${task.file} [${task.engine}]`);
-
-  if (config.dryRun) {
-    const info = task.engine === "claude"
-      ? `permissionMode="${CLAUDE_MODE_MAP[config.approvalMode]}"`
-      : `approvalPolicy="${CODEX_MODE_MAP[config.approvalMode].approvalPolicy}"`;
-    store.addTaskEvent(task.id, {
-      ts: Date.now(),
-      icon: "◇",
-      text: `[预演] engine=${task.engine} ${info}`,
-    });
-    await new Promise((r) => setTimeout(r, 200));
-    store.updateTask(task.id, { status: "success", endTime: Date.now() });
-    return { taskId: task.id, success: true, dryRun: true };
-  }
-
+  // Git workspace check
   try {
-    if (task.engine === "claude") {
-      return await dispatchClaudeTask(sdks.claude, task, config, store);
-    }
-    return await dispatchCodexTask(sdks.codex, task, config, store);
-  } catch (err) {
-    store.updateTask(task.id, { status: "failed", endTime: Date.now(), error: err.message });
-    store.addTaskEvent(task.id, { ts: Date.now(), icon: "✗", text: err.message });
-    log("ERROR", `T${task.id} 失败: ${err.message}`);
-    return { taskId: task.id, success: false, error: err.message };
-  }
-}
-
-async function dispatchCodexTask(codex, task, config, store) {
-  const prompt = `根据以下 Task Spec 执行任务:\n\n${task.content}`;
-  const sdkMode = CODEX_MODE_MAP[config.approvalMode];
-  const thread = codex.startThread({
-    approvalPolicy: sdkMode.approvalPolicy,
-    sandboxMode: sdkMode.sandboxMode,
-    workingDirectory: config.cwd,
-  });
-
-  const streamed = await thread.runStreamed(prompt);
-  for await (const event of streamed.events) {
-    const fmt = formatEvent(event);
-    if (fmt) {
-      store.addTaskEvent(task.id, { ts: Date.now(), ...fmt });
-      log("INFO", `  T${task.id} | ${fmt.icon} ${fmt.text}`);
-    }
-    if (event.type === "turn.completed") {
-      store.updateTask(task.id, {
-        usage: { input: event.usage.input_tokens, cached: event.usage.cached_input_tokens, output: event.usage.output_tokens },
-      });
-    }
-  }
-  store.updateTask(task.id, { status: "success", endTime: Date.now(), threadId: thread.id });
-  log("INFO", `T${task.id} 完成`);
-  return { taskId: task.id, success: true, threadId: thread.id };
-}
-
-async function dispatchClaudeTask(sdk, task, config, store) {
-  const prompt = `根据以下 Task Spec 执行任务:\n\n${task.content}`;
-  const permissionMode = CLAUDE_MODE_MAP[config.approvalMode] || CLAUDE_MODE_MAP["full-auto"];
-
-  const q = sdk.query({
-    prompt,
-    options: {
+    const status = execSync("git status --porcelain", {
       cwd: config.cwd,
-      model: "claude-sonnet-4-20250514",
-      permissionMode,
-      systemPrompt: { type: "preset", preset: "claude_code" },
-      settingSources: ["project"],
-      maxTurns: 50,
-    },
-  });
-
-  for await (const msg of q) {
-    if (msg.type === "system" && msg.subtype === "init") {
-      log("INFO", `  T${task.id} | INIT model=${msg.model} tools=${msg.tools?.length || 0}`);
-      store.addTaskEvent(task.id, { ts: Date.now(), icon: "▶", text: `init model=${msg.model}` });
-    }
-    if (msg.type === "assistant") {
-      const textBlocks = msg.message.content?.filter((b) => b.type === "text") || [];
-      const toolBlocks = msg.message.content?.filter((b) => b.type === "tool_use") || [];
-      if (textBlocks.length > 0) {
-        const preview = textBlocks.map((b) => b.text).join(" ").slice(0, 100).replace(/\n/g, " ");
-        log("INFO", `  T${task.id} | MSG ${preview}`);
-        store.addTaskEvent(task.id, { ts: Date.now(), icon: "💬", text: preview });
-      }
-      for (const tb of toolBlocks) {
-        const toolName = tb.name || "tool";
-        const input = typeof tb.input === "string" ? tb.input.slice(0, 80) : JSON.stringify(tb.input || {}).slice(0, 80);
-        log("INFO", `  T${task.id} | RUN ${toolName}: ${input}`);
-        store.addTaskEvent(task.id, { ts: Date.now(), icon: "▶", text: `${toolName}: ${input}` });
-      }
-    }
-    if (msg.type === "result") {
-      const usage = msg.usage || {};
-      store.updateTask(task.id, {
-        usage: { input: usage.input_tokens || 0, cached: 0, output: usage.output_tokens || 0 },
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+    if (status) {
+      const count = status.split("\n").length;
+      issues.push({
+        level: "warn",
+        msg: `Working directory has ${count} uncommitted change(s). Builder output will mix with existing changes.`,
       });
-      log("INFO", `  T${task.id} | tokens: in=${usage.input_tokens || 0} out=${usage.output_tokens || 0} cost=$${msg.total_cost_usd?.toFixed(4) || "?"}`);
     }
+    // Log current branch for context
+    const branch = execSync("git branch --show-current", {
+      cwd: config.cwd,
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+    if (branch) log("INFO", `Git branch: ${branch}`);
+  } catch {
+    // Not a git repo or git not available — skip
   }
 
-  store.updateTask(task.id, { status: "success", endTime: Date.now() });
-  log("INFO", `T${task.id} 完成`);
-  return { taskId: task.id, success: true };
-}
-
-// ─── Execution Strategies ───
-
-async function runSequential(sdks, tasks, config, store) {
-  const taskMap = new Map(tasks.map((t) => [t.id, t]));
-  const batches = store.getState().dag.batches;
-  const results = [];
-  let failedId = null;
-
-  for (const batch of batches) {
-    for (const id of batch) {
-      if (failedId !== null) {
-        store.updateTask(id, { status: "skipped" });
-        log("SKIP", `T${id} 跳过 (上游 T${failedId} 失败)`);
-        results.push({ taskId: id, success: false, skipped: true });
-        continue;
-      }
-      const result = await dispatchTask(sdks, taskMap.get(id), config, store);
-      results.push(result);
-      if (!result.success && !result.dryRun) failedId = id;
-    }
+  // API key checks (fail-fast before wasting time on DAG/server setup)
+  if (engineInfo.needsCodex && !process.env.OPENAI_API_KEY) {
+    issues.push({ level: "fatal", msg: "OPENAI_API_KEY not set (required for Codex engine)" });
   }
-  return results;
-}
-
-async function runParallel(sdks, tasks, config, store) {
-  const taskMap = new Map(tasks.map((t) => [t.id, t]));
-  const batches = store.getState().dag.batches;
-  const results = [];
-  const failedIds = new Set();
-
-  for (const batch of batches) {
-    const runnable = [];
-    for (const id of batch) {
-      const task = taskMap.get(id);
-      if (task.deps.some((d) => failedIds.has(d))) {
-        store.updateTask(id, { status: "skipped" });
-        log("SKIP", `T${id} 跳过 (上游依赖失败)`);
-        results.push({ taskId: id, success: false, skipped: true });
-      } else {
-        store.updateTask(id, { status: "queued" });
-        runnable.push(task);
-      }
-    }
-    const br = await pooled(runnable, config.concurrency, (t) => dispatchTask(sdks, t, config, store));
-    for (const r of br) {
-      results.push(r);
-      if (!r.success && !r.dryRun) failedIds.add(r.taskId);
-    }
+  if (engineInfo.needsClaude && !process.env.ANTHROPIC_API_KEY) {
+    issues.push({ level: "fatal", msg: "ANTHROPIC_API_KEY not set (required for Claude engine)" });
   }
-  return results;
-}
 
-async function pooled(items, limit, fn) {
-  const results = [];
-  const executing = new Set();
-  for (const item of items) {
-    const p = fn(item).then((r) => { executing.delete(p); return r; });
-    executing.add(p);
-    results.push(p);
-    if (executing.size >= limit) await Promise.race(executing);
-  }
-  return Promise.all(results);
-}
-
-// ─── Summary ───
-
-async function writeSummary(store, runDir) {
-  const state = store.getState();
-  const report = {
-    runId: state.runId,
-    timestamp: new Date().toISOString(),
-    config: state.config,
-    phase: state.phase,
-    duration: state.endTime ? `${((state.endTime - state.startTime) / 1000).toFixed(1)}s` : null,
-    dag: state.dag,
-    tasks: Object.values(state.tasks).map((t) => ({
-      id: t.id,
-      file: t.file,
-      status: t.status,
-      duration: t.startTime && t.endTime ? `${((t.endTime - t.startTime) / 1000).toFixed(1)}s` : null,
-      threadId: t.threadId,
-      usage: t.usage,
-      error: t.error,
-    })),
-  };
-  const p = join(runDir, "summary.json");
-  await writeFile(p, JSON.stringify(report, null, 2), "utf-8");
-  return p;
+  return issues;
 }
 
 // ─── Main ───
@@ -807,8 +404,8 @@ async function writeSummary(store, runDir) {
 async function main() {
   const config = parseArgs(process.argv);
 
-  if (!config.taskDir) fatal("需要指定 task-dir 参数，使用 --help 查看用法。");
-  if (!existsSync(config.taskDir)) fatal(`${config.taskDir} 不存在`);
+  if (!config.taskDir) fatal("task-dir argument required. Use --help for usage.");
+  if (!existsSync(config.taskDir)) fatal(`${config.taskDir} does not exist`);
 
   // Management commands (no server needed)
   if (config.status) {
@@ -826,59 +423,103 @@ async function main() {
 
   // Validate
   if (!VALID_MODES.includes(config.approvalMode))
-    fatal(`无效的 approval-mode '${config.approvalMode}'，可选: ${VALID_MODES.join(", ")}`);
+    fatal(`Invalid approval-mode '${config.approvalMode}', use: ${VALID_MODES.join(", ")}`);
+
+  // ─── Resume handling ───
+  let checkpoint = null;
+  let runId;
+  let runDir;
+
+  if (config.resume) {
+    const resumeId = config.resumeRunId || (await findLatestRun(config.taskDir));
+    if (!resumeId) fatal("No run to resume");
+    const cpPath = join(config.taskDir, LOGS_ROOT, resumeId, "checkpoint.json");
+    if (!existsSync(cpPath)) fatal(`No checkpoint found for run ${resumeId}`);
+    checkpoint = await StateStore.loadCheckpoint(cpPath);
+    runId = resumeId;
+    runDir = join(config.taskDir, LOGS_ROOT, runId);
+    log("INFO", `Resuming run ${runId} from checkpoint`);
+  } else {
+    runId = generateRunId();
+    runDir = join(config.taskDir, LOGS_ROOT, runId);
+    await mkdir(runDir, { recursive: true });
+  }
 
   // Load tasks (with per-task engine resolution)
   const tasks = await loadTasks(config.taskDir, config.engine);
-  if (tasks.length === 0) fatal(`在 ${config.taskDir} 中未找到任务文件 (T*.md)`);
+  if (tasks.length === 0) fatal(`No task files (T*.md) found in ${config.taskDir}`);
 
   const engineInfo = resolveEngines(tasks);
   const batches = topologicalBatches(tasks);
   const edges = buildEdges(tasks);
 
-  // Run isolation: each dispatch gets a unique runId
-  const runId = generateRunId();
-  const runDir = join(config.taskDir, LOGS_ROOT, runId);
-  await mkdir(runDir, { recursive: true });
-
   // State
-  const store = new StateStore(config, tasks, batches, edges, runId);
+  const store = new StateStore(config, tasks, batches, edges, runId, runDir);
+
+  // Apply checkpoint if resuming
+  if (checkpoint) {
+    const { skipped, retrying } = store.applyCheckpoint(checkpoint, {
+      retryFailed: config.retryFailed,
+      retryIds: config.retryIds,
+    });
+    if (skipped.length > 0) {
+      log("INFO", `Resumed: ${skipped.map((id) => `T${id}`).join(", ")} already done`);
+    }
+    if (retrying.length > 0) {
+      log("INFO", `Retrying: ${retrying.map((id) => `T${id}`).join(", ")}`);
+    }
+  }
 
   // Server
-  const { server, port } = await startServer(store, config.port);
+  const { server, port } = await startServer(store, config.port, __dirname);
   const url = `http://localhost:${port}`;
 
   // Write port file so --status can connect to live server
   await writeFile(join(runDir, "port"), String(port), "utf-8");
 
-  // Periodically write compact status file for Agent polling (cat-friendly)
-  const statusInterval = setInterval(() => writeStatusFile(store, runDir, port), 5000);
-  await writeStatusFile(store, runDir, port);
+  // Periodically write report files (signal + digest + status.txt)
+  const reportInterval = setInterval(() => {
+    writeReports(store, runDir, port);
+    store.writeCheckpoint().catch(() => { });
+  }, 5000);
+  await writeReports(store, runDir, port);
 
-  // Keep process alive — server.listen alone should suffice, this is a safety net
+  // Keep process alive
   const keepAlive = setInterval(() => { }, 1 << 30);
 
   // Engine label
-  const engineLabel = (engineInfo.needsCodex && engineInfo.needsClaude)
-    ? `mixed (${engineInfo.codexCount} codex, ${engineInfo.claudeCount} claude)`
-    : (engineInfo.needsClaude ? "claude" : "codex");
+  const engineLabel =
+    engineInfo.needsCodex && engineInfo.needsClaude
+      ? `mixed (${engineInfo.codexCount} codex, ${engineInfo.claudeCount} claude)`
+      : engineInfo.needsClaude
+        ? "claude"
+        : "codex";
   const taskLabels = tasks.map((t) => `T${t.id}[${t.engine}]`).join(", ");
 
   log("INFO", "┌──────────────────────────────────┐");
-  log("INFO", "│  Task Orchestrator               │");
+  log("INFO", "│  Task Orchestrator v2            │");
   log("INFO", "└──────────────────────────────────┘");
-  log("INFO", `面板:     ${url}`);
-  log("INFO", `运行 ID:  ${runId}`);
-  log("INFO", `任务:     ${tasks.length} 个 — ${taskLabels}`);
-  log("INFO", `引擎:     ${engineLabel}`);
-  log("INFO", `模式:     ${config.approvalMode}`);
-  log("INFO", `并行:     ${config.parallel ? `是 (×${config.concurrency})` : "否"}`);
-  log("INFO", `预演:     ${config.dryRun ? "是" : "否"}`);
+  log("INFO", `Dashboard: ${url}`);
+  log("INFO", `Run ID:   ${runId}${config.resume ? " (resumed)" : ""}`);
+  log("INFO", `Tasks:    ${tasks.length} — ${taskLabels}`);
+  log("INFO", `Engine:   ${engineLabel}`);
+  log("INFO", `Mode:     ${config.approvalMode}`);
+  log("INFO", `Parallel: ${config.parallel ? `yes (×${config.concurrency})` : "no"}`);
+  log("INFO", `Dry-run:  ${config.dryRun ? "yes" : "no"}`);
   log("INFO", `DAG:      ${batches.map((b) => b.map((id) => `T${id}`).join("+")).join(" → ")}`);
-  log("INFO", `日志:     ${runDir}`);
+  log("INFO", `Logs:     ${runDir}`);
   console.log("");
 
   if (!config.noOpen) openBrowser(url);
+
+  // ─── Pre-flight checks ───
+  if (!config.dryRun) {
+    const issues = preflight(config, engineInfo);
+    for (const issue of issues) {
+      if (issue.level === "fatal") fatal(`Pre-flight: ${issue.msg}`);
+      log("WARN", `Pre-flight: ${issue.msg}`);
+    }
+  }
 
   // SDK init — lazy load only needed engines
   const sdks = await loadSdks(engineInfo, config.dryRun);
@@ -895,28 +536,41 @@ async function main() {
   const skipped = results.filter((r) => r.skipped).length;
 
   store.setPhase(failed > 0 ? "failed" : "completed");
-  const summaryPath = await writeSummary(store, runDir);
 
-  // Persist full state + final status for later review
-  await writeFile(join(runDir, "state.json"), JSON.stringify(store.getState(), null, 2), "utf-8");
-  await writeStatusFile(store, runDir, port);
+  // Persist everything
+  const summaryPath = await writeSummary(store, runDir);
+  await writeFile(
+    join(runDir, "state.json"),
+    JSON.stringify(store.getState(), null, 2),
+    "utf-8",
+  );
+  await store.writeCheckpoint();
+  await writeReports(store, runDir, port);
 
   console.log("");
-  log("INFO", `── 结果 ──`);
-  log("INFO", `✓ ${succeeded} 通过 | ✗ ${failed} 失败 | ⏭ ${skipped} 跳过`);
-  log("INFO", `报告:  ${summaryPath}`);
-  log("INFO", `面板:  ${url}`);
-  log("INFO", `按 Ctrl+C 停止服务`);
+  log("INFO", `── Results ──`);
+  log("INFO", `✓ ${succeeded} passed | ✗ ${failed} failed | ⏭ ${skipped} skipped`);
+  if (failed > 0) {
+    const failedIds = results
+      .filter((r) => !r.success && !r.skipped)
+      .map((r) => `T${r.taskId}`)
+      .join(",");
+    log("INFO", `Resume:  node dispatch.mjs ${config.taskDir} --resume --retry-failed`);
+    log("INFO", `  or:    node dispatch.mjs ${config.taskDir} --resume --retry ${failedIds}`);
+  }
+  log("INFO", `Report:  ${summaryPath}`);
+  log("INFO", `Signal:  cat ${join(runDir, "signal")}`);
+  log("INFO", `Dash:    ${url}`);
+  log("INFO", `Press Ctrl+C to stop`);
 
   // Graceful shutdown
   let shuttingDown = false;
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    log("INFO", "正在关闭...");
+    log("INFO", "Shutting down...");
     clearInterval(keepAlive);
-    clearInterval(statusInterval);
-    // Remove port file so --status falls back to status.txt
+    clearInterval(reportInterval);
     await rm(join(runDir, "port"), { force: true }).catch(() => { });
     server.close(() => process.exit(failed > 0 ? 1 : 0));
     setTimeout(() => process.exit(1), 3000).unref();

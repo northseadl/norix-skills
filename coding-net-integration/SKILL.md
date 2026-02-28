@@ -1,5 +1,5 @@
 ---
-name: coding-integration
+name: coding-net-integration
 version: 0.2.0
 description: |
   Coding.net DevOps platform integration skill for Agent-driven automation.
@@ -240,7 +240,7 @@ Raw CLI output is JSON. Always transform for the user:
 ## Structure
 
 ```
-coding-integration/
+coding-net-integration/
 ├── coding                ← Unified CLI entry point (bash)
 ├── SKILL.md              ← This file (Agent execution standard)
 ├── scripts/
