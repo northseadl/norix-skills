@@ -1,0 +1,89 @@
+{
+    "skill_name": "agent-brainstorm",
+    "evals": [
+        {
+            "id": 1,
+            "prompt": "我想让几个 Agent 一起讨论一下我们项目的技术选型，用 Codex 和 Claude 混合跑，比如架构师用 Claude，性能工程师用 Codex",
+            "expected_output": "Agent 读取 SKILL.md，创建含 mixed engine 配置的 session JSON，执行 brainstorm.mjs",
+            "should_trigger": true
+        },
+        {
+            "id": 2,
+            "prompt": "帮我做个头脑风暴，我需要 5 个不同视角的专家来讨论我们新产品的 UI 方案，用 Claude Code 来跑",
+            "expected_output": "Agent 生成 5-agent session config with engine: claude，启动讨论",
+            "should_trigger": true
+        },
+        {
+            "id": 3,
+            "prompt": "brainstorm session about whether we should use event sourcing or CQRS for our payment system, run a war room with 4 experts",
+            "expected_output": "Agent creates session JSON with 4 domain experts, launches brainstorm engine",
+            "should_trigger": true
+        },
+        {
+            "id": 4,
+            "prompt": "我有个架构决策想集思广益，让多个 AI 从安全、性能、可维护性的角度辩论一下",
+            "expected_output": "Agent 识别「集思广益」「辩论」触发词，创建多角色 session",
+            "should_trigger": true
+        },
+        {
+            "id": 5,
+            "prompt": "需要方案选型讨论，微服务 vs 单体 vs serverless，3 个 agent 各自代表一个方案的支持者来辩论",
+            "expected_output": "Agent 创建 3-agent advocate session",
+            "should_trigger": true
+        },
+        {
+            "id": 6,
+            "prompt": "让 devil's advocate 和架构师针对我的 API 设计展开多视角讨论",
+            "expected_output": "Agent 识别 devil's advocate + 多视角讨论，启动 2-agent brainstorm",
+            "should_trigger": true
+        },
+        {
+            "id": 7,
+            "prompt": "我想让 AI agents 从不同角度分析这个 PRD 然后收敛出最优方案",
+            "expected_output": "Agent 识别意图，生成基于 PRD 的 brainstorm session",
+            "should_trigger": true
+        },
+        {
+            "id": 8,
+            "prompt": "把这个 PRD 拆成独立的开发任务，然后用 Codex 并行执行",
+            "expected_output": "应触发 codex-task-orchestration 而非 agent-brainstorm",
+            "should_trigger": false
+        },
+        {
+            "id": 9,
+            "prompt": "帮我写一个前端组件的技术方案文档",
+            "expected_output": "直接写文档，不需要多 agent 讨论",
+            "should_trigger": false
+        },
+        {
+            "id": 10,
+            "prompt": "用 Claude 帮我 review 这段代码有没有安全漏洞",
+            "expected_output": "单 agent 任务，不需要多 agent 碰撞",
+            "should_trigger": false
+        },
+        {
+            "id": 11,
+            "prompt": "画一个系统架构图来展示模块之间的关系",
+            "expected_output": "应触发 pm-toolkit 画 Mermaid 图而非 brainstorm",
+            "should_trigger": false
+        },
+        {
+            "id": 12,
+            "prompt": "帮我把这个功能实现一下，创建用户认证模块",
+            "expected_output": "直接编码任务，不需要讨论",
+            "should_trigger": false
+        },
+        {
+            "id": 13,
+            "prompt": "我在考虑数据库选型，能不能帮我比较一下 PostgreSQL 和 MySQL 的优劣",
+            "expected_output": "边界用例：单 agent 就能比较，不需要多 agent 讨论，除非用户明确要求多视角",
+            "should_trigger": false
+        },
+        {
+            "id": 14,
+            "prompt": "组织一个 agent 讨论会，让 3 个 Claude Code agent 和 2 个 Codex agent 一起分析我们的安全策略",
+            "expected_output": "Agent 识别混合引擎 + 多 agent 讨论意图，生成 mixed-engine session",
+            "should_trigger": true
+        }
+    ]
+}

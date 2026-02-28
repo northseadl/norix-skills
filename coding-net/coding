@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# coding — Unified CLI for Coding.net Integration
+# Usage: ./coding <module> <command> [options]
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")/scripts" && pwd)"
+
+module="${1:-help}"; shift 2>/dev/null || true
+
+case "$module" in
+  depot|git|repo)
+    exec python3 "$SCRIPT_DIR/depot.py" "$@" ;;
+  ci|build)
+    exec python3 "$SCRIPT_DIR/ci.py" "$@" ;;
+  artifact|artifacts|ar)
+    exec python3 "$SCRIPT_DIR/artifact.py" "$@" ;;
+  project|proj)
+    exec python3 "$SCRIPT_DIR/project.py" "$@" ;;
+  auth)
+    exec python3 "$SCRIPT_DIR/auth.py" "$@" ;;
+  help|--help|-h)
+    echo "Usage: coding <module> <command> [options]"
+    echo ""
+    echo "Modules:"
+    echo "  depot     Git repos (branches, commits, tree, file, commit-files, mr-create, mr-diff)"
+    echo "  project   Projects (list, info, find, members, depots)"
+    echo "  ci        CI builds (jobs, trigger, builds, log, stop)"
+    echo "  artifact  Artifact registry (repos, packages, versions, download-url)"
+    echo "  auth      Authentication (init, setup, status, clean)"
+    echo ""
+    echo "Examples:"
+    echo "  coding project find --name my-project"
+    echo "  coding project depots --id 12345"
+    echo "  coding depot branches --depot-id 15842394"
+    echo "  coding depot mr-diff --depot-id 123 --merge-id 5"
+    echo "  coding depot mr-comment --depot-path /p/proj/d/repo/git --merge-id 5 --content 'LGTM'"
+    echo "  coding ci trigger --project 12345 --job 678 --ref main"
+    echo "  coding artifact repos --project 12345"
+    echo "  coding auth init --team my-team --token xxx"
+    ;;
+  *)
+    echo "Unknown module: $module" >&2
+    echo "Run 'coding help' for usage." >&2
+    exit 1 ;;
+esac

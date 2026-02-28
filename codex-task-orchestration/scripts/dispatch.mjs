@@ -16,11 +16,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ─── Constants ───
 
 const VALID_MODES = ["suggest", "auto-edit", "full-auto"];
-const MODE_TO_SDK = {
+const VALID_ENGINES = ["codex", "claude"];
+
+const CODEX_MODE_MAP = {
   suggest: { approvalPolicy: "on-request", sandboxMode: "workspace-write" },
   "auto-edit": { approvalPolicy: "on-failure", sandboxMode: "workspace-write" },
   "full-auto": { approvalPolicy: "never", sandboxMode: "workspace-write" },
 };
+
+const CLAUDE_MODE_MAP = {
+  suggest: "default",
+  "auto-edit": "acceptEdits",
+  "full-auto": "bypassPermissions",
+};
+
+// Keep legacy alias for dry-run display
+const MODE_TO_SDK = CODEX_MODE_MAP;
 
 function generateRunId() {
   const d = new Date();
@@ -53,6 +64,7 @@ function parseArgs(argv) {
     dryRun: false,
     parallel: false,
     approvalMode: "suggest",
+    engine: "codex",
     concurrency: 4,
     cwd: process.cwd(),
     port: 0,
@@ -78,6 +90,12 @@ function parseArgs(argv) {
       case "--approval-mode":
         if (i + 1 >= argv.length) fatal("--approval-mode requires a value");
         config.approvalMode = argv[++i];
+        i++;
+        break;
+      case "--engine":
+        if (i + 1 >= argv.length) fatal("--engine requires a value");
+        config.engine = argv[++i];
+        if (!VALID_ENGINES.includes(config.engine)) fatal(`Invalid engine '${config.engine}', use: ${VALID_ENGINES.join(", ")}`);
         i++;
         break;
       case "--concurrency":
@@ -132,7 +150,7 @@ function parseArgs(argv) {
 
 function printUsage() {
   console.log(`
-Codex Orchestrator — 本地任务编排服务 + 实时监控面板
+Task Orchestrator — 本地任务编排服务 + 实时监控面板
 
 用法: node dispatch.mjs <task-dir> [选项]
 
@@ -143,8 +161,10 @@ Codex Orchestrator — 本地任务编排服务 + 实时监控面板
   --dry-run               预览执行计划，不实际调度
   --parallel              并行执行无依赖的任务 (默认: 顺序)
   --approval-mode MODE    suggest|auto-edit|full-auto (默认: suggest)
-  --concurrency N         最大并行 Codex 会话数 (默认: 4)
-  --cwd DIR               Codex Agent 的工作目录 (默认: 当前目录)
+  --engine ENGINE         默认引擎: codex|claude (默认: codex)
+                          每个 T*.md 可通过 engine: 行覆盖
+  --concurrency N         最大并行会话数 (默认: 4)
+  --cwd DIR               Agent 的工作目录 (默认: 当前目录)
   --port PORT             Dashboard 端口 (默认: 随机)
   --no-open               不自动打开浏览器
 
@@ -158,10 +178,9 @@ Codex Orchestrator — 本地任务编排服务 + 实时监控面板
 
 示例:
   node dispatch.mjs ./tasks/ --dry-run
-  node dispatch.mjs ./tasks/ --parallel --concurrency 2
+  node dispatch.mjs ./tasks/ --parallel --engine claude
   node dispatch.mjs ./tasks/ --status
   node dispatch.mjs ./tasks/ --list
-  node dispatch.mjs ./tasks/ --clean 5
 `);
 }
 
@@ -345,7 +364,13 @@ function extractDeps(content) {
   return [...line.matchAll(/T(\d+)/g)].map((m) => parseInt(m[1], 10));
 }
 
-async function loadTasks(taskDir) {
+function extractEngine(content) {
+  // Match "engine: codex" or "engine: claude" in task spec (case-insensitive)
+  const m = content.match(/^\s*[-*]?\s*\*{0,2}engine\*{0,2}\s*[:：]\s*(codex|claude)/im);
+  return m ? m[1].toLowerCase() : null;
+}
+
+async function loadTasks(taskDir, defaultEngine) {
   const entries = await readdir(taskDir);
   const files = entries.filter((f) => /^T\d+.*\.md$/.test(f)).sort();
   const tasks = [];
@@ -357,9 +382,37 @@ async function loadTasks(taskDir) {
       log("WARN", `跳过无法解析 ID 的文件: ${file}`);
       continue;
     }
-    tasks.push({ id, file, filePath, content, deps: extractDeps(content) });
+    const engine = extractEngine(content) || defaultEngine;
+    tasks.push({ id, file, filePath, content, deps: extractDeps(content), engine });
   }
   return tasks;
+}
+
+function resolveEngines(tasks) {
+  const codexCount = tasks.filter((t) => t.engine === "codex").length;
+  const claudeCount = tasks.filter((t) => t.engine === "claude").length;
+  return { needsCodex: codexCount > 0, needsClaude: claudeCount > 0, codexCount, claudeCount };
+}
+
+async function loadSdks(engineInfo, dryRun) {
+  const sdks = { codex: null, claude: null };
+  if (dryRun) return sdks;
+  if (engineInfo.needsCodex) {
+    try {
+      const mod = await import("@openai/codex-sdk");
+      sdks.codex = new mod.Codex();
+    } catch (err) {
+      fatal(`Cannot load @openai/codex-sdk: ${err.message}\n  Run: cd ${resolve(__dirname, "..")} && npm install`);
+    }
+  }
+  if (engineInfo.needsClaude) {
+    try {
+      sdks.claude = await import("@anthropic-ai/claude-agent-sdk");
+    } catch (err) {
+      fatal(`Cannot load @anthropic-ai/claude-agent-sdk: ${err.message}\n  Run: cd ${resolve(__dirname, "..")} && npm install`);
+    }
+  }
+  return sdks;
 }
 
 // ─── DAG ───
@@ -551,58 +604,117 @@ function formatEvent(event) {
   }
 }
 
-async function dispatchTask(codex, task, config, store) {
+async function dispatchTask(sdks, task, config, store) {
   store.updateTask(task.id, { status: "running", startTime: Date.now() });
-  log("INFO", `T${task.id}: ${task.file}`);
+  log("INFO", `T${task.id}: ${task.file} [${task.engine}]`);
 
   if (config.dryRun) {
-    const sdk = MODE_TO_SDK[config.approvalMode];
+    const info = task.engine === "claude"
+      ? `permissionMode="${CLAUDE_MODE_MAP[config.approvalMode]}"`
+      : `approvalPolicy="${CODEX_MODE_MAP[config.approvalMode].approvalPolicy}"`;
     store.addTaskEvent(task.id, {
       ts: Date.now(),
       icon: "◇",
-      text: `[预演] approvalPolicy="${sdk.approvalPolicy}"`,
+      text: `[预演] engine=${task.engine} ${info}`,
     });
     await new Promise((r) => setTimeout(r, 200));
     store.updateTask(task.id, { status: "success", endTime: Date.now() });
     return { taskId: task.id, success: true, dryRun: true };
   }
 
-  const prompt = `根据以下 Task Spec 执行任务:\n\n${task.content}`;
-  const sdkMode = MODE_TO_SDK[config.approvalMode];
-  const thread = codex.startThread({
-    approvalPolicy: sdkMode.approvalPolicy,
-    sandboxMode: sdkMode.sandboxMode,
-    workingDirectory: config.cwd,
-  });
-
   try {
-    const streamed = await thread.runStreamed(prompt);
-    for await (const event of streamed.events) {
-      const fmt = formatEvent(event);
-      if (fmt) {
-        store.addTaskEvent(task.id, { ts: Date.now(), ...fmt });
-        log("INFO", `  T${task.id} | ${fmt.icon} ${fmt.text}`);
-      }
-      if (event.type === "turn.completed") {
-        store.updateTask(task.id, {
-          usage: { input: event.usage.input_tokens, cached: event.usage.cached_input_tokens, output: event.usage.output_tokens },
-        });
-      }
+    if (task.engine === "claude") {
+      return await dispatchClaudeTask(sdks.claude, task, config, store);
     }
-    store.updateTask(task.id, { status: "success", endTime: Date.now(), threadId: thread.id });
-    log("INFO", `T${task.id} 完成`);
-    return { taskId: task.id, success: true, threadId: thread.id };
+    return await dispatchCodexTask(sdks.codex, task, config, store);
   } catch (err) {
-    store.updateTask(task.id, { status: "failed", endTime: Date.now(), error: err.message, threadId: thread.id });
+    store.updateTask(task.id, { status: "failed", endTime: Date.now(), error: err.message });
     store.addTaskEvent(task.id, { ts: Date.now(), icon: "✗", text: err.message });
     log("ERROR", `T${task.id} 失败: ${err.message}`);
     return { taskId: task.id, success: false, error: err.message };
   }
 }
 
+async function dispatchCodexTask(codex, task, config, store) {
+  const prompt = `根据以下 Task Spec 执行任务:\n\n${task.content}`;
+  const sdkMode = CODEX_MODE_MAP[config.approvalMode];
+  const thread = codex.startThread({
+    approvalPolicy: sdkMode.approvalPolicy,
+    sandboxMode: sdkMode.sandboxMode,
+    workingDirectory: config.cwd,
+  });
+
+  const streamed = await thread.runStreamed(prompt);
+  for await (const event of streamed.events) {
+    const fmt = formatEvent(event);
+    if (fmt) {
+      store.addTaskEvent(task.id, { ts: Date.now(), ...fmt });
+      log("INFO", `  T${task.id} | ${fmt.icon} ${fmt.text}`);
+    }
+    if (event.type === "turn.completed") {
+      store.updateTask(task.id, {
+        usage: { input: event.usage.input_tokens, cached: event.usage.cached_input_tokens, output: event.usage.output_tokens },
+      });
+    }
+  }
+  store.updateTask(task.id, { status: "success", endTime: Date.now(), threadId: thread.id });
+  log("INFO", `T${task.id} 完成`);
+  return { taskId: task.id, success: true, threadId: thread.id };
+}
+
+async function dispatchClaudeTask(sdk, task, config, store) {
+  const prompt = `根据以下 Task Spec 执行任务:\n\n${task.content}`;
+  const permissionMode = CLAUDE_MODE_MAP[config.approvalMode] || CLAUDE_MODE_MAP["full-auto"];
+
+  const q = sdk.query({
+    prompt,
+    options: {
+      cwd: config.cwd,
+      model: "claude-sonnet-4-20250514",
+      permissionMode,
+      systemPrompt: { type: "preset", preset: "claude_code" },
+      settingSources: ["project"],
+      maxTurns: 50,
+    },
+  });
+
+  for await (const msg of q) {
+    if (msg.type === "system" && msg.subtype === "init") {
+      log("INFO", `  T${task.id} | INIT model=${msg.model} tools=${msg.tools?.length || 0}`);
+      store.addTaskEvent(task.id, { ts: Date.now(), icon: "▶", text: `init model=${msg.model}` });
+    }
+    if (msg.type === "assistant") {
+      const textBlocks = msg.message.content?.filter((b) => b.type === "text") || [];
+      const toolBlocks = msg.message.content?.filter((b) => b.type === "tool_use") || [];
+      if (textBlocks.length > 0) {
+        const preview = textBlocks.map((b) => b.text).join(" ").slice(0, 100).replace(/\n/g, " ");
+        log("INFO", `  T${task.id} | MSG ${preview}`);
+        store.addTaskEvent(task.id, { ts: Date.now(), icon: "💬", text: preview });
+      }
+      for (const tb of toolBlocks) {
+        const toolName = tb.name || "tool";
+        const input = typeof tb.input === "string" ? tb.input.slice(0, 80) : JSON.stringify(tb.input || {}).slice(0, 80);
+        log("INFO", `  T${task.id} | RUN ${toolName}: ${input}`);
+        store.addTaskEvent(task.id, { ts: Date.now(), icon: "▶", text: `${toolName}: ${input}` });
+      }
+    }
+    if (msg.type === "result") {
+      const usage = msg.usage || {};
+      store.updateTask(task.id, {
+        usage: { input: usage.input_tokens || 0, cached: 0, output: usage.output_tokens || 0 },
+      });
+      log("INFO", `  T${task.id} | tokens: in=${usage.input_tokens || 0} out=${usage.output_tokens || 0} cost=$${msg.total_cost_usd?.toFixed(4) || "?"}`);
+    }
+  }
+
+  store.updateTask(task.id, { status: "success", endTime: Date.now() });
+  log("INFO", `T${task.id} 完成`);
+  return { taskId: task.id, success: true };
+}
+
 // ─── Execution Strategies ───
 
-async function runSequential(codex, tasks, config, store) {
+async function runSequential(sdks, tasks, config, store) {
   const taskMap = new Map(tasks.map((t) => [t.id, t]));
   const batches = store.getState().dag.batches;
   const results = [];
@@ -616,7 +728,7 @@ async function runSequential(codex, tasks, config, store) {
         results.push({ taskId: id, success: false, skipped: true });
         continue;
       }
-      const result = await dispatchTask(codex, taskMap.get(id), config, store);
+      const result = await dispatchTask(sdks, taskMap.get(id), config, store);
       results.push(result);
       if (!result.success && !result.dryRun) failedId = id;
     }
@@ -624,7 +736,7 @@ async function runSequential(codex, tasks, config, store) {
   return results;
 }
 
-async function runParallel(codex, tasks, config, store) {
+async function runParallel(sdks, tasks, config, store) {
   const taskMap = new Map(tasks.map((t) => [t.id, t]));
   const batches = store.getState().dag.batches;
   const results = [];
@@ -643,7 +755,7 @@ async function runParallel(codex, tasks, config, store) {
         runnable.push(task);
       }
     }
-    const br = await pooled(runnable, config.concurrency, (t) => dispatchTask(codex, t, config, store));
+    const br = await pooled(runnable, config.concurrency, (t) => dispatchTask(sdks, t, config, store));
     for (const r of br) {
       results.push(r);
       if (!r.success && !r.dryRun) failedIds.add(r.taskId);
@@ -716,10 +828,11 @@ async function main() {
   if (!VALID_MODES.includes(config.approvalMode))
     fatal(`无效的 approval-mode '${config.approvalMode}'，可选: ${VALID_MODES.join(", ")}`);
 
-  // Load tasks
-  const tasks = await loadTasks(config.taskDir);
+  // Load tasks (with per-task engine resolution)
+  const tasks = await loadTasks(config.taskDir, config.engine);
   if (tasks.length === 0) fatal(`在 ${config.taskDir} 中未找到任务文件 (T*.md)`);
 
+  const engineInfo = resolveEngines(tasks);
   const batches = topologicalBatches(tasks);
   const edges = buildEdges(tasks);
 
@@ -745,12 +858,19 @@ async function main() {
   // Keep process alive — server.listen alone should suffice, this is a safety net
   const keepAlive = setInterval(() => { }, 1 << 30);
 
+  // Engine label
+  const engineLabel = (engineInfo.needsCodex && engineInfo.needsClaude)
+    ? `mixed (${engineInfo.codexCount} codex, ${engineInfo.claudeCount} claude)`
+    : (engineInfo.needsClaude ? "claude" : "codex");
+  const taskLabels = tasks.map((t) => `T${t.id}[${t.engine}]`).join(", ");
+
   log("INFO", "┌──────────────────────────────────┐");
-  log("INFO", "│  Codex Orchestrator              │");
+  log("INFO", "│  Task Orchestrator               │");
   log("INFO", "└──────────────────────────────────┘");
   log("INFO", `面板:     ${url}`);
   log("INFO", `运行 ID:  ${runId}`);
-  log("INFO", `任务:     ${tasks.length} 个`);
+  log("INFO", `任务:     ${tasks.length} 个 — ${taskLabels}`);
+  log("INFO", `引擎:     ${engineLabel}`);
   log("INFO", `模式:     ${config.approvalMode}`);
   log("INFO", `并行:     ${config.parallel ? `是 (×${config.concurrency})` : "否"}`);
   log("INFO", `预演:     ${config.dryRun ? "是" : "否"}`);
@@ -760,22 +880,14 @@ async function main() {
 
   if (!config.noOpen) openBrowser(url);
 
-  // SDK init
-  let codex = null;
-  if (!config.dryRun) {
-    try {
-      const sdk = await import("@openai/codex-sdk");
-      codex = new sdk.Codex();
-    } catch (err) {
-      fatal(`无法加载 @openai/codex-sdk: ${err.message}\n  运行: cd ${resolve(__dirname, "..")} && npm install`);
-    }
-  }
+  // SDK init — lazy load only needed engines
+  const sdks = await loadSdks(engineInfo, config.dryRun);
 
   // Dispatch
   store.setPhase("running");
   const results = config.parallel
-    ? await runParallel(codex, tasks, config, store)
-    : await runSequential(codex, tasks, config, store);
+    ? await runParallel(sdks, tasks, config, store)
+    : await runSequential(sdks, tasks, config, store);
 
   // Summary
   const succeeded = results.filter((r) => r.success).length;

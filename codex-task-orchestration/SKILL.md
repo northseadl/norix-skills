@@ -1,17 +1,26 @@
 ---
 name: codex-task-orchestration
-version: 0.0.1
+version: 0.0.2
 description: |
-  Supervised task decomposition and multi-agent development orchestration using Codex SDK.
-  Use this skill whenever the user wants to: break down a PRD/requirement into Codex-executable tasks,
-  orchestrate multiple Codex agents in parallel, create task specs for Codex sessions, set up
-  a supervised development workflow, or run a long-lived supervision loop where the orchestrator
-  monitors progress and triggers follow-up batches.
-  Also trigger for: "用 Codex 拆任务", "Codex 多任务调度", "监督模式开发", "任务派发",
-  "分解需求给 Codex 执行", "长时间调度", or any mention of splitting work across Codex agents.
+  Supervised task decomposition and multi-agent development orchestration using Codex SDK or Claude Agent SDK.
+  Use this skill whenever the user wants to: break down a PRD/requirement into executable tasks,
+  orchestrate multiple agents in parallel, create task specs for Codex or Claude sessions, set up
+  a supervised development workflow, run a long-lived supervision loop where the orchestrator
+  monitors progress and triggers follow-up batches, or check dispatch status/progress.
+  Each task can independently use Codex or Claude Code engine (mixed mode).
+
+  Also trigger for: "用 Codex 拆任务", "多任务调度", "监督模式开发", "任务派发",
+  "分解需求给 Agent 执行", "长时间调度", "Claude 任务编排", "混合引擎调度",
+  "把 PRD 拆成任务", "并行开发", "Task DAG", "dispatch.mjs",
+  "create task specs", "supervised workflow", "follow-up batches",
+  or any mention of splitting work across Codex or Claude agents.
+
+  NOT for: multi-agent brainstorming/debate/discussion (use agent-brainstorm instead),
+  single one-off Codex tasks (just ask Codex directly), creating Feishu/external tasks,
+  code review, or diagram generation.
 ---
 
-# Codex 监督模式任务编排技能
+# Agent 任务编排技能
 
 ## 核心身份
 
@@ -27,7 +36,7 @@ description: |
 你 (Orchestrator) ── 用户的代理 ── 以用户的判断力自主决策
        │
        ▼
-Codex Agent (Executor) ── 执行原子任务 ── 不做架构决策
+Agent (Executor) ── Codex 或 Claude Code ── 执行原子任务 ── 不做架构决策
 ```
 
 **行为准则**:
@@ -93,13 +102,14 @@ Codex Agent (Executor) ── 执行原子任务 ── 不做架构决策
 ```markdown
 ## T{序号} · {任务名称}
 
-- **Agent**: {执行者标识，如 codex-1, codex-2}
+- **Agent**: {执行者标识，如 codex-1, claude-1}
+- **Engine**: codex 或 claude（可选，未指定则继承 --engine 默认值）
 - **范围**: {涉及的文件/模块，精确到目录}
 - **输入**: {前置条件，包括依赖任务的产出物}
 - **交付物**: {明确的输出文件列表}
 - **验收**:
-  - [ ] {可自动验证的条件，如 `./gradlew :feature:order:testDebugUnitTest` 通过}
-  - [ ] {可人工验证的条件，如"列表页显示订单数据"}
+  - [ ] {可自动验证的条件}
+  - [ ] {可人工验证的条件}
 - **依赖**: {无 / ← T{N} 完成}
 - **预估**: {S/M/L — Small: <30min, Medium: 30-60min, Large: 60-120min}
 ```
@@ -116,7 +126,7 @@ T3 + T4        ──→ T5 (集成测试)
 
 ### Phase 3: Dispatch (派发)
 
-**Codex Orchestrator 服务**:
+**Orchestrator 服务**:
 
 使用 `scripts/dispatch.mjs` 启动本地编排服务，自动打开实时监控 Dashboard:
 
@@ -127,15 +137,23 @@ cd <SKILLS_DIR>/codex-task-orchestration && npm install
 # 预览执行计划（不实际调度）
 node scripts/dispatch.mjs ./tasks/ --dry-run
 
-# 并行调度，全自动模式（Agent 监督推荐: --no-open 避免打开浏览器）
+# 并行调度，全自动模式
 node scripts/dispatch.mjs ./tasks/ --parallel --approval-mode full-auto --no-open
 
-# 查询运行状态（轻量，≤15 行输出）
+# 使用 Claude Code 引擎
+node scripts/dispatch.mjs ./tasks/ --parallel --engine claude --approval-mode full-auto
+
+# 查询运行状态
 node scripts/dispatch.mjs ./tasks/ --status
 
 # 或直接 cat 状态文件（零开销，推荐 Agent 使用）
 cat ./tasks/.dispatch-logs/{runId}/status.txt
 ```
+
+**引擎选择规则**:
+- 每个 T*.md 可通过 `engine: codex` 或 `engine: claude` 行指定引擎
+- 未指定则继承 CLI 的 `--engine` 参数（默认 codex）
+- 支持混合模式：同一批次中不同 task 使用不同引擎
 
 **Dashboard 能力**:
 - 实时 DAG 依赖图（SVG 渲染，状态着色 + 动画边）
@@ -144,13 +162,13 @@ cat ./tasks/.dispatch-logs/{runId}/status.txt
 - 任务进度条 + 整体完成率
 - 结构化 JSON 报告（`summary.json`）
 
-**Codex SDK 模式映射**:
+**SDK 模式映射**:
 
-| CLI 模式 | SDK approvalPolicy | SDK sandboxMode | 适用场景 |
+| CLI 模式 | Codex approvalPolicy | Codex sandboxMode | Claude permissionMode |
 |:---|:---|:---|:---|
-| `suggest` | `on-request` | `workspace-write` | 功能实现、修改现有代码 |
-| `auto-edit` | `on-failure` | `workspace-write` | 创建新模块、脚手架 |
-| `full-auto` | `never` | `workspace-write` | 新文件创建、格式化、文档 |
+| `suggest` | `on-request` | `workspace-write` | `default` |
+| `auto-edit` | `on-failure` | `workspace-write` | `acceptEdits` |
+| `full-auto` | `never` | `workspace-write` | `bypassPermissions` |
 
 **Instructions 文件增强**:
 
@@ -293,13 +311,13 @@ needs_fulfilled >= 100% AND quality_ok?
 
 > 审计/文档类批次可跳过构建检查。
 
-### Codex SDK 模式映射
+### SDK 模式映射
 
-| CLI 模式 | SDK approvalPolicy | SDK sandboxMode | 适用场景 |
+| CLI 模式 | Codex approvalPolicy | Codex sandboxMode | Claude permissionMode |
 |:---|:---|:---|:---|
-| `suggest` | `on-request` | `workspace-write` | 功能实现、修改现有代码 |
-| `auto-edit` | `on-failure` | `workspace-write` | 创建新模块、脚手架 |
-| `full-auto` | `never` | `workspace-write` | 新文件创建、格式化、文档 |
+| `suggest` | `on-request` | `workspace-write` | `default` |
+| `auto-edit` | `on-failure` | `workspace-write` | `acceptEdits` |
+| `full-auto` | `never` | `workspace-write` | `bypassPermissions` |
 
 ## 参考文档
 
