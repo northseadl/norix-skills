@@ -921,11 +921,12 @@ async function spawnCodexAgent(sdk, agent, prompt, config, space) {
 async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
   const permissionMode = CLAUDE_MODE_MAP[config.approvalMode] || CLAUDE_MODE_MAP["full-auto"];
 
+  // No model override — inherits user's locally configured default model.
+  // Users set their preferred model in Claude Code settings (e.g. Opus 4.6).
   const q = sdk.query({
     prompt,
     options: {
       cwd: config.cwd,
-      model: "claude-sonnet-4-20250514",
       permissionMode,
       systemPrompt: { type: "preset", preset: "claude_code" },
       settingSources: ["project"],
