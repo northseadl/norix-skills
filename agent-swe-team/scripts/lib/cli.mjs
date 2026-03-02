@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 
 export const VALID_APPROVAL_MODES = ["suggest", "auto-edit", "full-auto"];
 export const VALID_SANDBOX_MODES = ["workspace-write", "read-only", "danger-full-access"];
+export const VALID_ENGINES = ["codex", "claude"];
 export const DEFAULT_ROLES = ["architect", "backend", "frontend", "qa", "reviewer"];
 
 export function parseGlobalArgs(argv, fatal) {
@@ -9,6 +10,7 @@ export function parseGlobalArgs(argv, fatal) {
         cwd: process.cwd(),
         runId: "",
         dryRun: false,
+        engine: "codex",
         approvalMode: "suggest",
         sandboxMode: "workspace-write",
         noOpen: false,
@@ -32,6 +34,14 @@ export function parseGlobalArgs(argv, fatal) {
                 break;
             case "--dry-run":
                 config.dryRun = true;
+                i++;
+                break;
+            case "--engine":
+                if (i + 1 >= argv.length) fatal("--engine requires a value");
+                config.engine = argv[++i];
+                if (!VALID_ENGINES.includes(config.engine)) {
+                    fatal(`Invalid --engine '${config.engine}', use: ${VALID_ENGINES.join(", ")}`);
+                }
                 i++;
                 break;
             case "--approval-mode":
@@ -83,7 +93,7 @@ export function parseCommaList(s) {
 
 export function printUsage() {
     console.log(`
-Agent Team Dev — Leader + role-based Codex team with local Hub and git worktree isolation
+Agent SWE Team — Role-based multi-engine team with local Hub and git worktree isolation
 
 Usage:
   node scripts/team.mjs [global options] <command> [command options]
@@ -91,7 +101,8 @@ Usage:
 Global options:
   --cwd DIR                Target project directory (default: current)
   --run RUN_ID             Run id (default: latest run)
-  --dry-run                Do not call Codex or run destructive git operations
+  --dry-run                Do not call engines or run destructive git operations
+  --engine ENGINE          codex|claude (default: codex)
   --approval-mode MODE     suggest|auto-edit|full-auto (default: suggest)
   --sandbox MODE           workspace-write|read-only|danger-full-access (default: workspace-write)
   --port PORT              Dashboard port for serve (default: random)
@@ -110,11 +121,10 @@ Commands:
 
 Examples:
   node scripts/team.mjs init --cwd <PROJECT_DIR>
-  node scripts/team.mjs serve --cwd <PROJECT_DIR>
+  node scripts/team.mjs --engine claude serve --cwd <PROJECT_DIR> --approval-mode full-auto
   node scripts/team.mjs ticket new --cwd <PROJECT_DIR> --title "Implement OAuth login"
   node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <PROJECT_DIR>/.agent-team/tickets/001-implement-oauth-login.md
   node scripts/team.mjs reply --cwd <PROJECT_DIR> --role backend --text "Use PKCE flow."
   node scripts/team.mjs status --cwd <PROJECT_DIR>
 `);
 }
-

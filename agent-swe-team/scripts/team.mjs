@@ -17,7 +17,7 @@ import {
     removeRoleWorktrees,
     revParse,
 } from "./lib/git_worktree.mjs";
-import { formatCodexEvent, parseTeamStatus, resumeThread, runTurnStreamed, startThread } from "./lib/codex_runner.mjs";
+import { loadSdks, parseTeamStatus, runCodexSession, resumeCodexSession, runClaudeSession, resumeClaudeSession } from "./lib/engines.mjs";
 import { log, fatal } from "./lib/logger.mjs";
 import {
     digestPath,
@@ -566,30 +566,29 @@ async function handleAssign(global, store, role, req) {
         approvalMode: global.approvalMode,
     });
 
-    const thread = await startThread({
-        approvalMode: global.approvalMode,
-        sandboxMode: global.sandboxMode,
-        workingDirectory: worktreeAbs,
-    });
-
-    store.updateRole(role, { threadId: thread.id || null });
-
     let finalText = "";
     let usage = null;
     const turnStart = Date.now();
 
+    const onEvent = (fmt) => {
+        store.addRoleEvent(role, { ts: Date.now(), ...fmt });
+        appendRoleLog(global.cwd, runId, role, `[${new Date().toISOString()}] ${fmt.kind} ${fmt.text}`);
+    };
+
+    const engineOpts = {
+        approvalMode: global.approvalMode,
+        sandboxMode: global.sandboxMode,
+        workingDirectory: worktreeAbs,
+        onEvent,
+    };
+
     try {
-        const out = await runTurnStreamed(thread, prompt, {
-            onEvent: (event) => {
-                const fmt = formatCodexEvent(event);
-                if (!fmt) return;
-                store.addRoleEvent(role, { ts: Date.now(), ...fmt });
-                appendRoleLog(global.cwd, runId, role, `[${new Date().toISOString()}] ${fmt.kind} ${fmt.text}`);
-            },
-        });
+        const runFn = global.engine === "claude" ? runClaudeSession : runCodexSession;
+        const sdk = global.engine === "claude" ? global.sdks.claude : global.sdks.codex;
+        const out = await runFn(sdk, prompt, engineOpts);
         finalText = out.finalResponse || "";
         usage = out.usage || null;
-        store.updateRole(role, { threadId: out.threadId || thread.id || null });
+        store.updateRole(role, { threadId: out.threadId || null });
     } catch (err) {
         const msg = err.message || String(err);
         store.updateRole(role, { status: "attention", lastError: msg });
@@ -653,7 +652,8 @@ async function handleReply(global, store, role, req) {
         return { ok: false, error: "dry_run_reply_not_supported" };
     }
 
-    if (!roleState?.threadId || !roleState?.current?.ticketPath) {
+    const needsThread = global.engine === "codex";
+    if (needsThread && (!roleState?.threadId || !roleState?.current?.ticketPath)) {
         store.updateRole(role, { status: "attention", lastError: "no_active_thread" });
         return { ok: false, error: "no_active_thread" };
     }
@@ -681,24 +681,24 @@ async function handleReply(global, store, role, req) {
         baseSha: meta.baseSha,
     });
 
-    const thread = await resumeThread({
-        threadId: roleState.threadId,
+    const onEvent = (fmt) => {
+        store.addRoleEvent(role, { ts: Date.now(), ...fmt });
+        appendRoleLog(global.cwd, runId, role, `[${new Date().toISOString()}] ${fmt.kind} ${fmt.text}`);
+    };
+
+    const engineOpts = {
         approvalMode: global.approvalMode,
         sandboxMode: global.sandboxMode,
         workingDirectory: worktreeAbs,
-    });
+        onEvent,
+    };
 
     let finalText = "";
     let usage = null;
     try {
-        const out = await runTurnStreamed(thread, prompt, {
-            onEvent: (event) => {
-                const fmt = formatCodexEvent(event);
-                if (!fmt) return;
-                store.addRoleEvent(role, { ts: Date.now(), ...fmt });
-                appendRoleLog(global.cwd, runId, role, `[${new Date().toISOString()}] ${fmt.kind} ${fmt.text}`);
-            },
-        });
+        const resumeFn = global.engine === "claude" ? resumeClaudeSession : resumeCodexSession;
+        const sdk = global.engine === "claude" ? global.sdks.claude : global.sdks.codex;
+        const out = await resumeFn(sdk, roleState.threadId, prompt, engineOpts);
         finalText = out.finalResponse || "";
         usage = out.usage || null;
     } catch (err) {
@@ -752,6 +752,14 @@ async function cmdServe(global) {
     const runId = await resolveRunIdOrFatal(global.cwd, global.runId);
     const store = await loadOrInitStore(global.cwd, runId);
     if (!store) fatal(`Run not found: ${runId}`);
+
+    // Load SDK based on engine selection
+    const engineInfo = {
+        needsCodex: global.engine === "codex",
+        needsClaude: global.engine === "claude",
+    };
+    global.sdks = await loadSdks(engineInfo, global.dryRun);
+    log("INFO", `Engine: ${global.engine}`);
 
     await mkdir(reportsDir(global.cwd, runId), { recursive: true });
     await mkdir(logsDir(global.cwd, runId), { recursive: true });
