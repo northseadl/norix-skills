@@ -163,13 +163,45 @@ def make_divider_block() -> dict:
     return {"block_type": BT_DIVIDER, "divider": {}}
 
 
-def make_table_skeleton(row_size: int, column_size: int) -> dict:
+def _calc_column_widths(rows: List[List[str]], col_count: int) -> List[int]:
+    """Calculate column widths (px) proportional to content length."""
+    FEISHU_DOC_WIDTH = 700  # approx usable canvas width in px
+    MIN_COL_WIDTH = 60
+    PX_PER_CHAR = 8
+    CELL_PADDING = 24
+
+    # Measure max content length per column
+    col_max_len = [0] * col_count
+    for row in rows:
+        for col_idx, cell in enumerate(row):
+            if col_idx < col_count:
+                col_max_len[col_idx] = max(col_max_len[col_idx], len(cell))
+
+    # Convert char count → pixel estimate
+    raw_widths = [max(MIN_COL_WIDTH, length * PX_PER_CHAR + CELL_PADDING)
+                  for length in col_max_len]
+
+    # Scale proportionally to fit canvas if total exceeds it
+    total = sum(raw_widths)
+    if total > FEISHU_DOC_WIDTH:
+        scale = FEISHU_DOC_WIDTH / total
+        raw_widths = [max(MIN_COL_WIDTH, int(w * scale)) for w in raw_widths]
+
+    return raw_widths
+
+
+def make_table_skeleton(row_size: int, column_size: int,
+                        column_widths: Optional[List[int]] = None,
+                        header_row: bool = False) -> dict:
     """Create table block (cells auto-created by API). Returns block for first API call."""
+    prop: dict = {"row_size": row_size, "column_size": column_size}
+    if column_widths:
+        prop["column_width"] = column_widths
+    if header_row:
+        prop["header_row"] = True
     return {
         "block_type": BT_TABLE,
-        "table": {
-            "property": {"row_size": row_size, "column_size": column_size},
-        },
+        "table": {"property": prop},
     }
 
 
@@ -227,8 +259,13 @@ def markdown_to_blocks(text: str) -> tuple[List[dict], List[tuple]]:
             rows, i = _parse_md_table(lines, i)
             if rows:
                 col_count = max(len(r) for r in rows)
+                col_widths = _calc_column_widths(rows, col_count)
                 block_idx = len(blocks)
-                blocks.append(make_table_skeleton(len(rows), col_count))
+                blocks.append(make_table_skeleton(
+                    len(rows), col_count,
+                    column_widths=col_widths,
+                    header_row=True,
+                ))
                 table_data_queue.append((block_idx, rows))
             continue
 

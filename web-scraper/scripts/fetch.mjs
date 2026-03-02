@@ -123,6 +123,17 @@ try {
                 }
             }
 
+            // Warn on suspiciously short results that may be error pages
+            if (markdown.length < 1000) {
+                const lower = markdown.toLowerCase();
+                const errorHints = ['不存在', 'not found', '404', 'page not found', '无权限',
+                    'access denied', 'forbidden', '页面不存在', 'error', '出错'];
+                const matched = errorHints.find(h => lower.includes(h));
+                if (matched) {
+                    console.error(`  ⚠️  Low-content result (${markdown.length} chars), contains "${matched}" — URL may be invalid or redirected`);
+                }
+            }
+
             results.push({ url, finalUrl, title, markdown, chars: markdown.length, error: null });
 
         } catch (err) {
