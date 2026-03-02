@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Team Dev</title>
+    <style>
+      :root {
+        --bg0: #0b0f14;
+        --bg1: #0f1720;
+        --card: rgba(255, 255, 255, 0.06);
+        --card2: rgba(255, 255, 255, 0.08);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.65);
+        --border: rgba(255, 255, 255, 0.10);
+        --ok: #29c36a;
+        --warn: #f0b429;
+        --bad: #f05252;
+        --idle: rgba(255, 255, 255, 0.35);
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        color: var(--text);
+        background: radial-gradient(1200px 800px at 30% 20%, #13263a 0%, var(--bg0) 45%) ,
+          radial-gradient(1000px 600px at 80% 70%, #2a1432 0%, var(--bg0) 55%),
+          linear-gradient(180deg, var(--bg0), var(--bg1));
+        min-height: 100vh;
+      }
+      header {
+        padding: 18px 18px 10px 18px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(10px);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+      h1 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.9;
+      }
+      .toprow {
+        margin-top: 8px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .pillrow {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .pill {
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.22);
+        padding: 8px 10px;
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .pill strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      main { padding: 18px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 12px;
+        align-items: stretch;
+      }
+      .panel {
+        grid-column: span 12;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--card);
+        overflow: hidden;
+      }
+      .panel h2 {
+        margin: 0;
+        padding: 12px 14px;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.18);
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 12px;
+        padding: 12px;
+      }
+      .card {
+        grid-column: span 12;
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.22);
+        border-radius: 14px;
+        padding: 12px;
+      }
+      .card .row {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      .role {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--text);
+      }
+      .status {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+      }
+      .status.idle { color: var(--idle); }
+      .status.running { color: var(--warn); }
+      .status.blocked, .status.attention { color: var(--bad); }
+      .kv {
+        margin-top: 8px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .kv div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .kv .k { color: rgba(255,255,255,0.45); }
+      .kv .v { color: rgba(255,255,255,0.78); }
+      .ticketlist { padding: 12px; }
+      .ticket {
+        border: 1px solid var(--border);
+        background: rgba(0,0,0,0.18);
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        display: grid;
+        gap: 6px;
+      }
+      .ticket .id { font-family: var(--mono); font-size: 12px; color: var(--text); }
+      .ticket .meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+      .ticket .path { font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,0.45); }
+      .footer {
+        margin-top: 16px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: rgba(255,255,255,0.45);
+      }
+
+      @media (min-width: 900px) {
+        .panel.roles { grid-column: span 8; }
+        .panel.tickets { grid-column: span 4; }
+        .card { grid-column: span 6; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Agent Team Dev</h1>
+      <div class="toprow">
+        <div class="pillrow">
+          <div class="pill">run <strong id="runId">—</strong></div>
+          <div class="pill">phase <strong id="phase">—</strong></div>
+          <div class="pill">signal <strong id="signal">—</strong></div>
+          <div class="pill">updated <strong id="updatedAt">—</strong></div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="grid">
+        <section class="panel roles">
+          <h2>Roles</h2>
+          <div class="cards" id="roles"></div>
+        </section>
+
+        <section class="panel tickets">
+          <h2>Tickets</h2>
+          <div class="ticketlist" id="tickets"></div>
+        </section>
+      </div>
+      <div class="footer">
+        SSE: <span id="sse">connecting…</span>
+      </div>
+    </main>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+      const rolesEl = el("roles");
+      const ticketsEl = el("tickets");
+
+      let meta = null;
+      let state = null;
+      let lastSignal = "—";
+
+      function esc(s) {
+        return String(s ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function statusClass(s) {
+        const v = String(s || "idle").toLowerCase();
+        if (v === "running") return "running";
+        if (v === "blocked") return "blocked";
+        if (v === "attention") return "attention";
+        return "idle";
+      }
+
+      async function fetchText(path) {
+        const r = await fetch(path, { cache: "no-store" });
+        return await r.text();
+      }
+
+      async function refresh() {
+        try {
+          const [metaR, stateR, signal] = await Promise.all([
+            fetch("/api/meta", { cache: "no-store" }).then((r) => r.json()),
+            fetch("/api/state", { cache: "no-store" }).then((r) => r.json()),
+            fetchText("/api/signal"),
+          ]);
+          meta = metaR;
+          state = stateR;
+          lastSignal = (signal || "").trim();
+          render();
+        } catch (e) {
+          el("sse").textContent = "disconnected (refresh failed)";
+        }
+      }
+
+      function render() {
+        if (!state) return;
+        el("runId").textContent = state.runId || "—";
+        el("phase").textContent = state.phase || "—";
+        el("signal").textContent = lastSignal || "—";
+        el("updatedAt").textContent = state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString() : "—";
+
+        const roles = state.roles || {};
+        const order = (meta && meta.roles) ? meta.roles : Object.keys(roles).sort();
+        const cards = [];
+        for (const role of order) {
+          const r = roles[role];
+          if (!r) continue;
+          const ev = (r.events && r.events.length > 0) ? r.events[r.events.length - 1] : null;
+          const cur = r.current || null;
+          const curTicket = cur && cur.ticketId ? `${cur.ticketId}` : "—";
+          const curStatus = cur && cur.teamStatus ? `${cur.teamStatus}` : "—";
+          const queueDepth = (typeof r.queueDepth === "number") ? String(r.queueDepth) : "—";
+          const git = r.git ? `head=${(r.git.headSha || "?").slice(0,10)} ahead=${r.git.aheadCount ?? "?"} dirty=${r.git.dirty ? 1 : 0}` : "—";
+          const lastEvent = ev ? `${ev.kind}: ${ev.text}` : "—";
+          const err = r.lastError ? String(r.lastError) : "";
+
+          cards.push(`
+            <div class="card">
+              <div class="row">
+                <div class="role">${esc(role)}</div>
+                <div class="status ${statusClass(r.status)}">${esc(r.status || "idle")}</div>
+              </div>
+              <div class="kv">
+                <div><span class="k">ticket</span> <span class="v">${esc(curTicket)}</span> <span class="k">team</span> <span class="v">${esc(curStatus)}</span> <span class="k">q</span> <span class="v">${esc(queueDepth)}</span></div>
+                <div><span class="k">branch</span> <span class="v">${esc(r.branch || "—")}</span></div>
+                <div><span class="k">worktree</span> <span class="v">${esc(r.worktreeRel || "—")}</span></div>
+                <div><span class="k">git</span> <span class="v">${esc(git)}</span></div>
+                <div><span class="k">event</span> <span class="v">${esc(lastEvent)}</span></div>
+                ${err ? `<div><span class="k">error</span> <span class="v">${esc(err).slice(0,180)}</span></div>` : ""}
+              </div>
+            </div>
+          `);
+        }
+        rolesEl.innerHTML = cards.join("");
+
+        const tickets = Object.values(state.tickets || {}).sort((a,b) => String(a.id).localeCompare(String(b.id)));
+        if (tickets.length === 0) {
+          ticketsEl.innerHTML = `<div class="ticket"><div class="meta">No tickets yet</div></div>`;
+        } else {
+          ticketsEl.innerHTML = tickets.map((t) => {
+            const title = t.title ? ` · ${esc(t.title)}` : "";
+            const report = t.reportPath ? `report=${esc(t.reportPath)}` : "";
+            return `
+              <div class="ticket">
+                <div class="id">${esc(t.id)} <span class="meta">[${esc(t.role || "?")}] ${esc(t.status || "?")}</span>${title}</div>
+                <div class="meta">${esc(report || "")}</div>
+                <div class="path">${esc(t.path || "")}</div>
+              </div>
+            `;
+          }).join("");
+        }
+      }
+
+      // Initial load
+      refresh();
+
+      // SSE updates (debounced refresh)
+      let refreshTimer = null;
+      function scheduleRefresh() {
+        if (refreshTimer) return;
+        refreshTimer = setTimeout(() => {
+          refreshTimer = null;
+          refresh();
+        }, 250);
+      }
+
+      try {
+        const es = new EventSource("/api/events");
+        es.onopen = () => { el("sse").textContent = "connected"; };
+        es.onerror = () => { el("sse").textContent = "disconnected"; };
+        es.onmessage = (ev) => {
+          if (!ev.data) return;
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === "snapshot") {
+              meta = msg.meta;
+              state = msg.state;
+              scheduleRefresh();
+              return;
+            }
+            scheduleRefresh();
+          } catch {}
+        };
+      } catch {
+        el("sse").textContent = "disabled";
+      }
+    </script>
+  </body>
+</html>
+

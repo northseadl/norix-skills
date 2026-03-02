@@ -14,6 +14,7 @@
 | **[ADB MySQL](https://skills.norix-dev.com/skills/adb-mysql)** | 0.1.0 | ✅ Stable | 阿里云 AnalyticDB for MySQL 只读数据分析。多 Profile、交叉验证、Schema 文档。 |
 | **[PM Toolkit](https://skills.norix-dev.com/skills/pm-toolkit)** | 0.0.1 | ✅ Stable | 自然语言 → Mermaid 图表（16 种类型），本地 Web 面板实时预览与导出。 |
 | **[Agent 任务编排](https://skills.norix-dev.com/skills/task-orchestration)** | 0.0.2 | 🚧 DEV | 监督式多任务分解与调度，支持 Codex / Claude Code 混合引擎，实时 Dashboard。 |
+| **Agent Team Dev** | 0.0.1 | 🚧 DEV | Leader + 多角色 Codex 团队协作（git worktree 隔离 + 本地 Hub + BLOCKED→reply 回路）。 |
 | **[Agent 头脑风暴](https://skills.norix-dev.com/skills/agent-brainstorm)** | 0.0.1 | 🚧 DEV | 多 Agent 异步观点碰撞空间，支持 Codex / Claude Code 混合引擎。 |
 | **[前端设计规格](https://skills.norix-dev.com/skills/agent-front-design)** | 0.0.1 | 🚧 DEV | 双模式治理（Explore/Production），七维质量评分，输出可实施工程文档。 |
 | **[Coding.net 集成](https://skills.norix-dev.com/skills/coding-net)** | 0.2.0 | 🚧 DEV | Coding.net DevOps 平台 — MR/CI/制品库自动化。 |
