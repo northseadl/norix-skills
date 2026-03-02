@@ -188,15 +188,17 @@ def _calc_column_widths(rows: List[List[str]], col_count: int) -> List[int]:
     """Calculate column widths (px) proportional to display width of content."""
     FEISHU_DOC_WIDTH = 700  # approx usable canvas width in px
     MIN_COL_WIDTH = 60
+    MAX_DISPLAY_WIDTH = 80  # cap per-column: ~40 CJK chars, long text wraps anyway
     PX_PER_UNIT = 8  # px per display-width unit (1 for ASCII, 2 for CJK)
     CELL_PADDING = 24
 
-    # Measure max display width per column
+    # Measure max display width per column (capped to prevent starvation)
     col_max_len = [0] * col_count
     for row in rows:
         for col_idx, cell in enumerate(row):
             if col_idx < col_count:
-                col_max_len[col_idx] = max(col_max_len[col_idx], _display_width(cell))
+                w = min(_display_width(cell), MAX_DISPLAY_WIDTH)
+                col_max_len[col_idx] = max(col_max_len[col_idx], w)
 
     # Convert display-width → pixel estimate
     raw_widths = [max(MIN_COL_WIDTH, length * PX_PER_UNIT + CELL_PADDING)
