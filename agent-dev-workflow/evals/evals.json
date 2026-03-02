@@ -3,57 +3,57 @@
     "evals": [
         {
             "id": 1,
-            "prompt": "我准备用 Go 做后端、Vue 做前端搞一个摄影工作室管理系统，你觉得项目结构应该怎么组织？前后端分仓还是放一起？",
-            "expected_output": "闲聊范式，不应触发技能污染全局任务",
+            "prompt": "我准备用 Go 做后端、Vue 做前端搞一个摄影工作室管理系统，你觉得项目结构应该怎么组织？",
+            "expected_output": "日常架构讨论，不满足 //dev 触发约束",
             "should_trigger": false,
             "files": []
         },
         {
             "id": 2,
-            "prompt": "//dev 准备启动一个新项目，你觉得结构怎么组织好？",
-            "expected_output": "包含准确的触发指令，应推荐架构蓝图+结构初始化范式",
+            "prompt": "//dev init 准备启动一个新项目",
+            "expected_output": "触发 §1 项目初始化协议：扫描仓库 → 生成蓝图 → 初始化双脑",
             "should_trigger": true,
             "files": []
         },
         {
             "id": 3,
             "prompt": "这段支付回调的代码太乱了，handler 里面直接操作数据库。我不确定该怎么重构",
-            "expected_output": "具体业务重构探讨，不应触发系统级别抽象技能",
+            "expected_output": "具体业务重构讨论，不应触发系统级技能",
             "should_trigger": false,
             "files": []
         },
         {
             "id": 4,
-            "prompt": "我发现我们项目的 domain.md 越来越长了，很多条目已经过时了，不知道该怎么维护",
-            "expected_output": "只提到文件名，不满足严格指令约束，不应触发（避免意外重写大脑参数）",
+            "prompt": "我发现我们项目的 domain.md 越来越长了，很多条目已经过时了",
+            "expected_output": "提到文件名但不满足 //dev 触发约束，不应触发",
             "should_trigger": false,
             "files": []
         },
         {
             "id": 5,
-            "prompt": "//dev 执行工作区演变，domain.md 需要按准入标准进行一次压缩和梳理",
-            "expected_output": "包含显式斜杠指令，应触发工作区演变协议，指导执行准入标准检查",
+            "prompt": "//dev evolve domain.md 需要按准入标准进行一次压缩和梳理",
+            "expected_output": "触发 §2 工作区演变协议：读取 → 评估 → 压缩/替换 双脑文件",
             "should_trigger": true,
             "files": []
         },
         {
             "id": 6,
             "prompt": "我们代码里可能有人不小心提交了 API key，能不能每次 commit 前自动扫描",
-            "expected_output": "日常对话，如果不带明确协议指令不应触发（或应转而推荐安全分析但不用此宏大流程）",
+            "expected_output": "日常安全讨论，不带 //dev 指令不应触发",
             "should_trigger": false,
             "files": []
         },
         {
             "id": 7,
-            "prompt": "请帮我执行仓库安全审计",
-            "expected_output": "使用了允许精确触发的'执行仓库安全审计'协议用语，应触发安全审计 Hook生成流程",
+            "prompt": "//dev audit 仓库安全审计",
+            "expected_output": "触发 §3 安全审计协议：扫描凭据 → 过滤虚构值 → 生成报告",
             "should_trigger": true,
             "files": []
         },
         {
             "id": 8,
-            "prompt": "生成开发规范 hook",
-            "expected_output": "使用了精确指令用语，应触发分支保护和合并方向 hook 生成",
+            "prompt": "//dev hooks 给仓库加提交守卫",
+            "expected_output": "触发 §4 Git Hooks 注入协议：检查现有 → 生成 → 安装 → 验证",
             "should_trigger": true,
             "files": []
         },
@@ -66,8 +66,36 @@
         },
         {
             "id": 10,
-            "prompt": "进行范式集成注入，我要让所有 Agent 下次开始遵循开发范式",
-            "expected_output": "使用了精确协议指令，应触发并运行 integrate.py --format all",
+            "prompt": "//dev health 重构前先评估一下代码质量",
+            "expected_output": "触发 §5 代码健康度检查协议：死代码 + 僵尸注释 + 目录熵扫描",
+            "should_trigger": true,
+            "files": []
+        },
+        {
+            "id": 11,
+            "prompt": "//dev 我想把当前项目的架构梳理一下",
+            "expected_output": "智能路由到 §1 init（描述包含'架构'关键词）",
+            "should_trigger": true,
+            "files": []
+        },
+        {
+            "id": 12,
+            "prompt": "代码里有死代码需要清理",
+            "expected_output": "日常重构讨论，不带 //dev 前缀不应触发",
+            "should_trigger": false,
+            "files": []
+        },
+        {
+            "id": 13,
+            "prompt": "开始新项目",
+            "expected_output": "通用对话，不满足触发约束",
+            "should_trigger": false,
+            "files": []
+        },
+        {
+            "id": 14,
+            "prompt": "//dev 扫描仓库中是否有密钥泄露",
+            "expected_output": "智能路由到 §3 audit（描述包含'密钥''泄露'关键词）",
             "should_trigger": true,
             "files": []
         }
