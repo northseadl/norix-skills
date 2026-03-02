@@ -1,13 +1,18 @@
 ---
 name: agent-swe-team
-version: 0.1.0
+version: 0.1.1
 description: |
   Build large software tasks with a role-based "SWE team" model: one Leader agent (you, the primary user interface)
   dispatches tickets to multiple role-based sub-agents (architect/backend/frontend/qa/reviewer) through a
   local Hub service. Each role works in an isolated git worktree and communicates via a structured
   TEAM_STATUS protocol with a BLOCKED→Reply decision loop.
 
+  Hub acts as an intelligent broker: it extracts structured artifacts (contracts, API surfaces, decisions)
+  from role outputs, populates a shared Team Blackboard, and injects relevant team context into
+  downstream roles' prompts — enabling cross-role awareness without direct inter-agent communication.
+
   Supports dual engine: Codex SDK and Claude Agent SDK (--engine codex|claude).
+  Supports declarative workflow engine with auto-trigger phases and review loops.
 
   Use this skill when the user wants: role-based delegation with specialized Agent personas,
   SWE-team-like collaboration with architect/backend/frontend/qa/reviewer roles,
@@ -37,14 +42,39 @@ description: |
 
 **你不是调度器——你是决策者。** 当角色报告 BLOCKED 时，你不是转发问题给用户，而是自己做判断。只有当决策超出技术范畴（产品方向、预算）时，才升级给用户。
 
+## 协作架构
+
+```
+User ─── requirement ──→ Leader (你)
+                           ├── 定义 workflow + tickets
+                           ▼
+    ┌────────────────── Hub (智能中枢) ──────────────────┐
+    │  Workflow Engine    Prompt Enricher   Blackboard   │
+    │  (phase 自动触发)   (上下文注入)      (共享知识)    │
+    │  Review Loop       Artifact Extractor             │
+    │  (审查→修复循环)    (制品提取)                      │
+    └───────────────────────┬────────────────────────────┘
+                ┌───────────┼───────────┐
+                ▼           ▼           ▼
+          architect      backend     frontend ── qa ── reviewer
+          (worktree)    (worktree)   (worktree)
+```
+
+**Hub 不是 dumb queue，而是智能信息路由器**:
+- 角色完成后，Hub **自动提取** `## Contracts`、`## API Surface`、`## Decisions` 等结构化制品
+- 提取的制品写入 **Team Blackboard**（共享知识目录）
+- 下游角色启动时，Hub **自动注入** 相关制品到其 prompt 中
+- 每次 BLOCKED→Reply 的决策**自动归档**到 Blackboard
+
 ## 与其他技能的区别
 
 | 维度 | agent-task-orchestration | agent-brainstorm | **agent-swe-team** |
 |:---|:---|:---|:---|
 | Agent 身份 | 无身份 Builder | 有视角的讨论者 | **有角色认同的工程师** |
-| 沟通方式 | 无直接通信 | 共享讨论空间 | **Ticket → Report → Reply** |
-| 核心特性 | DAG 拓扑调度 | 观点碰撞收敛 | **BLOCKED→Reply 决策循环** |
+| 上下文传递 | 无（task 独立） | 共享讨论空间 | **Blackboard 自动路由制品** |
+| 核心特性 | DAG 拓扑调度 | 观点碰撞收敛 | **BLOCKED→Reply + Review Loop** |
 | 代码隔离 | 共享工作区 | 无代码产出 | **git worktree 角色隔离** |
+| 迭代能力 | retry 失败 | 多轮讨论 | **Reviewer findings → fix → re-review** |
 
 ## Quick Start
 
@@ -55,13 +85,14 @@ cd <SKILLS_DIR>/agent-swe-team && npm install
 # 初始化 run（创建 worktrees）
 node scripts/team.mjs init --cwd <PROJECT_DIR>
 
+# 创建 workflow（可选，启用自动 phase 触发）
+node scripts/team.mjs workflow create --cwd <PROJECT_DIR> --template fullstack
+
 # 启动 Hub（dashboard + 队列 worker）
 node scripts/team.mjs --engine codex serve --cwd <PROJECT_DIR> --approval-mode full-auto
 
-# 创建 ticket
+# 创建 + 分配 ticket
 node scripts/team.mjs ticket new --cwd <PROJECT_DIR> --title "Implement OAuth login"
-
-# 分配 ticket 给角色
 node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
 
 # 角色 BLOCKED 时 Reply
@@ -69,11 +100,18 @@ node scripts/team.mjs reply --cwd <PROJECT_DIR> --role backend --text "Use PKCE 
 
 # 查看状态
 node scripts/team.mjs status --cwd <PROJECT_DIR>
+node scripts/team.mjs workflow status --cwd <PROJECT_DIR>
 ```
 
 **引擎选择**:
 - `--engine codex` (默认): 使用 Codex SDK，支持 thread resume（BLOCKED→Reply 在同一 thread 中继续）
 - `--engine claude`: 使用 Claude Agent SDK，BLOCKED→Reply 通过新 session + 完整上下文实现
+
+**Workflow 模板**:
+- `fullstack`: design → implement(parallel) → verify → review
+- `backend-only`: implement(backend) → verify → review
+- `frontend-only`: implement(frontend) → verify
+- `hotfix`: fix → verify
 
 ## Leader 完整工作流
 
@@ -91,13 +129,13 @@ node scripts/team.mjs status --cwd <PROJECT_DIR>
 
 **角色选择指南**:
 
-| 需求类型 | 推荐角色组合 | 说明 |
+| 需求类型 | 推荐 workflow 模板 | 说明 |
 |:---|:---|:---|
-| 新功能（全栈） | architect → backend + frontend → qa | 先设计，再并行实现，最后测试 |
-| 纯后端变更 | backend → qa | 前端不需参与 |
-| 纯前端变更 | frontend → qa | 后端不需参与 |
-| 重构/架构调整 | architect → backend + frontend → reviewer | 需要审查 |
-| Bug 修复 | backend / frontend → qa | 直接修复 + 验证 |
+| 新功能（全栈） | `fullstack` | design → implement(parallel) → verify → review |
+| 纯后端变更 | `backend-only` | implement → verify → review |
+| 纯前端变更 | `frontend-only` | implement → verify |
+| 重构/架构调整 | `fullstack` | 含 architect + reviewer |
+| Bug 修复 | `hotfix` | fix → verify |
 
 ### Phase 2: Ticket 拆分与创建
 
@@ -124,11 +162,14 @@ node scripts/team.mjs ticket new --cwd <PROJECT_DIR> --title "Design API contrac
 | 范围清晰度 | out-of-scope 是否明确列出？ |
 | 上下文完整性 | 角色是否能凭 ticket 独立工作？ |
 
-### Phase 3: 初始化 + 启动 Hub
+### Phase 3: 初始化 + Workflow + 启动 Hub
 
 ```bash
 # 初始化 run 和角色 worktrees
-node scripts/team.mjs init --cwd <PROJECT_DIR> --roles architect,backend,frontend,qa
+node scripts/team.mjs init --cwd <PROJECT_DIR> --roles architect,backend,frontend,qa,reviewer
+
+# 创建 workflow（Hub 将根据 phase 依赖自动调度）
+node scripts/team.mjs workflow create --cwd <PROJECT_DIR> --template fullstack
 
 # 启动 Hub
 node scripts/team.mjs --engine codex serve --cwd <PROJECT_DIR> --approval-mode full-auto --no-open
@@ -139,13 +180,17 @@ node scripts/team.mjs --engine codex serve --cwd <PROJECT_DIR> --approval-mode f
 ```bash
 # 按角色分配
 node scripts/team.mjs assign --cwd <PROJECT_DIR> --role architect <TICKET_PATH>
-node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
 ```
 
-**分配策略**:
+**有 workflow 时的分配策略**:
+- Workflow engine 在 architect DONE 后**自动标记 implement phase 为 ready**
+- Leader 只需 assign implement phase 的 tickets（backend/frontend）
+- 当 implement 全部 DONE 后，Hub 自动标记 verify phase ready
+- **Leader 仍需为每个 ready phase 创建并 assign tickets**
+
+**无 workflow 时的分配策略**:
 - **有依赖的 ticket**: 先 assign 前置 ticket，等其 DONE 后再 assign 后续 ticket
 - **无依赖的 ticket**: 可同时 assign 给多个角色并行执行
-- **reviewer ticket**: 在其他角色 DONE/NEEDS_REVIEW 后分配
 
 ### Phase 5: 监控与决策循环
 
@@ -157,7 +202,8 @@ node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
 |:---|:---|:---|:---|
 | **cat signal** | `cat <CWD>/.agent-team/runs/<runId>/signal` | ~20 tokens | **Leader 首选** |
 | **cat digest** | `cat <CWD>/.agent-team/runs/<runId>/digest.txt` | ~80 tokens | signal 变化时 |
-| **status 命令** | `node scripts/team.mjs status --cwd <CWD>` | ~100 tokens | signal + digest 一次性 |
+| **team-digest** | `cat <CWD>/.agent-team/runs/<runId>/blackboard/team-digest.md` | ~100 tokens | 了解团队知识状态 |
+| **workflow status** | `node scripts/team.mjs workflow status --cwd <CWD>` | ~80 tokens | 查看 phase 进度 |
 | **cat status** | `cat <CWD>/.agent-team/runs/<runId>/status.txt` | ~500 tokens | 需详细信息时 |
 
 **轮询协议**:
@@ -171,18 +217,11 @@ node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
    └─ IDLE               → 所有角色空闲，无队列任务
 ```
 
-**轮询节奏**:
-
-| 阶段 | 间隔 | 理由 |
-|:---|:---|:---|
-| 刚启动 (0-2min) | 15s | 快速确认角色是否正常启动 |
-| 运行中 (2min+) | 30s | 减少上下文消耗 |
-
 **上下文保护规则**:
 - ❌ **禁止** 通过 `command_status` 读取 serve 进程的终端输出
 - ❌ **禁止** 读取 `state.json` 中的 `events` 数组
 - ✅ **首选** `signal` 文件
-- ✅ **次选** `digest.txt`
+- ✅ **次选** `digest.txt` / `team-digest.md`
 
 ### Phase 6: BLOCKED 决策协议
 
@@ -192,17 +231,7 @@ node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
 2. 角色会提供 2-3 个选项
 3. **以 Leader 身份做决策**（不转发给用户，除非涉及产品方向）
 
-**决策框架**:
-
-```
-阅读 blocker 选项
-  ├─ 技术决策（API 设计、数据结构、实现策略）
-  │   └─ Leader 自行判断 → reply
-  ├─ 产品决策（用户体验、功能范围、优先级）
-  │   └─ 简要征求用户意见 → 拿到方向后 reply
-  └─ 外部依赖（需要其他角色的产出）
-      └─ 先完成依赖角色 → 再 reply
-```
+**决策自动归档**: 每次 reply 的内容会被 Hub 自动写入 Blackboard 的 `decisions.jsonl`，后续角色能看到已有决策。
 
 **Reply 命令**:
 
@@ -210,69 +239,76 @@ node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
 node scripts/team.mjs reply --cwd <PROJECT_DIR> --role backend --text "Use PKCE flow. Store tokens in Keychain."
 ```
 
-**Reply 质量标准**: 每个 reply 必须是"可执行的指令"，不能是"你看着办"。
+### Phase 7: Blackboard 与跨角色感知
 
-### Phase 7: 评估与合并
+角色完成后，Hub 自动执行：
+1. **Artifact Extraction**: 从 report 中提取 `## Contracts`、`## API Surface`、`## Decisions` 段
+2. **Blackboard Write**: 制品写入 `blackboard/contracts/`，决策追加到 `decisions.jsonl`
+3. **Changelog**: 变更摘要追加到 `changelog.md`
+4. **Team Digest**: 重新生成 `team-digest.md`
 
-**当所有角色 DONE/NEEDS_REVIEW 时**:
+下游角色启动时，Hub 自动注入：
+
+| 角色 | 注入内容 |
+|:---|:---|
+| backend | architect 的 contracts + 相关 decisions |
+| frontend | architect 的 contracts + backend 的 API surface |
+| qa | 所有实现角色的 changelog + contracts |
+| reviewer | changelog + contracts + decisions（全量） |
+
+**Token 预算**: 团队上下文注入总量 ≤ 4500 tokens（约占总窗口 5-10%），超出自动截断最旧条目。
+
+### Phase 8: Review Loop (自动审查循环)
+
+当 reviewer 提交包含 `## Findings` 的报告时：
+
+```
+Reviewer DONE
+  │
+  ├─ 全部 🟢 OPTIONAL → workflow 标记完成
+  ├─ 存在 🟡 SHOULD_FIX → Log 通知 Leader 决定是否修复
+  └─ 存在 🔴 MUST_FIX → Hub 自动创建 fix ticket 给对应角色
+       │
+       ▼
+     角色收到 fix ticket（含 findings 作为上下文）
+     角色修复 → DONE → Hub 自动重新 assign reviewer
+       │
+       ▼
+     Reviewer 复查 → 循环直到没有 MUST_FIX（最多 3 轮）
+```
+
+### Phase 9: 集成与清理
+
+**当所有角色 DONE 或 workflow COMPLETED 时**:
 
 ```bash
-# Step 1: 读取每个角色的报告
-cat <CWD>/.agent-team/runs/<runId>/reports/<ticketId>-<role>.md
-
-# Step 2: 检查每个角色分支的变更
-cd <PROJECT_DIR>
-git log --oneline team/<runId>/backend
+# 检查每个角色分支的变更
 git diff main...team/<runId>/backend --stat
 
-# Step 3: 合并到集成分支
+# 合并到集成分支
 git checkout -b integration/<runId>
 git merge team/<runId>/architect
 git merge team/<runId>/backend
 git merge team/<runId>/frontend
 
-# Step 4: 解决冲突（如有）
-
-# Step 5: 质量门禁（从 AGENTS.md 获取构建/测试命令）
-# 示例:
-# cd server && go build ./... && go test ./...
-# cd apps/web && pnpm build
+# 质量门禁（从 AGENTS.md 获取构建/测试命令）
 ```
-
-**评估标准**:
-
-| 检查项 | 命令 | 必须 |
-|:---|:---|:---|
-| 构建通过 | 项目构建命令 | ✅ |
-| 测试通过 | 项目测试命令 | ✅ |
-| diff 范围合理 | `git diff --stat` | ✅ |
-| 角色报告完整 | 检查 ## Report 块 | ✅ |
-
-**评估输出格式（≤15行）**:
-
-```
-## 团队评估: <runId>
-
-| Role | Ticket | 状态 | 变更 |
-|:---|:---|:---|:---|
-| architect | 001 | DONE | +30/-5 |
-| backend | 002 | DONE | +120/-40 |
-| frontend | 003 | NEEDS_REVIEW | +80/-10 |
-
-总结: 构建 ✅ | 测试 ✅ | 变更 +230/-55
-```
-
-### Phase 8: 清理
 
 ```bash
-# 预览清理计划
-node scripts/team.mjs clean --cwd <PROJECT_DIR>
-
-# 执行清理（移除 worktrees + run 数据）
+# 清理
 node scripts/team.mjs clean --cwd <PROJECT_DIR> --force
+```
 
-# 保留分支（仅清理 worktrees）
-node scripts/team.mjs clean --cwd <PROJECT_DIR> --force --keep-branches
+## Blackboard 目录结构
+
+```
+.agent-team/runs/<runId>/blackboard/
+├── contracts/               # Hub 自动提取的角色制品
+│   ├── 001-architect-contracts.md
+│   └── 002-backend-api_surface.md
+├── decisions.jsonl          # BLOCKED→Reply 决策流水日志
+├── changelog.md             # 角色完成摘要
+└── team-digest.md           # 自动生成的团队状态概览
 ```
 
 ## Safety Rules
@@ -281,16 +317,7 @@ node scripts/team.mjs clean --cwd <PROJECT_DIR> --force --keep-branches
 2. 不要在 tickets/prompts 中硬编码凭据
 3. 角色只能在自己的 worktree 目录内编辑文件
 4. Hub 在 worktree dirty 时拒绝执行新 ticket
-
-## Dry-Run 验证
-
-```bash
-node scripts/team.mjs init --cwd <PROJECT_DIR> --dry-run
-node scripts/team.mjs serve --cwd <PROJECT_DIR> --dry-run --no-open
-node scripts/team.mjs ticket new --cwd <PROJECT_DIR> --title "Test ticket"
-node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
-node scripts/team.mjs status --cwd <PROJECT_DIR>
-```
+5. Review loop 最多 3 轮，超过自动升级给 Leader
 
 ## SDK 模式映射
 

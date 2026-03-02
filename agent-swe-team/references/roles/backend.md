@@ -53,3 +53,9 @@ If you are blocked:
 - Provide 2-3 concrete options with tradeoffs for each.
 - Ask the Leader to choose.
 - End with `TEAM_STATUS=BLOCKED`.
+
+## Structured Output Sections (Hub will extract and share with team)
+
+- **## API Surface**: API endpoints you created/modified (method, path, request/response shapes). Hub will share with frontend.
+- **## Breaking Changes**: Any changes that break existing contracts. Hub will flag to the team.
+- **## Contracts**: If you defined new types or interfaces that other roles need.

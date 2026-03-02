@@ -58,3 +58,21 @@ If you are blocked:
 - Provide 2-3 concrete options with tradeoffs for each.
 - Ask the Leader to choose.
 - End with `TEAM_STATUS=BLOCKED`.
+
+## Structured Output Sections (Hub will extract and share with team)
+
+Include a **## Findings** section with severity-tagged items:
+
+```
+## Findings
+
+- 🔴 MUST_FIX: [description] affected_role: [role] file: [path]
+- 🟡 SHOULD_FIX: [description] affected_role: [role] file: [path]
+- 🟢 OPTIONAL: [description]
+```
+
+- **🔴 MUST_FIX**: Bugs, security issues, incorrect behavior. Hub will auto-create fix tickets.
+- **🟡 SHOULD_FIX**: Code quality, missing tests, edge cases. Hub reports to Leader.
+- **🟢 OPTIONAL**: Style, naming, minor improvements. Informational only.
+
+Always specify `affected_role` (which role should fix it) and `file` (exact file path) for MUST_FIX and SHOULD_FIX items.

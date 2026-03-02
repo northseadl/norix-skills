@@ -59,3 +59,10 @@ If you are blocked:
 - Provide 2-3 concrete options with tradeoffs for each.
 - Ask the Leader to choose.
 - End with `TEAM_STATUS=BLOCKED`.
+
+## Structured Output Sections (Hub will extract and share with team)
+
+If your work produces any of the following, include them as separate `##` sections in your response:
+
+- **## Contracts**: Interface definitions, API contracts, type schemas, module boundaries. Hub will share these with backend/frontend roles.
+- **## Decisions**: Key architecture decisions with rationale (Why, not What). Hub will add these to the team decision log.

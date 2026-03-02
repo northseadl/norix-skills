@@ -76,3 +76,31 @@ export function worktreesRootDir(cwd, runId) {
     return join(rootDir(cwd), "worktrees", runId);
 }
 
+// ─── Blackboard ───
+
+export function blackboardDir(cwd, runId) {
+    return join(runDir(cwd, runId), "blackboard");
+}
+
+export function blackboardContractsDir(cwd, runId) {
+    return join(blackboardDir(cwd, runId), "contracts");
+}
+
+export function blackboardDecisionsPath(cwd, runId) {
+    return join(blackboardDir(cwd, runId), "decisions.jsonl");
+}
+
+export function blackboardChangelogPath(cwd, runId) {
+    return join(blackboardDir(cwd, runId), "changelog.md");
+}
+
+export function blackboardTeamDigestPath(cwd, runId) {
+    return join(blackboardDir(cwd, runId), "team-digest.md");
+}
+
+// ─── Workflow ───
+
+export function workflowPath(cwd, runId) {
+    return join(runDir(cwd, runId), "workflow.json");
+}
+

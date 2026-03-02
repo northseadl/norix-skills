@@ -20,6 +20,7 @@ import {
 import { loadSdks, parseTeamStatus, runCodexSession, resumeCodexSession, runClaudeSession, resumeClaudeSession } from "./lib/engines.mjs";
 import { log, fatal } from "./lib/logger.mjs";
 import {
+    blackboardDir,
     digestPath,
     logsDir,
     portPath,
@@ -46,6 +47,10 @@ import {
     initStateFromRunMeta,
 } from "./lib/store.mjs";
 import { openBrowser, startServer } from "./lib/server.mjs";
+import { ensureBlackboardDirs, writeContract, appendDecision, appendChangelog, updateTeamDigest, buildTeamContext } from "./lib/blackboard.mjs";
+import { extractArtifacts, generateChangelogEntry } from "./lib/extractor.mjs";
+import { loadWorkflow, saveWorkflow, getPreset, initWorkflowState, resolveReadyPhases, markRoleDone, activatePhase, isWorkflowComplete, getPhase, listPresets } from "./lib/workflow.mjs";
+import { analyzeFindings } from "./lib/review_loop.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -267,6 +272,7 @@ async function cmdInit(global, args) {
     await mkdir(reportsDir(global.cwd, runId), { recursive: true });
     await mkdir(logsDir(global.cwd, runId), { recursive: true });
     await ensureQueueDirs(global.cwd, runId);
+    await ensureBlackboardDirs(global.cwd, runId);
 
     const meta = {
         version: 1,
@@ -555,6 +561,7 @@ async function handleAssign(global, store, role, req) {
     }
 
     const roleTemplate = await loadRoleTemplate(role);
+    const teamContext = await buildTeamContext(global.cwd, runId, role);
     const prompt = buildAssignPrompt({
         role,
         roleTemplate,
@@ -564,6 +571,7 @@ async function handleAssign(global, store, role, req) {
         branch,
         baseSha: meta.baseSha,
         approvalMode: global.approvalMode,
+        teamContext,
     });
 
     let finalText = "";
@@ -614,7 +622,6 @@ async function handleAssign(global, store, role, req) {
     store.updateRole(role, { git: gitInfo });
 
     const report = `# ${ticketId} · ${role}\n\n${finalText}\n`;
-    // Overwrite per turn; source of truth is last report
     await writeTextAtomic(reportPathAbs, report);
 
     store.upsertTicket(ticketId, {
@@ -624,6 +631,11 @@ async function handleAssign(global, store, role, req) {
         reportPath: reportPathRel,
         updatedAt: new Date().toISOString(),
     });
+
+    // ── Blackboard: extract artifacts and update shared knowledge ──
+    if (teamStatus === "DONE" || teamStatus === "NEEDS_REVIEW") {
+        await processRoleCompletion(global.cwd, runId, role, ticketId, finalText, store);
+    }
 
     if (teamStatus === "BLOCKED") {
         store.updateRole(role, {
@@ -670,6 +682,7 @@ async function handleReply(global, store, role, req) {
         return { ok: false, error: "missing_worktree" };
     }
     const roleTemplate = await loadRoleTemplate(role);
+    const teamContext = await buildTeamContext(global.cwd, runId, role);
     const prompt = buildReplyPrompt({
         role,
         roleTemplate,
@@ -679,6 +692,15 @@ async function handleReply(global, store, role, req) {
         worktreePathAbs: worktreeAbs,
         branch,
         baseSha: meta.baseSha,
+        teamContext,
+    });
+
+    // Archive BLOCKED→Reply decision to blackboard
+    await appendDecision(global.cwd, runId, {
+        role,
+        ticketId,
+        question: `(${role} was BLOCKED)`,
+        answer: req.text.slice(0, 200),
     });
 
     const onEvent = (fmt) => {
@@ -764,6 +786,16 @@ async function cmdServe(global) {
     await mkdir(reportsDir(global.cwd, runId), { recursive: true });
     await mkdir(logsDir(global.cwd, runId), { recursive: true });
     await ensureQueueDirs(global.cwd, runId);
+    await ensureBlackboardDirs(global.cwd, runId);
+
+    // Load workflow if it exists (auto-trigger phases)
+    const workflowDef = await loadWorkflow(global.cwd, runId);
+    if (workflowDef) {
+        log("INFO", `Workflow loaded: ${workflowDef.phases.length} phases`);
+        if (!workflowDef._state) {
+            workflowDef._state = initWorkflowState(workflowDef);
+        }
+    }
 
     const { server, port } = await startServer(store, global.port, __dirname);
     store.setDashboard(port);
@@ -845,6 +877,126 @@ async function cmdServe(global) {
     process.on("SIGTERM", shutdown);
 }
 
+// ─── Post-Completion Processing (Blackboard + Workflow + Review Loop) ───
+
+async function processRoleCompletion(cwd, runId, role, ticketId, reportText, store) {
+    // 1. Extract artifacts from report
+    const artifacts = extractArtifacts(reportText, role, ticketId);
+    for (const artifact of artifacts) {
+        if (artifact.type === "contracts" || artifact.type === "api_surface") {
+            await writeContract(cwd, runId, artifact);
+            log("INFO", `Blackboard: wrote ${artifact.type} from ${role}`);
+        }
+        if (artifact.type === "decisions") {
+            await appendDecision(cwd, runId, {
+                role,
+                ticketId,
+                question: `(from ${role} report)`,
+                answer: artifact.content.slice(0, 200),
+            });
+        }
+    }
+
+    // 2. Append changelog
+    const changelogEntry = generateChangelogEntry(role, ticketId, reportText);
+    await appendChangelog(cwd, runId, changelogEntry);
+
+    // 3. Update team digest
+    await updateTeamDigest(cwd, runId, store.getState(), store.getMeta());
+
+    // 4. Workflow phase advancement
+    const workflowDef = await loadWorkflow(cwd, runId);
+    if (workflowDef && workflowDef._state) {
+        const { phaseCompleted, phaseId } = markRoleDone(workflowDef, workflowDef._state, role);
+        if (phaseCompleted) {
+            log("INFO", `Workflow: phase '${phaseId}' completed`);
+
+            // 5. Review Loop: if review phase completed, check findings
+            const phase = getPhase(workflowDef, phaseId);
+            if (phase?.roles?.includes("reviewer")) {
+                const findingItems = artifacts.filter((a) => a.type === "finding_item");
+                const result = analyzeFindings(findingItems, workflowDef._state.reviewLoopCount || 0);
+
+                if (result.action === "fix_and_re_review") {
+                    workflowDef._state.reviewLoopCount = (workflowDef._state.reviewLoopCount || 0) + 1;
+                    log("INFO", `Review Loop: round ${workflowDef._state.reviewLoopCount}, creating ${result.fixTickets.length} fix ticket(s)`);
+                    for (const ft of result.fixTickets) {
+                        // Write fix ticket and auto-enqueue
+                        const fixTicketPath = join(cwd, ".agent-team", "tickets", `fix-r${workflowDef._state.reviewLoopCount}-${ft.role}.md`);
+                        await writeTextAtomic(fixTicketPath, ft.ticketContent);
+                        await enqueueAssign(cwd, runId, {
+                            role: ft.role,
+                            ticketPath: relative(cwd, fixTicketPath),
+                            estimate: "S",
+                        });
+                    }
+                } else if (result.action === "escalate") {
+                    log("WARN", `Review Loop: ESCALATED — ${result.reason}`);
+                    store.setPhase("attention");
+                } else {
+                    log("INFO", `Review Loop: APPROVED — workflow complete`);
+                }
+            }
+
+            // 6. Auto-trigger ready phases
+            const readyPhases = resolveReadyPhases(workflowDef, workflowDef._state);
+            for (const readyId of readyPhases) {
+                const readyPhase = getPhase(workflowDef, readyId);
+                if (!readyPhase) continue;
+                activatePhase(workflowDef._state, readyId, readyPhase.roles);
+                log("INFO", `Workflow: auto-triggering phase '${readyId}' (roles: ${readyPhase.roles.join(", ")})`);
+                // Note: actual ticket creation for auto-triggered phases requires
+                // Leader to have pre-created tickets. Hub logs the trigger for Leader awareness.
+            }
+
+            if (isWorkflowComplete(workflowDef, workflowDef._state)) {
+                store.setPhase("completed");
+                log("INFO", "Workflow: ALL PHASES COMPLETE");
+            }
+        }
+        await saveWorkflow(cwd, runId, workflowDef);
+    }
+}
+
+// ─── Workflow Command ───
+
+async function cmdWorkflow(global, args) {
+    if (args[0] === "create") {
+        const runId = await resolveRunIdOrFatal(global.cwd, global.runId);
+        let template = "fullstack";
+        for (let i = 1; i < args.length; i++) {
+            if (args[i] === "--template" && i + 1 < args.length) {
+                template = args[++i];
+            }
+        }
+        const preset = getPreset(template);
+        if (!preset) fatal(`Unknown workflow template: ${template}. Available: ${listPresets().join(", ")}`);
+        const wf = { ...preset, _state: initWorkflowState(preset) };
+        await saveWorkflow(global.cwd, runId, wf);
+        log("INFO", `Workflow created: ${template} (${preset.phases.length} phases)`);
+        for (const p of preset.phases) {
+            const deps = p.dependsOn?.join(", ") || "(start)";
+            console.log(`  ${p.id}: roles=[${p.roles.join(",")}] depends=[${deps}]`);
+        }
+        return;
+    }
+    if (args[0] === "status") {
+        const runId = await resolveRunIdOrFatal(global.cwd, global.runId);
+        const wf = await loadWorkflow(global.cwd, runId);
+        if (!wf) { log("INFO", "No workflow defined for this run."); return; }
+        console.log(`\nWorkflow (${wf.phases.length} phases):\n`);
+        for (const p of wf.phases) {
+            const ps = wf._state?.phases?.[p.id];
+            const status = ps?.status?.toUpperCase() || "?";
+            const roleStatuses = p.roles.map((r) => `${r}=${ps?.roles?.[r] || "?"}`).join(" ");
+            console.log(`  ${p.id}: ${status} [${roleStatuses}]`);
+        }
+        console.log("");
+        return;
+    }
+    fatal("Usage: workflow create --template <name> | workflow status");
+}
+
 async function main() {
     const { config: global, rest } = parseGlobalArgs(process.argv, fatal);
     if (global.help || rest.length === 0) {
@@ -871,6 +1023,9 @@ async function main() {
             return;
         case "reply":
             await cmdReply(global, parseReplyArgs(args, fatal));
+            return;
+        case "workflow":
+            await cmdWorkflow(global, args);
             return;
         case "status":
             await cmdStatus(global);

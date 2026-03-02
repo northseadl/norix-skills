@@ -115,6 +115,8 @@ Commands:
   ticket new               Create a ticket template file
   assign                   Assign a ticket to a role (enqueue)
   reply                    Reply to a BLOCKED role (enqueue)
+  workflow create           Create a workflow from preset template
+  workflow status           Show workflow phase statuses
   status                   Show low-cost status (signal + digest)
   list-runs                List runs under .agent-team/runs
   clean                    Remove worktrees and run data (requires --force)

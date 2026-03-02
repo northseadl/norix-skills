@@ -53,3 +53,7 @@ If you are blocked:
 - Provide 2-3 concrete options with tradeoffs for each.
 - Ask the Leader to choose.
 - End with `TEAM_STATUS=BLOCKED`.
+
+## Structured Output Sections (Hub will extract and share with team)
+
+- **## Contracts**: Component props interfaces, shared types, or event contracts if you defined any.
