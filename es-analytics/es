@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# es — Unified CLI for ES Analytics
+# Usage: ./es <module> [command] [options]
+#
+# Modules:
+#   config    Connection profile management
+#   query     Read-only ES query execution
+#   indices   List indices
+#   mapping   View index mapping
+#   count     Document count
+#   extract   Full unique value extraction (search_after)
+#   sample    Quick data sampling
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")/scripts" && pwd)"
+
+module="${1:-help}"; shift 2>/dev/null || true
+
+case "$module" in
+  config)
+    python3 "$SCRIPT_DIR/config.py" "$@"
+    ;;
+  query)
+    python3 "$SCRIPT_DIR/query.py" "$@"
+    ;;
+  indices)
+    python3 "$SCRIPT_DIR/indices.py" "$@"
+    ;;
+  mapping)
+    python3 "$SCRIPT_DIR/mapping.py" "$@"
+    ;;
+  count)
+    python3 "$SCRIPT_DIR/count.py" "$@"
+    ;;
+  extract)
+    python3 "$SCRIPT_DIR/extract.py" "$@"
+    ;;
+  sample)
+    python3 "$SCRIPT_DIR/sample.py" "$@"
+    ;;
+  help|--help|-h)
+    echo "ES Analytics — Elasticsearch / SLS ES 数据分析技能"
+    echo ""
+    echo "用法: ./es <module> [command] [options]"
+    echo ""
+    echo "模块:"
+    echo "  config    连接配置管理 (add|list|use|test|remove|clean)"
+    echo "  query     ES 查询 (只读, 自动限制 200 条)"
+    echo "  indices   列出索引"
+    echo "  mapping   查看索引 Mapping"
+    echo "  count     文档计数"
+    echo "  extract   全量去重提取 (search_after 分页)"
+    echo "  sample    数据采样 (快速查看)"
+    echo ""
+    echo "快速开始:"
+    echo "  ./es config add prod --url https://my-es:9200 --user elastic --password xxx --test"
+    echo "  ./es config add sls-prod --url https://xxx.log.aliyuncs.com/es --user AK --password SK --sls --test"
+    echo "  ./es indices -p prod"
+    echo "  ./es sample my-index -p prod"
+    echo "  ./es query -i my-index '{\"size\":10,\"query\":{\"match_all\":{}}}'"
+    echo "  ./es extract my-index --field user_id -o /tmp/uids.csv"
+    ;;
+  *)
+    echo "未知模块: $module"
+    echo "运行 ./es help 查看可用模块"
+    exit 1
+    ;;
+esac
