@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 
-CONFIG_DIR = os.path.expanduser("~/.adb-mysql")
+CONFIG_DIR = os.path.expanduser("~/.agents/data/adb-mysql")
 PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
 SCHEMA_DIR = os.path.join(CONFIG_DIR, "schema")
 MAX_ROWS = 200
@@ -102,17 +102,21 @@ _PROTECTED_DIRS = frozenset({
 def safe_clean(data_dir, skill_name):
     """Delete a skill's data directory with multi-layer safety validation.
 
-    Layers: realpath resolve → $HOME direct child → hidden dir → blacklist → double confirm.
+    Layers: realpath resolve → $HOME subtree → agents data prefix → blacklist → double confirm.
     """
     home = os.path.expanduser("~")
     real_path = os.path.realpath(data_dir)
+    agents_data = os.path.join(home, ".agents", "data")
 
     if not real_path.startswith(home + os.sep):
         Log.err(f"安全拒绝: 数据目录不在用户主目录下 ({real_path})")
         sys.exit(1)
 
-    if os.path.dirname(real_path) != home:
-        Log.err(f"安全拒绝: 仅允许删除 $HOME 下的直接子目录 ({real_path})")
+    # Allow paths under ~/.agents/data/ or direct $HOME children
+    is_agents_data = real_path.startswith(agents_data + os.sep)
+    is_home_child = os.path.dirname(real_path) == home
+    if not is_agents_data and not is_home_child:
+        Log.err(f"安全拒绝: 仅允许删除 ~/.agents/data/ 下的目录或 $HOME 直接子目录 ({real_path})")
         sys.exit(1)
 
     basename = os.path.basename(real_path)

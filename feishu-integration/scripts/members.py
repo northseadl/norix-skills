@@ -17,7 +17,7 @@ sys.path.insert(0, SCRIPT_DIR)
 
 from feishu_api import FeishuClient, Log, output
 
-CACHE_FILE = os.path.expanduser("~/.feishu/members.json")
+CACHE_FILE = os.path.expanduser("~/.agents/data/feishu/members.json")
 CACHE_TTL_HOURS = 24 * 7  # 7 days
 
 

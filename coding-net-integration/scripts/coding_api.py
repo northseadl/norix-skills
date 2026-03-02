@@ -24,7 +24,7 @@ from typing import Any, Optional
 
 MAX_RETRIES = int(os.environ.get("CODING_MAX_RETRIES", "3"))
 RETRY_DELAY = int(os.environ.get("CODING_RETRY_DELAY", "2"))
-CREDENTIALS_FILE = os.path.expanduser("~/.coding/credentials.json")
+CREDENTIALS_FILE = os.path.expanduser("~/.agents/data/coding/credentials.json")
 DATA_DIR = os.path.dirname(CREDENTIALS_FILE)
 
 # ─── Colored Logging ─────────────────────────────────────────────────────────
@@ -245,17 +245,21 @@ _PROTECTED_DIRS = frozenset({
 def safe_clean(data_dir: str, skill_name: str):
     """Delete a skill's data directory with multi-layer safety validation.
 
-    Layers: realpath resolve → $HOME direct child → hidden dir → blacklist → double confirm.
+    Layers: realpath resolve → $HOME subtree → agents data prefix → blacklist → double confirm.
     """
     home = os.path.expanduser("~")
     real_path = os.path.realpath(data_dir)
+    agents_data = os.path.join(home, ".agents", "data")
 
     if not real_path.startswith(home + os.sep):
         Log.error(f"安全拒绝: 数据目录不在用户主目录下 ({real_path})")
         sys.exit(1)
 
-    if os.path.dirname(real_path) != home:
-        Log.error(f"安全拒绝: 仅允许删除 $HOME 下的直接子目录 ({real_path})")
+    # Allow paths under ~/.agents/data/ or direct $HOME children
+    is_agents_data = real_path.startswith(agents_data + os.sep)
+    is_home_child = os.path.dirname(real_path) == home
+    if not is_agents_data and not is_home_child:
+        Log.error(f"安全拒绝: 仅允许删除 ~/.agents/data/ 下的目录或 $HOME 直接子目录 ({real_path})")
         sys.exit(1)
 
     basename = os.path.basename(real_path)
