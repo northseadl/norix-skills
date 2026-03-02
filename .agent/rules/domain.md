@@ -17,7 +17,8 @@ norix-skills/
 │   └── scripts/panel.html      # 预览/编辑/刷新/复制/SVG-PNG 导出
 ├── feishu-integration/         # 飞书 API CLI 集成（auth/docx/task/wiki/bitable/members）
 ├── agent-task-orchestration/   # Codex 多任务拆解与执行调度工具链
-└── agent-front-design/         # 前端设计与 agent 规范技能
+├── agent-front-design/         # 前端设计与 agent 规范技能
+└── system-dev-workflow/        # 系统化开发流程（Magic + First + COT + Clean）
 ```
 
 ### PM Toolkit 子架构
@@ -67,7 +68,7 @@ curSvg → canvas rasterize
 ### 4) 飞书认证主流
 
 ```
-./feishu auth login → OAuth2 → ~/.feishu/credentials.json
+./feishu auth login → OAuth2 → ~/.agents/data/feishu/credentials.json
                    → 业务命令调用时解析/刷新 token
 ```
 
@@ -84,6 +85,8 @@ curSvg → canvas rasterize
 | 复制支持回退策略 | Clipboard API 不可用时退回 `execCommand` | 提升不同浏览器环境可用性 |
 | 手绘渲染与 UI 解耦 | Mermaid `look=handDrawn` + 图表字体栈手绘；UI 保持默认系统字体 | 保证图形表达风格，同时不牺牲面板控件可读性 |
 | 飞书 token 使用 user 维度 | 默认使用 user_access_token 语义 | 避免 tenant/user 权限语义混淆 |
+| 全局流程技能标准化 | `system-dev-workflow` 将 Antigravity 的 `magic/first-plan/cot-plan/clean-refactor` 归一为 M-F-C-B-L-V 阶段模型 | 让复杂开发任务具备统一输入模板、决策门禁与验收闭环 |
+| 统一数据目录 | 全局凭证/配置统一存储于 `~/.agents/data/<skill>/`，项目级数据保持 `{cwd}` 相对路径 | 避免 HOME 目录碎片化污染；区分全局数据与项目上下文数据 |
 
 ## 设计系统 (Design System)
 

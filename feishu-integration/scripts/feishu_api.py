@@ -21,7 +21,7 @@ from typing import Any, Optional
 API_BASE = os.environ.get("FEISHU_API_BASE", "https://open.feishu.cn/open-apis")
 MAX_RETRIES = int(os.environ.get("FEISHU_MAX_RETRIES", "3"))
 RETRY_DELAY = int(os.environ.get("FEISHU_RETRY_DELAY", "2"))
-CREDENTIALS_FILE = os.path.expanduser("~/.feishu/credentials.json")
+CREDENTIALS_FILE = os.path.expanduser("~/.agents/data/feishu/credentials.json")
 
 # ─── Colored Logging ─────────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ class FeishuClient:
     """Authenticated HTTP client for Feishu Open API (user identity only).
 
     Token resolution:
-    1. Stored credentials in ~/.feishu/credentials.json (managed by auth.py)
+    1. Stored credentials in ~/.agents/data/feishu/credentials.json (managed by auth.py)
        — auto-refreshes if expired
     2. FEISHU_USER_ACCESS_TOKEN env var (manual override)
     """
@@ -74,7 +74,7 @@ class FeishuClient:
         """Resolve user_access_token. This skill only operates with user identity.
 
         Priority:
-        1. Stored credentials file (~/.feishu/credentials.json), auto-refresh if expired
+        1. Stored credentials file (~/.agents/data/feishu/credentials.json), auto-refresh if expired
         2. FEISHU_USER_ACCESS_TOKEN env var (manual override)
         """
         # Priority 1: stored credentials file (managed by auth.py)
@@ -370,17 +370,21 @@ _PROTECTED_DIRS = frozenset({
 def safe_clean(data_dir: str, skill_name: str):
     """Delete a skill's data directory with multi-layer safety validation.
 
-    Layers: realpath resolve → $HOME direct child → hidden dir → blacklist → double confirm.
+    Layers: realpath resolve → $HOME subtree → agents data prefix → blacklist → double confirm.
     """
     home = os.path.expanduser("~")
     real_path = os.path.realpath(data_dir)
+    agents_data = os.path.join(home, ".agents", "data")
 
     if not real_path.startswith(home + os.sep):
         Log.error(f"安全拒绝: 数据目录不在用户主目录下 ({real_path})")
         sys.exit(1)
 
-    if os.path.dirname(real_path) != home:
-        Log.error(f"安全拒绝: 仅允许删除 $HOME 下的直接子目录 ({real_path})")
+    # Allow paths under ~/.agents/data/ or direct $HOME children
+    is_agents_data = real_path.startswith(agents_data + os.sep)
+    is_home_child = os.path.dirname(real_path) == home
+    if not is_agents_data and not is_home_child:
+        Log.error(f"安全拒绝: 仅允许删除 ~/.agents/data/ 下的目录或 $HOME 直接子目录 ({real_path})")
         sys.exit(1)
 
     basename = os.path.basename(real_path)

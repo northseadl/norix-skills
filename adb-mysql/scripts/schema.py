@@ -155,7 +155,7 @@ def main():
     parser = argparse.ArgumentParser(description="ADB Schema 文档生成器")
     parser.add_argument("database", nargs="?", default=None, help="数据库名")
     parser.add_argument("-p", "--profile", default=None, help="连接 profile")
-    parser.add_argument("-o", "--output", default=SCHEMA_DIR, help="输出目录 (默认 ~/.adb-mysql/schema)")
+    parser.add_argument("-o", "--output", default=SCHEMA_DIR, help="输出目录 (默认 ~/.agents/data/adb-mysql/schema)")
 
     args = parser.parse_args()
 

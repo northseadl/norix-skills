@@ -294,7 +294,7 @@ def markdown_to_blocks(text: str) -> tuple[List[dict], List[tuple]]:
 
 # ─── Shared Folder Cache ─────────────────────────────────────────────────────
 
-SHARED_FOLDERS_FILE = os.path.join(os.path.expanduser("~"), ".feishu", "shared_folders.json")
+SHARED_FOLDERS_FILE = os.path.join(os.path.expanduser("~"), ".agents", "data", "feishu", "shared_folders.json")
 
 
 def _load_shared_folders() -> dict:

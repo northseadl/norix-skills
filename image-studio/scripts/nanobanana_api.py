@@ -70,7 +70,7 @@ VALID_OUTPUT_FORMATS = ["png", "jpeg", "webp"]
 # Credential Resolution
 # ---------------------------------------------------------------------------
 
-CREDENTIALS_FILE = Path.home() / ".nanobanana" / "credentials.json"
+CREDENTIALS_FILE = Path.home() / ".agents" / "data" / "image-studio" / "credentials.json"
 
 # Support both naming conventions
 ENV_KEY_NAMES = ["NANOBANANA_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"]
@@ -99,7 +99,7 @@ def _resolve_api_key() -> str:
 
 
 def save_credentials(api_key: str) -> None:
-    """Persist API key to ~/.nanobanana/credentials.json."""
+    """Persist API key to ~/.agents/data/image-studio/credentials.json."""
     CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
     CREDENTIALS_FILE.write_text(json.dumps({"api_key": api_key}, indent=2))
     CREDENTIALS_FILE.chmod(0o600)
