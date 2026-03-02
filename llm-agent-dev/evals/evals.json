@@ -1,0 +1,54 @@
+{
+  "skill_name": "llm-agent-dev",
+  "version": "2.0.0",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "设计一个电商智能客服 Agent，目标是提升售后自助率。",
+      "should_trigger": true,
+      "expected_output": "触发 llm-agent-dev；输出包含 Recommended Stack、Runtime Architecture、Safety and Escalation、Evaluation Plan"
+    },
+    {
+      "id": 2,
+      "prompt": "帮我写 pre-push hook，限制 develop 合并到 main。",
+      "should_trigger": false,
+      "expected_output": "不触发 llm-agent-dev；这属于仓库治理技能范围"
+    },
+    {
+      "id": 3,
+      "prompt": "我们要做点餐 Agent，语音入口，端到端延迟要求 1 秒内。",
+      "should_trigger": true,
+      "expected_output": "优先推荐低延迟栈（CREX + Slot），避免默认 ReAct"
+    },
+    {
+      "id": 4,
+      "prompt": "我要做一个需要跨部门审批的退款流程 Agent。",
+      "should_trigger": true,
+      "expected_output": "推荐 Workflow + Handoff，明确 HITL 触发条件"
+    },
+    {
+      "id": 5,
+      "prompt": "我只想要一个普通 FAQ 页面信息架构建议。",
+      "should_trigger": true,
+      "expected_output": "可触发 llm-agent-dev，但应给出轻量化方案，不应过度设计 multi-agent"
+    },
+    {
+      "id": 6,
+      "prompt": "请直接给我一个分支策略模板。",
+      "should_trigger": false,
+      "expected_output": "不触发 llm-agent-dev；这不是 agent architecture 设计任务"
+    },
+    {
+      "id": 7,
+      "prompt": "请给我一个客服 Agent 的评估闭环设计。",
+      "should_trigger": true,
+      "expected_output": "应包含离线评测、线上 KPI、发布门禁、回滚条件"
+    },
+    {
+      "id": 8,
+      "prompt": "把这个项目代码全部重构成多 Agent 架构。",
+      "should_trigger": true,
+      "expected_output": "应先做 tradeoff 评估，不得默认 multi-agent 是最优"
+    }
+  ]
+}

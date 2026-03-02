@@ -17,8 +17,9 @@
 | **Agent Team Dev** | 0.0.1 | 🚧 DEV | Leader + 多角色 Codex 团队协作（git worktree 隔离 + 本地 Hub + BLOCKED→reply 回路）。 |
 | **[Agent 头脑风暴](https://skills.norix-dev.com/skills/agent-brainstorm)** | 0.0.1 | 🚧 DEV | 多 Agent 异步观点碰撞空间，支持 Codex / Claude Code 混合引擎。 |
 | **[前端设计规格](https://skills.norix-dev.com/skills/agent-front-design)** | 0.0.1 | 🚧 DEV | 双模式治理（Explore/Production），七维质量评分，输出可实施工程文档。 |
+| **LLM Agent 设计与开发** | 2.0.0 | 🚧 DEV | Agent 架构设计协议：模式选型、运行时契约、安全护栏、评估闭环。 |
 | **[Coding.net 集成](https://skills.norix-dev.com/skills/coding-net)** | 0.2.0 | 🚧 DEV | Coding.net DevOps 平台 — MR/CI/制品库自动化。 |
-| **系统开发流程** | 0.1.0 | 🚧 DEV | 融合 Magic + 第一性原理 + COT + Clean 的端到端软件开发流程技能包。 |
+| **Meta Engineering** | 2.0.0 | 🚧 DEV | AI 时代开发范式 — 双脑演化、LLM-Native 审计、仓库治理（`//dev init/evolve/audit/hooks/health`）。 |
 
 ## 快速开始
 
@@ -46,8 +47,9 @@ norix-skills/
 ├── agent-task-orchestration/  # Agent 任务编排 — Codex / Claude Code 混合调度
 ├── agent-brainstorm/         # Agent 头脑风暴 — 多 Agent 异步讨论
 ├── agent-front-design/       # 前端设计规格与质量评分体系
-├── coding-net/               # Coding.net DevOps 集成
-└── system-dev-workflow/      # 系统开发流程（Magic + First + COT + Clean）
+├── llm-agent-dev/            # LLM Agent 设计与开发（模式选型/评估闭环）
+├── coding-net-integration/   # Coding.net DevOps 集成
+└── meta-engineering/         # Meta Engineering（AI 时代开发范式/脑进化/审计/治理）
 ```
 
 每个技能目录包含：
