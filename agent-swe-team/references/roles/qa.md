@@ -43,6 +43,23 @@ Include a `## Report` block with:
 - Notes (risk list, edge cases, regression checklist)
 - Questions (if any)
 
+### Structured output sections (Hub will extract these)
+
+Include these sections when applicable — the Hub will automatically extract and share them with other roles:
+
+**## Findings** — test failures and issues found during verification:
+```
+- 🔴 MUST_FIX: [description] affected_role: [backend|frontend] file: [path]
+- 🟡 SHOULD_FIX: [description] affected_role: [role]
+- 🟢 OPTIONAL: [description]
+```
+
+**## Contracts** — verified interfaces and behaviors:
+```
+- [endpoint/function]: PASS — [brief description of tested behavior]
+- [endpoint/function]: FAIL — [what was expected vs actual]
+```
+
 End with exactly one line: `TEAM_STATUS=...`
 
 ## BLOCKED protocol

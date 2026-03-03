@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -241,7 +241,5 @@ export async function removeRunData(cwd, runId, { dryRun } = {}) {
     const dir = runDir(cwd, runId);
     if (!existsSync(dir)) return;
     if (dryRun) return;
-    const { rm } = await import("node:fs/promises");
     await rm(dir, { recursive: true, force: true });
 }
-

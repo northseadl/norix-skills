@@ -51,7 +51,7 @@ export function generateDigest(state, roleOrder = []) {
     const roles = state.roles || {};
     const order = roleOrder.length > 0 ? roleOrder : Object.keys(roles).sort();
     const lines = [];
-    for (const role of order.slice(0, 5)) {
+    for (const role of order.slice(0, 10)) {
         const r = roles[role];
         if (!r) continue;
         const status = String(r.status || "idle").toUpperCase();
@@ -62,7 +62,6 @@ export function generateDigest(state, roleOrder = []) {
     }
     return lines.join("\n");
 }
-
 export function generateStatus(state, meta) {
     const roles = Object.values(state.roles || {});
     const tickets = Object.values(state.tickets || {});

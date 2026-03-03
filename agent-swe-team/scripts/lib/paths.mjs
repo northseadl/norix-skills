@@ -1,8 +1,4 @@
-import { join, resolve } from "node:path";
-
-export function resolveCwd(cwdArg) {
-    return resolve(cwdArg || process.cwd());
-}
+import { join } from "node:path";
 
 export function rootDir(cwd) {
     return join(cwd, ".agent-team");
@@ -103,4 +99,3 @@ export function blackboardTeamDigestPath(cwd, runId) {
 export function workflowPath(cwd, runId) {
     return join(runDir(cwd, runId), "workflow.json");
 }
-

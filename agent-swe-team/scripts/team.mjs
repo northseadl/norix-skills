@@ -20,7 +20,6 @@ import {
 import { loadSdks, parseTeamStatus, runCodexSession, resumeCodexSession, runClaudeSession, resumeClaudeSession } from "./lib/engines.mjs";
 import { log, fatal } from "./lib/logger.mjs";
 import {
-    blackboardDir,
     digestPath,
     logsDir,
     portPath,
@@ -28,10 +27,8 @@ import {
     runDir,
     runsRootDir,
     signalPath,
-    statePath,
     statusPath,
     ticketsDir,
-    worktreesRootDir,
 } from "./lib/paths.mjs";
 import { generateDigest, generateSignal, generateStatus } from "./lib/reporter.mjs";
 import { dequeueNextForRole, enqueueAssign, enqueueReply, ensureQueueDirs, markProcessed, countPendingByRole } from "./lib/queue.mjs";
@@ -56,6 +53,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
+}
+
+function deriveTicketStatus(teamStatus) {
+    if (teamStatus === "DONE") return "done";
+    if (teamStatus === "BLOCKED") return "blocked";
+    if (teamStatus === "FAILED") return "failed";
+    return "needs_review";
 }
 
 function slugify(input) {
@@ -664,14 +668,7 @@ async function handleAssign(global, store, role, req) {
     }
 
     const teamStatus = parseTeamStatus(finalText) || "NEEDS_REVIEW";
-    const ticketStatus =
-        teamStatus === "DONE"
-            ? "done"
-            : teamStatus === "BLOCKED"
-                ? "blocked"
-                : teamStatus === "FAILED"
-                    ? "failed"
-                    : "needs_review";
+    const ticketStatus = deriveTicketStatus(teamStatus);
 
     const gitInfo = await getWorktreeStatus({ worktreePathAbs: worktreeAbs, baseSha: meta.baseSha });
     store.updateRole(role, { git: gitInfo });
@@ -786,14 +783,7 @@ async function handleReply(global, store, role, req) {
     }
 
     const teamStatus = parseTeamStatus(finalText) || "NEEDS_REVIEW";
-    const ticketStatus =
-        teamStatus === "DONE"
-            ? "done"
-            : teamStatus === "BLOCKED"
-                ? "blocked"
-                : teamStatus === "FAILED"
-                    ? "failed"
-                    : "needs_review";
+    const ticketStatus = deriveTicketStatus(teamStatus);
 
     const reportPathAbs = resolve(global.cwd, roleState.current.reportPath);
     const report = `# ${ticketId} · ${role}\n\n${finalText}\n`;
@@ -807,6 +797,11 @@ async function handleReply(global, store, role, req) {
         teamStatus,
         updatedAt: new Date().toISOString(),
     });
+
+    // Blackboard: extract artifacts and update shared knowledge (same as handleAssign)
+    if (teamStatus === "DONE" || teamStatus === "NEEDS_REVIEW") {
+        await processRoleCompletion(global.cwd, runId, role, ticketId, finalText, store);
+    }
 
     if (teamStatus === "BLOCKED") {
         store.updateRole(role, {

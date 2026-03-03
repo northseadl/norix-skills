@@ -3,7 +3,7 @@
 import { mkdir, readFile, readdir, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { writeTextAtomic, writeJsonAtomic } from "./atomic.mjs";
+import { writeTextAtomic } from "./atomic.mjs";
 import {
     blackboardDir,
     blackboardContractsDir,
