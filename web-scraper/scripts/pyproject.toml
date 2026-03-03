@@ -1,0 +1,11 @@
+[project]
+name = "web-scraper"
+version = "1.0.0"
+description = "Tiered web scraper: L0 (HTTP) → L1 (crawl4ai browser)"
+requires-python = ">=3.12"
+dependencies = [
+    "crawl4ai>=0.8.0",
+    "httpx>=0.28.1",
+    "markdownify>=1.2.2",
+    "selectolax>=0.4.6",
+]

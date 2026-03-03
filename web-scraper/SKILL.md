@@ -1,172 +1,113 @@
 ---
 name: web-scraper
-version: 0.0.2
+version: 0.0.4
 description: |
   Web scraper and content extractor with full SPA/JavaScript rendering support.
-  Converts any web page — including React, Vue, Angular SPAs — to clean, LLM-optimized Markdown.
-  Core capabilities: render JavaScript-driven pages, detect doc frameworks (Docusaurus/VuePress/GitBook/MkDocs),
-  discover navigation links, deep-crawl sites, extract OpenAPI/Swagger specs, batch-fetch and merge pages.
-  Use when read_url_content returns empty/broken content, or for web scraping, site crawling,
-  HTML-to-markdown conversion, documentation site downloading, OpenAPI extraction, SPA content reading,
-  sitemap building. Triggers: "抓取网页", "网页爬取", "文档站抓取", "SPA页面", "Swagger文档".
+  Two-tier engine: L0 (httpx, pure HTTP) → L1 (crawl4ai, Playwright browser).
+  Smart discovery (sitemap/nav/crawl), batch fetch, stealth mode, OpenAPI extraction.
+  Use when: (1) read_url_content returns empty/broken content (SPA), (2) scraping doc sites,
+  (3) batch-downloading pages as Markdown, (4) extracting OpenAPI/Swagger specs,
+  (5) analyzing site structure, (6) fetching from anti-bot sites.
+  Not for: pages requiring login, binary downloads, or simple static pages where read_url_content works.
+  Triggers: "抓取网页", "文档站抓取", "SPA页面", "Swagger文档", "read_url_content failed", "scrape website".
 ---
-
 
 # Web Scraper
 
-> Unified CLI: `./scrape <command> [options]`
-> Engine: System Chrome + CDP — zero browser downloads, full SPA rendering
+> `./scrape <command> [options]` — Run `./scrape help` for full option reference.
 
-## When to Use This Skill
+## Content Precision Levels
 
-Agent's `read_url_content` works well for simple static HTML pages, but **fails completely** on:
-- **SPA pages** (React, Vue, Angular — content loaded via JavaScript)
-- **Modern doc sites** (Docusaurus, VuePress, VitePress, GitBook, etc.)
-- **API portals** (Feishu Open Platform, Swagger UI, Redoc)
+The `fetch` command outputs filtered content by default. Three precision levels:
 
-This skill fills those gaps through **real browser rendering** — launching a headless Chrome instance via CDP, waiting for JavaScript to execute, then extracting the rendered DOM as clean Markdown.
+| Level | Flag | Behavior | When to use |
+|-------|------|----------|-------------|
+| **Default** | *(none)* | PruningContentFilter removes boilerplate | Most scenarios — good enough |
+| **Precision** | `--selector ".css"` | Extract only the matched container | Production-quality docs, zero noise |
+| **Raw** | `--raw` | Full page, no filtering | Debugging, page structure analysis |
 
-### ✅ Use This Skill For
+Precision workflow: fetch a sample page → inspect remaining noise → identify content container via CSS selector → re-fetch all pages with `--selector`.
 
-- Scraping **any** web page (static or SPA) and converting to clean Markdown
-- Discovering all pages/links on a website automatically
-- Extracting OpenAPI/Swagger specs from Swagger UI or Redoc pages
-- Batch-downloading an entire documentation site as Markdown
-- Building a sitemap/directory tree of any website
-- Detecting which framework a site uses (Docusaurus, VuePress, etc.)
+## Engine Architecture
 
-### ❌ Don't Use This Skill For
+```
+L0: Pure HTTP (httpx + selectolax + markdownify)
+    fetch → strip boilerplate → markdownify → clean content
 
-- Pages requiring authentication (login walls)
-- Downloading binary files (images, PDFs)
-- Simple static pages where `read_url_content` already works fine
+L1: Browser (crawl4ai + Playwright, networkidle wait)
+    fetch → PruningContentFilter → fit_markdown → clean content
+    Handles: SPAs, anti-bot, JS-rendered content
+
+Auto mode: L0 probe → detect SPA/empty → fallback to L1
+
+Smart Discovery (3-tier):
+    1. sitemap.xml → 2. Nav DOM extraction → 3. Browser deep crawl
+```
 
 ## Workflow Patterns
 
-### Pattern 1: Analyze Unknown Website
+### Single page fetch
 
 ```bash
-# Step 1: Discover framework and structure
-./scrape discover https://docs.example.com
-
-# Step 2: If many pages, deep crawl
-./scrape discover https://docs.example.com --deep --max-pages 100
-```
-
-### Pattern 2: Fetch SPA Content
-
-When `read_url_content` returns empty or incomplete content:
-
-```bash
-# Single SPA page → stdout as markdown
+# Auto-detects if browser needed
 ./scrape fetch https://open.feishu.cn/document/server-docs/im-v1/message/create
 
-# Save to file
-./scrape fetch https://open.feishu.cn/document/server-docs/im-v1/message/create -o /tmp/api.md
+# Force browser for known SPA sites
+./scrape fetch https://developer.work.weixin.qq.com/document/path/90664 --engine cdp
+
+# Precision extraction with CSS selector
+./scrape fetch https://developer.work.weixin.qq.com/document/path/90196 --engine cdp --selector ".ep-doc-area"
 ```
 
-### Pattern 3: Batch-Download Full Website
+### Batch-download documentation
 
 ```bash
-# Auto-discover all pages and merge into one file
-./scrape fetch https://docs.example.com --auto --merge -o /tmp/docs/all-docs.md
-
-# Or save as individual files
 ./scrape fetch https://docs.example.com --auto -o /tmp/docs/
+./scrape fetch --from-file urls.txt -o /tmp/docs/
+./scrape fetch --from-file urls.txt --merge -o /tmp/docs/all.md
 ```
 
-### Pattern 4: Selective Page Fetch
+Files are automatically named by page title (e.g., `读取成员.md`, `Getting_Started.md`).
+
+### Build organized local documentation
+
+1. **Discover** site structure: `./scrape discover <url> --json` → get URLs + titles
+2. **Filter** relevant URLs (Agent selects subset based on user's needs)
+3. **Write** filtered URLs to a file
+4. **Fetch** to output directory: `./scrape fetch --from-file urls.txt -o /path/to/docs/`
+5. **Organize** (Agent moves/renames files into logical folder structure)
+
+### Analyze site structure
 
 ```bash
-# From a file (one URL per line)
-./scrape fetch --from-file /tmp/urls.txt -o /tmp/docs/ --merge
+./scrape discover https://docs.example.com
+./scrape discover https://docs.example.com --engine cdp --deep --max-pages 100
 ```
 
-### Pattern 5: Extract API Documentation
+### Extract OpenAPI specs
 
 ```bash
-# Direct spec URL
-./scrape openapi https://api.example.com/v3/api-docs -o /tmp/api-docs.md
-
-# From Swagger UI page (auto-discovers spec URL)
-./scrape openapi https://api.example.com/swagger-ui/ -o /tmp/api-docs.md
+./scrape openapi https://api.example.com/v3/api-docs -o /tmp/api.md
+./scrape openapi https://api.example.com/swagger-ui/ -o /tmp/api.md
 ```
 
-## Command Reference
+## Key Options
 
-### `discover` — Analyze Site Structure
-
-```bash
-./scrape discover <url> [options]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--links-only` | Only list discovered navigation links |
-| `--framework-only` | Only detect the site framework |
-| `--sitemap` | Build a directory tree of the site |
-| `--deep` | Follow links to discover more pages |
-| `--max-pages N` | Max pages to crawl (default: 50) |
-| `--max-depth N` | Max crawl depth (default: 3) |
-| `--wait MS` | Wait for SPA rendering in ms (default: 2000) |
-| `--json` | Output as JSON (for programmatic use) |
-
-### `fetch` — Fetch & Convert Pages
-
-```bash
-./scrape fetch <url> [options]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--auto` | Auto-discover pages then fetch all |
-| `--from-file FILE` | Read URLs from file (one per line) |
-| `-o, --output PATH` | Output directory or file path |
-| `--merge` | Merge all pages into single markdown file |
-| `--max-lines N` | Max lines per page (0 = unlimited) |
-| `--max-pages N` | Max pages in auto mode (default: 50) |
-| `--wait MS` | Wait for SPA rendering in ms (default: 2000) |
-| `--summary-only` | Only show fetch summary |
-| `--json` | Output results as JSON |
-
-### `openapi` — Extract OpenAPI Specs
-
-```bash
-./scrape openapi <url> [-o FILE]
-```
-
-Accepts either a direct spec URL (`.json`/`.yaml`) or a Swagger UI / Redoc page URL.
-
-## Output Format
-
-All output is optimized for LLM consumption:
-- **Markdown tables** (parameter tables, schemas) via GFM plugin
-- **Fenced code blocks** for code examples
-- **Clean headings** for navigation and grep-ability
-- **Token estimates** in summaries to help Agent decide how much to read
-
-## Architecture
-
-```
-scrape (Bash CLI entry point)
-│
-├── discover  → discover.mjs    Site analysis + deep crawl (CDP)
-├── fetch     → fetch.mjs       Page fetching + markdown conversion (CDP)
-└── openapi   → openapi.mjs     OpenAPI spec discovery + conversion (CDP)
-                    ↓
-    cdp_client.mjs     Zero-dep CDP client (WebSocket to system Chrome)
-    md_converter.mjs   HTML→Markdown (Turndown + GFM)
-```
+| Option | Commands | Description |
+|--------|----------|-------------|
+| `--engine MODE` | discover, fetch | `auto` (default), `http` (L0 only), `cdp` (L1 only) |
+| `--selector CSS` | fetch | CSS selector for content area (precision mode) |
+| `--raw` | fetch | Output full page (skip content filtering) |
+| `--auto` | fetch | Auto-discover pages then fetch all |
+| `--from-file FILE` | fetch | Read URLs from file (one per line) |
+| `-o PATH` | fetch, openapi | Output directory or file path |
+| `--merge` | fetch | Merge all pages into single markdown |
+| `--json` | discover, fetch | Machine-readable JSON output |
+| `--summary-only` | fetch | Only show URL, title, char count |
+| `--max-pages N` | discover, fetch | Limit pages (discover: 200, fetch: 50) |
+| `--deep` | discover | Follow links for browser-based BFS crawl |
 
 ## Requirements
 
-- **Node.js 18+** (for CDP engine and built-in WebSocket)
-- **Google Chrome** or Chromium (uses your existing installation, no downloads)
-
-## Dependencies
-
-| Package | Size | Purpose |
-|---------|------|---------|
-| `turndown` | ~50KB | HTML to Markdown conversion |
-| `turndown-plugin-gfm` | ~5KB | Table + strikethrough support |
-| **Total** | **~55KB** | *No browser binaries, no heavy frameworks* |
+- **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Dependencies and Playwright Chromium auto-installed on first run
