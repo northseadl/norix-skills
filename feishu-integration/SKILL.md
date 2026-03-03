@@ -1,20 +1,13 @@
 ---
 name: feishu-integration
-version: 0.1.1
+version: 0.1.2
 description: |
-  Feishu (Lark) task, document, wiki, bitable, and Drive management skill.
+  Feishu (Lark) task, document, wiki, bitable, and Drive management.
   Zero-dependency Python scripts operating Feishu Open API via user_access_token.
-  Covers Task v2 (CRUD / tasklist / comment / batch), Docx v1 (create / edit / Markdown-to-Block),
-  Wiki v2 (spaces / node tree / read / create-from-markdown), Bitable v1 (tables / fields / records / batch / export),
-  Drive (list / search / tree / trash / shared folder cache).
-  Use this skill whenever the user mentions any of these, even without saying "feishu" explicitly:
-  tasks, todos, task management, sprint planning, "what's not done", "check my tasks",
-  creating/reading/browsing documents, writing to wiki, publishing tech specs,
-  Drive file browsing, directory tree, file cleanup, shared folders, member lookup,
-  bitable, multi-dimensional table, spreadsheet data, database records, data export.
-  Also trigger on Chinese: "建任务", "查任务", "看文档", "写文档", "发布到知识库",
-  "帮我建几个任务", "有什么没完成的", "把方案写到飞书", "列出文件", "共享文件夹",
-  "多维表格", "读取表格数据", "导出数据", "写入表格".
+  Covers Task v2, Docx v1 (create/edit/Markdown-to-Block), Wiki v2 (spaces/nodes/create-from-markdown),
+  Bitable v1 (tables/fields/records/batch/export), Drive (list/search/tree/trash).
+  Use for: task management, document creation, wiki publishing, bitable data, Drive browsing.
+  Triggers: "建任务", "查任务", "看文档", "写文档", "发布到知识库", "多维表格", "导出数据".
 ---
 
 # Feishu Integration

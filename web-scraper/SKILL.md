@@ -1,43 +1,14 @@
 ---
 name: web-scraper
-version: 0.0.1
+version: 0.0.2
 description: |
   Web scraper and content extractor with full SPA/JavaScript rendering support.
   Converts any web page — including React, Vue, Angular SPAs — to clean, LLM-optimized Markdown.
-
-  Core value (what read_url_content CANNOT do):
-  - Render SPA/JavaScript-driven pages that return empty or broken content with read_url_content
-  - Detect documentation frameworks (Docusaurus, VuePress, VitePress, GitBook, MkDocs, etc.)
-  - Discover all navigation links and build sitemaps from any website
-  - Deep-crawl a site to map its entire page structure
-  - Extract and convert OpenAPI/Swagger specs to readable Markdown
-  - Batch-fetch multiple pages and merge into a single Markdown document
-
-  IMPORTANT: If read_url_content returns empty, incomplete, or garbled content for a URL,
-  this is a strong signal the page is a SPA and this skill should be used instead. Always
-  try this skill when read_url_content gives poor results.
-
-  Use this skill whenever the user mentions any of these, even without saying "scrape":
-  scraping websites, extracting web content, crawling documentation sites,
-  analyzing site structure, converting HTML to markdown, fetching web pages,
-  reading Swagger UI, downloading OpenAPI specs, building sitemaps,
-  batch downloading web pages, merging web content into markdown,
-  extracting content from JavaScript-rendered pages, pulling API documentation,
-  reading single page applications, website content extraction,
-  downloading an entire doc site, web page to markdown conversion,
-  "read this page for me", "grab the content from this URL",
-  "what's on this page", "download this documentation".
-
-  Also trigger on Chinese: "抓取网页", "网页抓取", "网站爬取", "提取网页内容",
-  "分析网页结构", "API文档提取", "文档站抓取", "Swagger文档转换",
-  "批量下载网页", "网页转Markdown", "站点地图", "网站目录分析",
-  "读取网页", "OpenAPI文档", "文档网站分析", "爬取网页内容",
-  "SPA页面分析", "下载文档", "网页内容提取", "抓取文档",
-  "帮我看一下这个页面", "把这个网页下载下来", "读取这个URL的内容".
-
-  Also trigger when the user mentions "web scraping", "site crawl", "documentation site",
-  "Swagger UI", "Redoc", "Docusaurus", "VuePress", "GitBook", "API docs extraction",
-  "SPA", "single page application", "Feishu open platform docs".
+  Core capabilities: render JavaScript-driven pages, detect doc frameworks (Docusaurus/VuePress/GitBook/MkDocs),
+  discover navigation links, deep-crawl sites, extract OpenAPI/Swagger specs, batch-fetch and merge pages.
+  Use when read_url_content returns empty/broken content, or for web scraping, site crawling,
+  HTML-to-markdown conversion, documentation site downloading, OpenAPI extraction, SPA content reading,
+  sitemap building. Triggers: "抓取网页", "网页爬取", "文档站抓取", "SPA页面", "Swagger文档".
 ---
 
 

@@ -1,7 +1,10 @@
 ---
-name: cnb-cool-build
-version: 0.1.0
-description: 针对 cnb.cool 的「云原生构建」（CNB Build）：生成/修改 `.cnb.yml` 流水线、触发规则（branch glob / events）、构建环境（docker image/build/devcontainer）、runner 资源、缓存（volumes / docker:cache）、环境变量（env/imports/exports）、手动触发（web_trigger）与调试（login debug）。在接入、迁移、优化或排查 CNB 构建配置时使用。
+name: cnb-cool-integration
+version: 0.1.1
+description: |
+  针对 cnb.cool 的云原生构建（CNB Build）：生成/修改 .cnb.yml 流水线、触发规则、
+  构建环境、runner 资源、缓存、环境变量、手动触发与调试。
+  在接入、迁移、优化或排查 CNB 构建配置时使用。
 ---
 
 # CNB 云原生构建（cnb.cool）

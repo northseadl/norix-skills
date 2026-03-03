@@ -1,27 +1,12 @@
 ---
 name: es-analytics
-version: 0.1.0
+version: 0.1.1
 description: |
-  Elasticsearch / 阿里云 SLS ES 兼容层 数据分析技能。
-
-  通过纯 Python（urllib）连接 ES 实例或 SLS ES 兼容 API，提供只读数据查询与分析能力。
-  零依赖，仅需 Python 3 标准库。
-
-  使用场景：
-  - 连接任意 Elasticsearch 实例执行只读查询（_search / _count / _mapping）
-  - 连接阿里云 SLS ES 兼容端点（自动处理时间窗口、嵌套字段限制等坑）
-  - 索引探索：列出索引、查看 mapping、采样数据
-  - 数据分析：聚合、去重统计、时间序列、search_after 分页全量提取
-  - 多 Profile 管理：支持多个 ES 集群 / SLS 端点快速切换（类比 ADB 技能）
-
-  安全策略：只读模式，拦截 DELETE/PUT 等写入；自动限制返回 200 条；凭据文件权限 0600。
-
-  Make sure to use this skill whenever the user mentions Elasticsearch queries, ES data analysis,
-  SLS log queries, log search, index exploration, mapping inspection, ES aggregations,
-  or any data retrieval from Elasticsearch or SLS ES compatible endpoints.
-  Also trigger for: "ES查询", "日志搜索", "查ES", "SLS查询", "看看ES里的数据",
-  "ES索引", "ES聚合", "查日志", "Elasticsearch", "SLS ES", "日志分析",
-  "kibana", "opensearch", "ES mapping", "search_after", "ES分页查询".
+  Elasticsearch / 阿里云 SLS ES 兼容层数据分析技能。通过纯 Python（urllib）连接 ES 或 SLS ES 兼容 API，
+  提供只读查询与分析：索引探索、mapping 查看、聚合统计、时间序列、search_after 分页。
+  多 Profile 管理，支持多集群快速切换。安全策略：只读模式，拦截写入，限制返回 200 条。
+  Use for: ES queries, log search, index exploration, mapping inspection, aggregations.
+  Triggers: "ES查询", "日志搜索", "SLS查询", "ES聚合", "Elasticsearch", "查日志".
 ---
 
 # ES 数据分析技能

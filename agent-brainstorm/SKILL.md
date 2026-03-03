@@ -1,21 +1,14 @@
 ---
 name: agent-brainstorm
-version: 0.0.1
+version: 0.0.2
 description: |
   Multi-agent brainstorming through async opinion collision spaces powered by Codex SDK or Claude Agent SDK.
-  Use this skill whenever the user wants to: brainstorm ideas with multiple AI perspectives,
-  explore technical or product decisions through structured multi-agent debate, run a
-  "war room" discussion with different expert personas, or have AI agents discuss and
-  converge on a solution from different angles.
-  Also trigger for: "头脑风暴", "多视角讨论", "Agent 讨论", "多专家探讨",
-  "让几个 Agent 一起讨论", "集思广益", "方案选型讨论", "架构讨论",
-  "brainstorm", "multi-agent discussion", "war room", "devil's advocate",
-  "观点碰撞", "辩论", "多角度分析", "专家讨论会", "agent 讨论会",
-  "让 AI 从不同角度", "混合 agent", "codex 和 claude 一起",
-  or any mention of having multiple AI agents debate or discuss a topic.
-  Supports mixed engine mode: some agents can use Codex while others use Claude Code.
-  NOT for: single-agent code review, task decomposition (use agent-task-orchestration instead),
-  simple document writing, or diagram generation.
+  Use for: brainstorming with multiple AI perspectives, structured multi-agent debate,
+  "war room" discussions with expert personas, converging on solutions from different angles.
+  Supports mixed engine mode: some agents on Codex, others on Claude Code.
+  Triggers: "头脑风暴", "多视角讨论", "Agent讨论", "方案选型讨论", "观点碰撞", "brainstorm".
+  NOT for: single-agent code review, task decomposition (use agent-task-orchestration),
+  document writing, or diagram generation.
 ---
 
 # Agent 头脑风暴技能 — 异步观点碰撞空间

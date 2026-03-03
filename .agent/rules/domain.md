@@ -5,103 +5,84 @@
 
 **仓库定位**: 面向 Agent 的技能集合（SKILL.md + references + scripts）
 
-**技术栈**:
-- Python 3（feishu-integration，stdlib 为主）
-- Node.js（pm-toolkit 与任务编排脚本，零/低依赖）
-- 静态 Web（panel.html + Mermaid CDN）
+**技术栈**: Python 3 (stdlib 为主) · Node.js (零/低依赖) · 静态 Web (panel.html)
 
 ```
 norix-skills/
-├── adb-mysql/                  # ADB for MySQL 数据分析（query/analyze/schema）
-├── agent-brainstorm/           # 多 Agent 异步观点碰撞空间（Codex / Claude Code 混合）
-├── agent-front-design/         # 前端设计与 agent 规范技能
-├── agent-task-orchestration/   # Codex 多任务拆解与执行调度工具链
+├── adb-mysql/                  # ADB for MySQL 只读数据分析
+├── agent-brainstorm/           # 多 Agent 异步观点碰撞（Codex/Claude 混合引擎）
+├── agent-front-design/         # 前端设计方案规格输出
+├── agent-swe-team/             # 角色化 SWE 团队协作（Leader → Hub → Roles）
+├── agent-task-orchestration/   # 多任务拆解与并行 Agent 调度
 ├── cnb-cool-integration/       # cnb.cool 云原生构建集成
-├── coding-net-integration/     # Coding.net DevOps 集成
-├── es-analytics/               # Elasticsearch 分析查询
-├── feishu-integration/         # 飞书 API CLI 集成（auth/docx/task/wiki/bitable/members）
-├── image-studio/               # 图像处理与生成能力
-├── pm-toolkit/                 # Mermaid 图表生成与本地预览面板
-│   ├── scripts/serve.js        # 单文件 HTTP server（/api/read, /api/write）
-│   └── scripts/panel.html      # 预览/编辑/刷新/复制/SVG-PNG 导出
-└── web-scraper/                # 网页抓取与提取
-```
-
-### PM Toolkit 子架构
-
-```
-用户操作 (刷新/编辑/导出/复制)
-        ↓
-panel.html (状态机 + Mermaid 渲染 + 缩放)
-        ↓ HTTP
-serve.js (/api/read /api/write, no-store)
-        ↓
-目标 .mmd 文件（单文件读写）
+├── coding-net-integration/     # Coding.net DevOps API 集成
+├── es-analytics/               # Elasticsearch / SLS ES 只读分析
+├── feishu-integration/         # 飞书 API 集成（task/docx/wiki/bitable/drive）
+├── image-studio/               # Nano Banana AI 图像生成与精修
+├── llm-agent-dev/              # LLM Agent 工程全栈（设计/仿真/收敛）
+├── mobile-testing/             # 移动应用自动化测试与评估
+├── pm-toolkit/                 # Mermaid 图表 + 网页原型本地预览面板
+├── web-scraper/                # SPA 网页抓取与 Markdown 转换
+└── scripts/
+    └── sync_global_skills.py   # 全局技能目录同步脚本
 ```
 
 ## 核心数据流 (Core Data Flows)
 
-### 1) PM Toolkit 渲染与缩放流
+### 全局技能同步流
 
 ```
-loadFile() → /api/read → source
-         → mermaid.render(source) → svg
-         → normalizeRenderedSvg(svg) 固定内在宽高（去除 width=100% 带来的容器耦合）
-         → measureSvg(svg) → fitScale(视口适配)
-         → baseScale = fitScale * 0.8
-         → finalScale = baseScale * zoom/100
+sync_global_skills.py --target all --force
 
-语义约束：zoom=100 永远代表“当前视口 80% 填充的最佳适配比例”
+扫描仓库（SKILL.md 存在 → 视为技能）
+  → 加载 .norix-manifest.json（追踪哪些技能由本仓库管理）
+  → 孤儿检测：manifest 中 source_path 不存在 → 删除目标副本（处理删除/重命名）
+  → 重命名检测：同一 source_path 不同目录名 → 删旧建新
+  → 同步：Antigravity=rsync 全量复制 | Codex=SKILL.md 物化+其他 symlink
+  → 持久化 manifest
+
+安全边界：仅操作 manifest 记录的技能，其他来源永不触碰
 ```
 
-### 2) PM Toolkit 编辑保存流
-
-```
-编辑器修改源码 → /api/write {source}
-            → 文件落盘
-            → render(source) 立即重绘
-            → 状态栏 + toast 反馈
-```
-
-### 3) PM Toolkit PNG 导出流
-
-```
-curSvg → canvas rasterize
-      → 若触发 tainted canvas
-      → 兼容路径：exportSafe mermaid config 重新渲染 → 再次 rasterize
-```
-
-### 4) 飞书认证主流
+### 飞书认证流
 
 ```
 ./feishu auth login → OAuth2 → ~/.agents/data/feishu/credentials.json
-                   → 业务命令调用时解析/刷新 token
+                   → 业务命令调用时自动解析/刷新 token
+```
+
+### PM Toolkit 渲染流
+
+```
+loadFile → /api/read → mermaid.render → normalizeRenderedSvg(固定内在宽高)
+        → fitScale(视口适配) → baseScale = fitScale * 0.8 → finalScale = baseScale × zoom/100
+语义：zoom=100 = "80% 填充最佳适配"
 ```
 
 ## 架构决策 (Architecture Decisions)
 
 | 决策 | 说明 | 理由 |
 |------|------|------|
-| PM Toolkit 单文件 server | `serve.js` + `panel.html`，零构建步骤 | 启动快、可移植、Agent 易调用 |
-| `no-store` 读写接口 | 读写接口与页面响应禁用缓存 | 刷新必须反映磁盘最新状态 |
-| SVG 内在尺寸归一化 | 渲染后将 SVG 固定为 intrinsic `width/height` 像素值 | 避免 Mermaid 默认 `width=100%` 导致缩放基准被容器污染 |
-| 双层缩放模型 | `fitScale * 0.8 = baseScale`，最终缩放为 `baseScale × zoom` | 保证 100% 固定为“80% 填充最佳适配”，缩放语义稳定 |
-| PNG 导出双通路 | 先用当前渲染导出；若遇 tainted canvas，自动切换 export-safe 配置重渲染后导出 | 兼容跨域字体/foreignObject 导致的浏览器安全限制 |
-| 导出走内存 SVG 源 | SVG/PNG 基于当前渲染结果导出 | 避免二次解析文件造成不一致 |
-| 复制支持回退策略 | Clipboard API 不可用时退回 `execCommand` | 提升不同浏览器环境可用性 |
-| 手绘渲染与 UI 解耦 | Mermaid `look=handDrawn` + 图表字体栈手绘；UI 保持默认系统字体 | 保证图形表达风格，同时不牺牲面板控件可读性 |
-| 飞书 token 使用 user 维度 | 默认使用 user_access_token 语义 | 避免 tenant/user 权限语义混淆 |
-| 统一数据目录 | 全局凭证/配置统一存储于 `~/.agents/data/<skill>/`，项目级数据保持 `{cwd}` 相对路径 | 避免 HOME 目录碎片化污染；区分全局数据与项目上下文数据 |
+| Manifest 追踪同步 | `.norix-manifest.json` 记录 source_path + synced_at | 安全边界：仅管理本仓库来源的技能；支持重命名/删除检测 |
+| 双策略同步 | Antigravity=rsync；Codex=SKILL.md 物化 + symlink | Antigravity 不 follow symlink；Codex 需 SKILL.md 为实体文件 |
+| PM Toolkit 单文件 server | `serve.js` + `panel.html`，零构建 | 启动快、可移植、Agent 易调用 |
+| PM Toolkit 双层缩放 | `fitScale * 0.8 = baseScale`，再 × zoom | 100% 固定为"80% 最佳适配"，语义稳定 |
+| PNG 导出双通路 | 正常渲染优先；tainted canvas 时切换 export-safe 重渲染 | 兼容跨域字体/foreignObject 安全限制 |
+| 飞书 user_access_token | 默认使用 user 维度 token | 避免 tenant/user 权限语义混淆 |
+| 统一数据目录 | 全局凭证 `~/.agents/data/<skill>/`，项目数据保持 cwd | 避免 HOME 碎片化；区分全局/项目上下文 |
+
+## SKILL.md Frontmatter 规范
+
+基于 Anthropic skill-creator 规范，frontmatter 允许字段：
+- `name`（必需）— 必须与目录名一致
+- `version`（必需）— pre-commit hook 强制 patch 递增
+- `description`（必需）— 核心触发机制，**≤ 100 words / ≤ 800 chars**
+
+> description 过长会导致 Codex metadata 加载器过滤技能。压缩策略：核心能力 + 精选 5-8 个触发词，不穷举。
 
 ## 设计系统 (Design System)
 
 ### PM Toolkit UI Token
 - 主题：`data-theme=dark/light`
-- 字体：UI=`Inter + JetBrains Mono`；Mermaid 图表=`Caveat + LXGW WenKai`
-- 视觉语言：现代中性面板 + 手绘图形（仅图表）
-- 反馈机制：toast（success/info/error）+ 状态栏文本
-
-### PM Toolkit 交互约束
-- 首次加载/手动刷新：重新计算最佳适配基准，100% 对齐“80% 填充”的最佳比例
-- 视口变化（窗口 resize/编辑器开合）：保留用户 zoom 百分比，仅重算 `baseScale`
-- 导出与复制：无可用图表或源码时必须给出显式错误提示
+- 字体：UI=`Inter + JetBrains Mono`；图表=`Caveat + LXGW WenKai`（手绘风）
+- 反馈：toast（success/info/error）+ 状态栏

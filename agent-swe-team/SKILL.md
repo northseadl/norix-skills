@@ -1,31 +1,15 @@
 ---
 name: agent-swe-team
-version: 0.1.2
+version: 0.1.3
 description: |
-  Build large software tasks with a role-based "SWE team" model: one Leader agent (you, the primary user interface)
-  dispatches tickets to multiple role-based sub-agents (architect/backend/frontend/qa/reviewer) through a
-  local Hub service. Each role works in an isolated git worktree and communicates via a structured
-  TEAM_STATUS protocol with a BLOCKED→Reply decision loop.
-
-  Hub acts as an intelligent broker: it extracts structured artifacts (contracts, API surfaces, decisions)
-  from role outputs, populates a shared Team Blackboard, and injects relevant team context into
-  downstream roles' prompts — enabling cross-role awareness without direct inter-agent communication.
-
-  Supports dual engine: Codex SDK and Claude Agent SDK (--engine codex|claude).
-  Supports declarative workflow engine with auto-trigger phases and review loops.
-
-  Use this skill when the user wants: role-based delegation with specialized Agent personas,
-  SWE-team-like collaboration with architect/backend/frontend/qa/reviewer roles,
-  git worktree isolation per role, ticket-driven development with BLOCKED→Reply decision loops,
-  or multi-role parallel development with a local hub/dashboard.
-
-  Also trigger for: "agent team", "team mode", "SWE team", "leader + 多 agent", "角色分工",
-  "模拟软件团队", "本地协作中枢", "git worktree 隔离", "派发工单", "reply 回灌",
-  "TEAM_STATUS=BLOCKED", "Codex SDK orchestrate roles", "role-based agents".
-
-  NOT for: task decomposition without role identity (use agent-task-orchestration),
-  multi-agent brainstorming/debate (use agent-brainstorm),
-  single one-off agent tasks, code review, or diagram generation.
+  Build large software tasks with a role-based "SWE team" model: one Leader agent dispatches
+  tickets to role-based sub-agents (architect/backend/frontend/qa/reviewer) through a local Hub.
+  Each role works in an isolated git worktree with structured TEAM_STATUS protocol and BLOCKED→Reply loops.
+  Hub extracts artifacts into a shared Team Blackboard for cross-role awareness.
+  Supports dual engine: Codex SDK and Claude Agent SDK.
+  Use for: role-based delegation, SWE-team collaboration, git worktree isolation, ticket-driven development.
+  Triggers: "agent team", "SWE team", "角色分工", "模拟软件团队", "派发工单".
+  NOT for: task decomposition without roles (use agent-task-orchestration), brainstorming.
 ---
 
 # Agent SWE Team — Role-Based Multi-Engine Development Team
