@@ -1,26 +1,14 @@
 ---
 name: coding-net-integration
-version: 0.2.0
+version: 0.2.1
 description: |
-  Coding.net DevOps platform integration skill for Agent-driven automation.
+  Coding.net DevOps platform integration for Agent-driven automation.
   Zero-dependency Python scripts operating Coding.net Open API via Personal Access Token.
-
-  Core value (things standard git CANNOT do):
-  - MR lifecycle: create, merge, close merge requests programmatically
-  - CI operations: trigger builds, view logs, stop running builds
-  - Artifact registry: browse packages, versions, get download URLs
-  - Cross-project queries: enumerate all projects and repos in a team
-  - Remote file audit: read files from any repo without cloning
-
-  Use this skill whenever the user mentions any of these, even without saying "Coding" explicitly:
-  merge requests, MR reviews, triggering CI builds, checking build status, viewing build logs,
-  artifact management, Docker image versions, package registry, artifact downloads,
-  listing remote repos, reading remote files without clone.
-
-  Also trigger on Chinese: "合并请求", "触发构建", "查看构建日志",
-  "制品库", "查看版本", "下载制品", "Coding 部署", "查看 CI 状态",
-  "查看仓库", "创建分支", "远程代码审计".
-  Also trigger when the user mentions "coding.net", "CODING", "Coding CI", "Coding 制品库".
+  Core capabilities beyond standard git: MR lifecycle (create/merge/close), CI operations
+  (trigger/view logs/stop builds), artifact registry (packages/versions/downloads),
+  cross-project queries, remote file audit without cloning.
+  Use for: merge requests, CI builds, build logs, artifact management, remote repos.
+  Triggers: "合并请求", "触发构建", "查看构建日志", "制品库", "Coding CI".
 ---
 
 # Coding.net Integration

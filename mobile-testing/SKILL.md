@@ -1,35 +1,14 @@
 ---
 name: mobile-testing
-version: 0.0.1
+version: 0.0.2
 description: |
-  Mobile app automated testing and evaluation skill for Android and iOS.
-  Zero-dependency Python scripts wrapping adb (Android) and xcrun simctl (iOS) to provide
-  unified device management, app installation, performance profiling, log analysis,
-  screenshot capture/comparison, and Maestro E2E test orchestration.
-
-  Core workflows:
-  - Device discovery: unified listing of Android emulators/devices and iOS simulators/devices
-  - Quick evaluation: install → launch → screenshot → collect performance metrics → generate report
-  - E2E testing: generate and execute Maestro YAML flows for user journey validation
-  - Performance profiling: multi-sample CPU/memory/launch-time collection with statistical analysis
-  - Log monitoring: filtered log capture with automatic crash/ANR detection
-  - Visual regression: pixel-level screenshot comparison between app versions
-
-  Use this skill whenever the user mentions any of these, even without saying "mobile testing":
-  testing Android apps, testing iOS apps, mobile app evaluation, app performance profiling,
-  mobile UI testing, E2E mobile tests, Maestro test flows, device management,
-  installing APK on emulator, running app on simulator, mobile app crash analysis,
-  logcat filtering, app launch time measurement, mobile screenshot comparison,
-  visual regression testing, mobile accessibility audit, ANR detection,
-  Android emulator management, iOS simulator management, mobile CI testing,
-  automated mobile QA, app quality assessment, mobile performance benchmarking.
-
-  Also trigger for: "测试App", "测试应用", "手机测试", "移动端测试", "跑一下这个APK",
-  "安装到模拟器", "模拟器测试", "真机测试", "看看App性能", "App崩溃分析",
-  "启动时间测试", "帧率测试", "内存占用", "logcat日志", "截图对比",
-  "E2E测试", "UI自动化", "Maestro测试", "回归测试", "安卓测试", "iOS测试",
-  "App评估", "移动应用质量", "应用性能分析", "设备管理", "模拟器管理",
-  "无障碍测试", "可访问性测试", "自动化测试Android", "自动化测试iOS".
+  Mobile app automated testing and evaluation for Android and iOS.
+  Zero-dependency Python scripts wrapping adb and xcrun simctl for unified device management,
+  app installation, performance profiling, log analysis, screenshot capture/comparison,
+  and Maestro E2E test orchestration. Use for: testing apps, mobile evaluation,
+  performance profiling, E2E tests, device management, crash analysis, visual regression,
+  APK installation, app launch time measurement, logcat filtering, ANR detection.
+  Triggers: "测试App", "手机测试", "模拟器测试", "App性能", "崩溃分析", "Maestro测试".
 ---
 
 # Mobile Testing — 移动应用自动化测试与评估

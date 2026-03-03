@@ -1,32 +1,14 @@
 ---
 name: agent-task-orchestration
-version: 0.1.0
+version: 0.1.1
 description: |
   Break down complex requirements and execute them across multiple AI agents (Codex and Claude Code)
-  with automatic retry, checkpoint recovery, and real-time monitoring.
-
-  Use this skill whenever the user wants to: decompose a PRD or feature spec into executable tasks,
-  orchestrate multiple agents in parallel or sequential order, create task specs for Codex or Claude
-  sessions, run a supervised development workflow with automatic quality checks, resume failed runs
-  from checkpoints, retry specific failed tasks, or check dispatch status and progress.
+  with automatic retry, checkpoint recovery, and real-time monitoring. Use for: decomposing PRDs
+  into executable tasks, orchestrating parallel/sequential agents, creating task specs,
+  supervised development workflows, resuming from checkpoints, retrying failed tasks.
   Each task can independently use Codex or Claude Code engine (mixed mode).
-
-  Even if the user only mentions "splitting work into tasks", "running multiple agents",
-  "parallel development", "resuming a failed run", or "checking task progress", this skill
-  should be triggered. The skill handles the full lifecycle from requirement analysis through
-  task decomposition, parallel dispatch, monitoring, recovery, and acceptance.
-
-  Also trigger for: "用 Codex 拆任务", "多任务调度", "监督模式开发", "任务派发",
-  "分解需求给 Agent 执行", "长时间调度", "Claude 任务编排", "混合引擎调度",
-  "把 PRD 拆成任务", "并行开发", "Task DAG", "dispatch.mjs",
-  "恢复失败的任务", "重试任务", "任务编排恢复", "checkpoint 恢复",
-  "create task specs", "supervised workflow", "follow-up batches",
-  "resume failed tasks", "retry specific tasks", "check dispatch status",
-  or any mention of splitting work across Codex or Claude agents.
-
-  NOT for: multi-agent brainstorming/debate/discussion (use agent-brainstorm instead),
-  single one-off Codex tasks (just ask Codex directly), creating Feishu/external tasks,
-  code review, or diagram generation.
+  Triggers: "拆任务", "多任务调度", "任务派发", "并行开发", "Task DAG", "checkpoint恢复".
+  NOT for: brainstorming (use agent-brainstorm), single tasks, Feishu tasks.
 ---
 
 # Agent 任务编排技能 (Trinity Architecture)

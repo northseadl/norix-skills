@@ -1,20 +1,11 @@
 ---
 name: adb-mysql
-version: 0.1.0
+version: 0.1.1
 description: |
   阿里云 AnalyticDB (ADB) for MySQL 数据分析技能。
-
-  通过 pymysql 纯 Python 连接 ADB 实例（或 DMS 代理），提供只读数据分析能力。
-  
-  使用场景：
-  - 连接任意 ADB for MySQL 实例执行只读查询
-  - 多维数据分析（计数/聚合/时间序列）带交叉验证
-  - 自动生成 Schema 文档供后续分析作为上下文
-  - 多 Profile 管理，支持多个 ADB 实例快速切换
-
-  安全策略：只读模式，自动限制返回 200 条，禁止所有写入操作。
-
-  依赖：pip install pymysql
+  通过 pymysql 连接 ADB 实例（或 DMS 代理），提供只读数据分析能力。
+  多维数据分析（计数/聚合/时间序列）带交叉验证，自动生成 Schema 文档，多 Profile 管理。
+  安全策略：只读模式，自动限制返回 200 条，禁止所有写入操作。依赖：pip install pymysql.
 ---
 
 # ADB 数据分析技能

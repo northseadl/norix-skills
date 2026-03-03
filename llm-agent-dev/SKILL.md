@@ -1,24 +1,14 @@
 ---
 name: llm-agent-dev
-version: 0.1.0
+version: 0.1.1
 description: |
   Full-stack LLM Agent engineering — architecture to production.
-  Three pillars: Design Paradigms, Data Simulation, Convergence Iteration.
-
-  Trigger when user asks about: agent architecture, chatbot design, intent routing,
-  slot filling, function calling, workflow agents, ReAct, router-expert,
-  MCP protocol, handoff/delegation, prompt chaining, parallelizing,
-  orchestrator-worker, evaluator-optimizer, context engineering,
-  guardrails, HITL, LLM evaluation, memory architecture, RAG,
-  observability, tracing, performance benchmarking, TTFT/TPS,
-  synthetic data generation, convergence testing, A/B prompt testing,
-  scenario blueprints (e-commerce, food ordering, customer service, coding, QA).
-
-  Also: "Agent开发", "意图识别", "技能路由", "Function Calling", "ReAct",
-  "MCP协议", "Agent评估", "上下文工程", "提示词工程", "Agent记忆",
-  "合成数据生成", "收敛迭代", "TTFT", "TPS", "设计一个Agent".
-
-  Not for: autonomous coding workflows, multi-agent brainstorming, task decomposition.
+  Three pillars: Design Paradigms (12-mode pattern matrix), Data Simulation, Convergence Iteration.
+  Use for: agent architecture, chatbot design, intent routing, function calling, workflow agents,
+  ReAct, MCP protocol, prompt chaining, context engineering, guardrails, LLM evaluation,
+  memory architecture, RAG, observability, synthetic data generation, convergence testing.
+  Triggers: "Agent开发", "意图识别", "Function Calling", "MCP协议", "设计一个Agent".
+  NOT for: autonomous coding workflows, multi-agent brainstorming, task decomposition.
 ---
 
 # LLM Agent 全栈工程技能 — Tri-Pillar Protocol v3

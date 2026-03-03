@@ -1,32 +1,13 @@
 ---
 name: image-studio
-version: 0.1.0
+version: 0.1.1
 description: |
-  AI-powered image generation and editing via Nano Banana API (nanobananapro.cloud).
-  Zero-dependency Python scripts for e-commerce product image creation and photo refinement.
-  Uses Google Gemini API directly (generativelanguage.googleapis.com).
-
-  Two core workflows:
-  1. E-commerce Image Generation: product hero shots, marketing banners, detail page grids,
-     lifestyle scenes, social media posts — with 6 professional prompt templates
-  2. Image Refinement: background replacement/removal, quality enhancement, portrait retouching,
-     object swap, style transfer, color grading, canvas extension
-
-  Default model: Nano Banana 2 (Gemini 3.1 Flash Image) — best speed/quality balance.
-  Supports 3 Gemini image models from fast previews to studio-quality 4K via Nano Banana Pro.
-
-  Use this skill whenever the user mentions any of these, even without saying "Nano Banana":
-  AI image generation, product photo generation, e-commerce image creation,
-  marketing banner creation, product photography AI, hero shot generation,
-  detail page images, product mockups, image editing API, background removal,
-  background replacement, photo retouching, image enhancement, style transfer,
-  object replacement in photos, image upscaling, color grading, canvas extension,
-  AI product photos, batch image generation, commercial photography AI.
-
-  Also trigger on Chinese: "AI生图", "电商图片", "商品图", "产品图", "主图生成",
-  "详情页图片", "营销图片", "海报设计", "背景替换", "图片精修", "抠图",
-  "去背景", "图片增强", "风格迁移", "人像修图", "产品摄影", "电商摄影",
-  "Banner生成", "社交媒体图片", "Nano Banana", "AI修图", "商品主图".
+  AI-powered image generation and editing via Nano Banana API (Google Gemini image models).
+  Two workflows: (1) E-commerce image generation with 6 templates (hero/banner/detail/lifestyle/grid/social),
+  (2) Image refinement with 9 templates (background replace/remove, enhance, retouch, style transfer, etc.).
+  Use for: AI image generation, product photos, e-commerce images, marketing banners,
+  background removal/replacement, photo retouching, style transfer, color grading.
+  Triggers: "AI生图", "电商图片", "商品图", "背景替换", "图片精修", "Nano Banana".
 ---
 
 # Nano Banana — AI Image Generation & Editing

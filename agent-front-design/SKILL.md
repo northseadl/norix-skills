@@ -1,20 +1,13 @@
 ---
 name: agent-front-design
-version: 0.1.0
+version: 0.1.1
 description: |
   前端卓越设计技能 — 输出可实施的高质量前端方案规格。
   核心能力：设计哲学锚定、反 AI 审美同质化、Design Token 三层架构、
-  2026 现代 CSS 工程实践、动效体系、七维质量门禁、React/Vue 工程交接。
-
-  Use this skill whenever the user mentions:
-  前端设计方案, UI 方案, UX 设计, 页面设计, 交互设计, 设计系统, Design Token,
-  组件设计, 页面蓝图, 视觉规范, 设计评审, 上线评审, 发布建议, 设计交付,
-  frontend design, UI blueprint, UX architecture, design system, component design,
-  page layout, design review, design handoff, visual specification, design tokens.
-
-  Also trigger for: "帮我设计一个页面", "出一套设计方案", "设计评审",
-  "组件规范", "视觉系统", "交互规范", "设计交接", "前端方案",
-  "页面架构", "信息架构", "design spec", "UI spec".
+  现代 CSS 工程实践、动效体系、七维质量门禁、React/Vue 工程交接。
+  Use for: frontend design, UI/UX blueprints, design systems, component design,
+  page layout, design review, design handoff, visual specifications.
+  Triggers: "前端设计方案", "UI方案", "设计系统", "Design Token", "设计评审", "design spec".
 ---
 
 # 前端卓越设计技能
