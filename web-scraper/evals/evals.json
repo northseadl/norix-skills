@@ -10,37 +10,55 @@
         {
             "id": 2,
             "prompt": "帮我分析一下 https://cn.vuejs.org 这个文档站的结构，看看有哪些页面",
-            "expected_output": "Agent uses web-scraper discover command to detect VitePress framework and list all navigation links",
+            "expected_output": "Agent uses web-scraper discover command. Smart Discovery extracts navigation links via HTTP (L0) without launching a browser",
             "files": []
         },
         {
             "id": 3,
             "prompt": "I need to pull down all the API docs from https://docs.example.com and save them as a single markdown file",
-            "expected_output": "Agent uses web-scraper fetch command with --auto --merge flags to discover all pages and merge into a single markdown file",
+            "expected_output": "Agent uses web-scraper fetch with --auto --merge to discover pages and merge into a single markdown file",
             "files": []
         },
         {
             "id": 4,
             "prompt": "帮我把飞书开放平台的这个 API 文档读取出来 https://open.feishu.cn/document/server-docs/im-v1/message/create",
-            "expected_output": "Agent recognizes this is a SPA page and uses web-scraper fetch command. Output should contain API parameters, request/response schemas, and Chinese content",
+            "expected_output": "Agent uses web-scraper fetch. L0 probe detects SPA, auto-fallback to L1 browser engine with networkidle wait for full content rendering",
             "files": []
         },
         {
             "id": 5,
-            "prompt": "I tried reading https://open.feishu.cn/document/server-docs/application-scope/scope-list with read_url_content but got almost nothing back. Can you help me get the actual content?",
-            "expected_output": "Agent recognizes read_url_content failure as SPA signal and falls back to web-scraper fetch command for full JS-rendered content extraction",
+            "prompt": "I tried reading https://open.feishu.cn/document/server-docs/application-scope/scope-list with read_url_content but got almost nothing back. Can you help?",
+            "expected_output": "Agent recognizes read_url_content failure as SPA signal and uses web-scraper fetch. Engine auto-routes to L1 browser",
             "files": []
         },
         {
             "id": 6,
-            "prompt": "这个文档站用的什么框架？https://docusaurus.io/docs",
-            "expected_output": "Agent uses web-scraper discover --framework-only to detect Docusaurus framework",
+            "prompt": "把这个文档站的所有页面都抓下来 https://gorm.io/docs/",
+            "expected_output": "Agent uses discover then fetch --from-file or --auto. L0 HTTP engine handles this static site without browser",
             "files": []
         },
         {
             "id": 7,
             "prompt": "把这几个页面的内容都抓下来合并成一个文件：https://cn.vuejs.org/api/composition-api-setup.html 和 https://cn.vuejs.org/api/reactivity-core.html",
-            "expected_output": "Agent creates a URL list file, then uses web-scraper fetch --from-file with --merge to batch fetch and merge the pages",
+            "expected_output": "Agent creates a URL list file, then uses web-scraper fetch --from-file with --merge to batch fetch and merge",
+            "files": []
+        },
+        {
+            "id": 8,
+            "prompt": "这个企业微信的开发文档页面内容读不出来 https://developer.work.weixin.qq.com/document/path/90664",
+            "expected_output": "Agent uses web-scraper fetch. L0 detects SPA, auto-falls back to L1 browser. Default PruningContentFilter removes sidebar noise",
+            "files": []
+        },
+        {
+            "id": 9,
+            "prompt": "把企业微信通讯录管理的 API 文档全部下载到本地，要干净的 Markdown，不要导航栏那些噪音",
+            "expected_output": "Agent uses discover --json to get URL list, filters relevant APIs, fetches with --selector for precision extraction, saves to organized folder structure",
+            "files": []
+        },
+        {
+            "id": 10,
+            "prompt": "帮我在本地建一套飞书消息 API 的参考文档，按接口分文件",
+            "expected_output": "Agent follows 'Build organized local documentation' workflow: discover → filter URLs → write to file → fetch --from-file -o dir/ → organize files by API category",
             "files": []
         }
     ]

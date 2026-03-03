@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Scraper"
+  short_description: "Scrape any website to clean Markdown"
+  default_prompt: "Use $web-scraper to scrape this page and convert it to Markdown."
