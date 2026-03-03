@@ -1,19 +1,15 @@
 ---
 name: web-scraper
-version: 0.0.3
+version: 0.0.4
 description: |
   Web scraper and content extractor with full SPA/JavaScript rendering support.
-  Converts any web page — including React, Vue, Angular SPAs — to clean, LLM-optimized Markdown.
-  Two-tier engine: L0 (pure HTTP, zero browser overhead) and L1 (crawl4ai Playwright browser).
-  Core capabilities: HTTP-first with auto browser fallback, smart site discovery (sitemap/nav/crawl),
-  concurrent batch fetching, stealth mode for anti-bot sites, OpenAPI/Swagger extraction.
-  Use when: (1) read_url_content returns empty/broken content (SPA signal), (2) scraping documentation
-  sites, (3) batch-downloading website content as Markdown, (4) extracting OpenAPI/Swagger specs,
-  (5) building sitemaps or analyzing site structure, (6) fetching content from anti-bot protected sites.
-  Do NOT use for: pages requiring login, binary file downloads, or simple static pages where
-  read_url_content already works.
-  Triggers: "抓取网页", "网页爬取", "文档站抓取", "SPA页面", "Swagger文档", "read_url_content failed",
-  "scrape website", "download docs", "convert page to markdown".
+  Two-tier engine: L0 (httpx, pure HTTP) → L1 (crawl4ai, Playwright browser).
+  Smart discovery (sitemap/nav/crawl), batch fetch, stealth mode, OpenAPI extraction.
+  Use when: (1) read_url_content returns empty/broken content (SPA), (2) scraping doc sites,
+  (3) batch-downloading pages as Markdown, (4) extracting OpenAPI/Swagger specs,
+  (5) analyzing site structure, (6) fetching from anti-bot sites.
+  Not for: pages requiring login, binary downloads, or simple static pages where read_url_content works.
+  Triggers: "抓取网页", "文档站抓取", "SPA页面", "Swagger文档", "read_url_content failed", "scrape website".
 ---
 
 # Web Scraper
