@@ -53,6 +53,12 @@ description: |
 | 节奏控制 | DAG 拓扑排序 | 异步自治 + 收敛检测 |
 | Agent 引擎 | Codex 专用 | Codex 或 Claude Code |
 
+## Fan-out / Fan-in（观点发散 → 综合收敛）
+
+- **Fan-out**：每个 Agent 独立阅读代码/资料，先产出“立场明确 + 有证据”的首轮观点（opinion）。
+- **碰撞**：通过 `challenge/build/respond` 机制让观点互相校正，而不是并列堆叠。
+- **Fan-in**：由 Orchestrator 生成 `synthesis.md`，把共识/分歧/决策点收敛成一个可执行结论。
+
 ## 工具
 
 ```bash

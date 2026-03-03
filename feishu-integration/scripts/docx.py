@@ -101,8 +101,8 @@ def _parse_inline_md(text: str) -> List[dict]:
             if url.startswith(("http://", "https://", "mailto:")):
                 elements.append({"text_run": {"content": m.group(12), "text_element_style": {"link": {"url": url}}}})
             else:
-                # Invalid URL: render as plain text "[label](value)"
-                elements.append({"text_run": {"content": f"[{m.group(12)}]({url})"}})
+                # Relative/non-HTTP URL: render link text only (relative paths don't work in Feishu)
+                elements.append({"text_run": {"content": m.group(12)}})
 
         last_end = m.end()
 
@@ -163,22 +163,45 @@ def make_divider_block() -> dict:
     return {"block_type": BT_DIVIDER, "divider": {}}
 
 
+def _display_width(text: str) -> int:
+    """Estimate display width of text, treating CJK chars as 2x width."""
+    w = 0
+    for ch in text:
+        cp = ord(ch)
+        # CJK Unified Ideographs, CJK Compatibility, Fullwidth Forms, etc.
+        if (0x4E00 <= cp <= 0x9FFF      # CJK Unified Ideographs
+            or 0x3400 <= cp <= 0x4DBF    # CJK Extension A
+            or 0xF900 <= cp <= 0xFAFF    # CJK Compatibility Ideographs
+            or 0x3000 <= cp <= 0x303F    # CJK Symbols and Punctuation
+            or 0xFF01 <= cp <= 0xFF60    # Fullwidth Forms
+            or 0xFE30 <= cp <= 0xFE4F    # CJK Compatibility Forms
+            or 0x2E80 <= cp <= 0x2FDF    # CJK Radicals
+            or 0x20000 <= cp <= 0x2FA1F  # CJK Extension B-F
+        ):
+            w += 2
+        else:
+            w += 1
+    return w
+
+
 def _calc_column_widths(rows: List[List[str]], col_count: int) -> List[int]:
-    """Calculate column widths (px) proportional to content length."""
+    """Calculate column widths (px) proportional to display width of content."""
     FEISHU_DOC_WIDTH = 700  # approx usable canvas width in px
     MIN_COL_WIDTH = 60
-    PX_PER_CHAR = 8
+    MAX_DISPLAY_WIDTH = 80  # cap per-column: ~40 CJK chars, long text wraps anyway
+    PX_PER_UNIT = 8  # px per display-width unit (1 for ASCII, 2 for CJK)
     CELL_PADDING = 24
 
-    # Measure max content length per column
+    # Measure max display width per column (capped to prevent starvation)
     col_max_len = [0] * col_count
     for row in rows:
         for col_idx, cell in enumerate(row):
             if col_idx < col_count:
-                col_max_len[col_idx] = max(col_max_len[col_idx], len(cell))
+                w = min(_display_width(cell), MAX_DISPLAY_WIDTH)
+                col_max_len[col_idx] = max(col_max_len[col_idx], w)
 
-    # Convert char count → pixel estimate
-    raw_widths = [max(MIN_COL_WIDTH, length * PX_PER_CHAR + CELL_PADDING)
+    # Convert display-width → pixel estimate
+    raw_widths = [max(MIN_COL_WIDTH, length * PX_PER_UNIT + CELL_PADDING)
                   for length in col_max_len]
 
     # Scale proportionally to fit canvas if total exceeds it

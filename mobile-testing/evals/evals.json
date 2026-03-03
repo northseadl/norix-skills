@@ -1,0 +1,23 @@
+{
+    "skill_name": "mobile-testing",
+    "evals": [
+        {
+            "id": 1,
+            "prompt": "我有一个 APK 在 /tmp/myapp.apk，帮我装到模拟器上跑一下看看性能怎么样，启动时间、内存占用都看看",
+            "expected_output": "Agent should: 1) check adb availability, 2) install APK, 3) identify main activity, 4) cold-launch with timing, 5) collect memory/CPU metrics, 6) generate a Markdown performance report",
+            "files": []
+        },
+        {
+            "id": 2,
+            "prompt": "帮我给这个电商 App (com.shop.demo) 写一组 Maestro E2E 测试，覆盖登录、浏览商品、加入购物车、下单这几个核心流程",
+            "expected_output": "Agent should: 1) generate modular Maestro YAML flows (login.yaml, browse.yaml, cart.yaml, checkout.yaml), 2) use proper element locators (id/text, not coordinates), 3) include assertions and screenshots, 4) provide execution instructions",
+            "files": []
+        },
+        {
+            "id": 3,
+            "prompt": "我们的 iOS App 最近用户反馈经常闪退，帮我在 iPhone 16 Pro 模拟器上装好 App 后监控 30 秒日志，看看有没有崩溃",
+            "expected_output": "Agent should: 1) boot iOS simulator, 2) install app, 3) launch app, 4) capture filtered logs for 30s, 5) analyze for crash patterns (SIGABRT, SIGSEGV, etc.), 6) generate crash analysis report",
+            "files": []
+        }
+    ]
+}

@@ -1,108 +1,98 @@
 ---
 name: agent-front-design
-version: 0.0.1
-description: 面向 React/Vue 的前端卓越设计技能。用于输出高质量、完整、优秀的前端方案级规格，采用双模式治理（Explore/Production）避免设计随机化与质量漂移，产出可实施方案、七维评分、风险缓解与发布建议。
+version: 0.1.0
+description: |
+  前端卓越设计技能 — 输出可实施的高质量前端方案规格。
+  核心能力：设计哲学锚定、反 AI 审美同质化、Design Token 三层架构、
+  2026 现代 CSS 工程实践、动效体系、七维质量门禁、React/Vue 工程交接。
+
+  Use this skill whenever the user mentions:
+  前端设计方案, UI 方案, UX 设计, 页面设计, 交互设计, 设计系统, Design Token,
+  组件设计, 页面蓝图, 视觉规范, 设计评审, 上线评审, 发布建议, 设计交付,
+  frontend design, UI blueprint, UX architecture, design system, component design,
+  page layout, design review, design handoff, visual specification, design tokens.
+
+  Also trigger for: "帮我设计一个页面", "出一套设计方案", "设计评审",
+  "组件规范", "视觉系统", "交互规范", "设计交接", "前端方案",
+  "页面架构", "信息架构", "design spec", "UI spec".
 ---
 
 # 前端卓越设计技能
 
 ## 核心承诺
 
-该技能只服务一件事：稳定输出高质量、完整、优秀的前端方案级规格。
+稳定输出高质量、可实施、避免 AI 审美同质化的前端方案级规格。
 
-不输出“风格拼贴”式随机设计，不以单纯视觉表达替代可实施方案。
+不输出"风格拼贴"式随机设计，不输出训练数据的平均审美。
+
+## 首要原则：克制 AI 审美
+
+> AI 生成的 UI 存在严重的审美同质化问题（Indigo Bias）—— 紫蓝渐变、
+> glassmorphism、抽象 3D 人物、Inter/Roboto 字体组合。这些元素在 AI 训练数据
+> 中过度代表，导致输出趋同。本技能要求**主动抵抗**这种默认倾向。
+
+详细的反 AI 审美协议：`references/philosophy/anti-ai-aesthetic.md`
 
 ## 工作模式
 
-### 模式 A：`Explore`
+### Explore 模式
 
 用途：创意探索、方向发散、方案对比。
 
-允许：
+执行：
+1. 先读取 `references/philosophy/design-principles.md` 锚定设计哲学
+2. 生成 2-3 个方向候选，每个必须包含：适配场景、核心交互假设、主要风险
+3. 不得给出"可发布"结论
 
-1. 多方案并行
-2. 不同视觉语言尝试
-3. 交互假设实验
-
-限制：
-
-1. 不得直接给出“可发布”结论
-2. 必须进入 `Production` 才能形成最终交付
-
-### 模式 B：`Production`
+### Production 模式
 
 用途：收敛为可实施、可验收、可评审的唯一主方案。
 
-强制要求：
+执行：
+1. 从 Explore 结果选择唯一主方案
+2. 备选方案不超过 2 个，必须说明拒绝原因
+3. 输出完整方案规格（参考 `references/templates/deliverable-templates.md`）
+4. 执行七维评分与阻断判定（参考 `references/quality/quality-gate.md`）
+5. 输出发布建议与风险缓解动作
 
-1. 输出唯一主方案
-2. 备选方案不超过 2 个
-3. 必须说明拒绝备选方案的原因
-4. 必须执行七维评分与阻断规则
+默认策略：若用户未指定模式，先 Explore 后自动进入 Production。
 
-默认策略：若用户未指定模式，先 `Explore` 后自动进入 `Production`。
+## 参考文档路由
 
-## 七维质量定义
+根据任务阶段，按需读取以下参考文档：
 
-1. 目标一致性
-2. 信息架构完整性
-3. 交互完整性
-4. 视觉系统一致性
-5. 工程可实施性
-6. 可访问性与性能
-7. 安全与可观测性
+### 设计哲学（方案启动时必读其一）
+- `references/philosophy/design-principles.md` — 设计原则与美学方向
+- `references/philosophy/anti-ai-aesthetic.md` — 反 AI 审美协议（色彩、字体、布局）
 
-详细规则请读取：
+### 工程实践（视觉/交互定义时按需读取）
+- `references/engineering/design-tokens.md` — Design Token 三层架构
+- `references/engineering/modern-css.md` — 2026 现代 CSS 技术栈
+- `references/engineering/motion-design.md` — 动效与微交互体系
 
-- `references/standards/quality-seven-dimensions.md`
-- `references/standards/scoring-model.md`
+### 设计模式（IA/交互规划时读取）
+- `references/patterns/page-archetypes.md` — 页面原型选型
+- `references/patterns/interaction-patterns.md` — 交互模式库
+- `references/patterns/state-coverage.md` — 状态覆盖规范
 
-## 输出契约（方案级）
+### 质量与交付（Production 模式必读）
+- `references/quality/quality-gate.md` — 七维评分与阻断模型
+- `references/handoff/framework-handoff.md` — React/Vue 工程交接
+- `references/templates/deliverable-templates.md` — 输出模板
 
-所有交付必须映射到以下模板之一：
-
-1. `DesignGoalSpec` -> `references/templates/design-goal-spec-template.md`
-2. `UXArchitectureSpec` -> `references/templates/ux-architecture-spec-template.md`
-3. `UIBlueprintSpec` -> `references/templates/ui-blueprint-spec-template.md`
-4. `EngineeringHandoffSpec` -> `references/templates/engineering-handoff-template.md`
-5. `QualityGateReport` -> `references/templates/quality-gate-report-template.md`
-6. `ReleaseDecision` -> `references/templates/release-decision-template.md`
+### 框架路由
+- React 场景：优先读取 `references/handoff/framework-handoff.md` 的 React 章节
+- Vue 场景：优先读取 `references/handoff/framework-handoff.md` 的 Vue 章节
 
 ## 反随机化硬约束
 
 最终交付时必须满足：
 
 1. 主方案 1 个，备选方案 <= 2 个
-2. 明确写出备选被拒绝原因
+2. 明确写出备选被拒绝的原因
 3. 给出七维分项分数与总分
-4. 包含状态完整性表：`loading/empty/error/success/permission`
+4. 包含状态完整性表：`loading / empty / error / success / permission`
 5. 包含组件树与状态边界
 6. 包含可访问性关键检查点
 7. 包含性能预算与监控点
-8. 包含风险等级与缓解动作
-
-## 评分与阻断
-
-- 每维 0-4 分，总分折算为 100
-- 通过线：>= 85
-- 阻断线：任一维 < 2
-- 严重级别：`P0/P1/P2/P3`
-- 阻断条件：存在 `P0` 或 `P1` 时，不得给出“可发布”
-
-## 使用流程
-
-1. 先读取 `references/index/INDEX.md` 选择分区索引
-2. 再读取目标分区索引（`INDEX-*.md`）定位文档
-3. 首次加载最多 1 个分区索引
-4. 二次加载最多 2 个节点
-5. 歧义时最多追加 1 个 `next`
-
-目标：减少上下文污染，提高命中稳定性。
-
-## React/Vue 路由
-
-- React 场景：优先 `references/playbooks/react-handoff-playbook.md`
-- Vue 场景：优先 `references/playbooks/vue-handoff-playbook.md`
-- 模式执行：
-  - `Explore` -> `references/playbooks/explore-mode-playbook.md`
-  - `Production` -> `references/playbooks/production-mode-playbook.md`
+8. 包含色彩方案的 AI 审美偏离度说明

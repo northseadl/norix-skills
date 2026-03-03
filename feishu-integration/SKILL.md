@@ -66,6 +66,26 @@ When the user expresses intent, map to the right module and command:
 | "清理无用文档" | `doc list` → identify → `doc trash --token "..."` |
 | "共享文件夹" | `doc shared-add --url "..."` (user must provide URL) |
 
+#### Batch Upload with Cross-Document Linking
+
+When uploading a directory of Markdown files where an index document (e.g., README.md) contains relative links to other `.md` files, follow this orchestration pattern:
+
+1. **Create target folder** via Feishu Drive API
+2. **Upload child documents first** — for each `.md` file, call `doc create-from-markdown`. Capture the returned `document_id` and build a URL map: `{"filename.md": "https://feishu.cn/docx/DOC_ID"}`
+3. **Process the index document** — read the index file, replace all relative `.md` links with the corresponding Feishu URLs from the map
+4. **Upload the processed index** — write the modified content to a temp file, then `doc create-from-markdown` from that temp file
+
+This ensures all index links are **clickable and navigate to the correct Feishu documents**.
+
+#### Markdown → Feishu Adaptation Notes
+
+The `create-from-markdown` command handles these conversions automatically:
+
+- **CJK table column widths**: Chinese characters are measured at 2x width for proportional column sizing
+- **Relative links** `[text](file.md)`: Degraded to plain text (Feishu only supports HTTP links)
+- **HTTP links** `[text](https://...)`: Rendered as clickable links
+- **Code blocks, headings, lists, quotes, dividers, todos**: Fully supported
+
 ### Wiki (知识库)
 
 | User intent | Command |
