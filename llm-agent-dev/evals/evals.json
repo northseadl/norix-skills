@@ -1,54 +1,126 @@
 {
   "skill_name": "llm-agent-dev",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "evals": [
     {
       "id": 1,
       "prompt": "设计一个电商智能客服 Agent，目标是提升售后自助率。",
       "should_trigger": true,
-      "expected_output": "触发 llm-agent-dev；输出包含 Recommended Stack、Runtime Architecture、Safety and Escalation、Evaluation Plan"
+      "expected_output": "触发技能；输出包含 Stack/Architecture/Safety/Evaluation/Data&Iteration 五段。推荐 CREX + Slot + Workflow"
     },
     {
       "id": 2,
       "prompt": "帮我写 pre-push hook，限制 develop 合并到 main。",
       "should_trigger": false,
-      "expected_output": "不触发 llm-agent-dev；这属于仓库治理技能范围"
+      "expected_output": "不触发；这属于仓库治理技能范围"
     },
     {
       "id": 3,
       "prompt": "我们要做点餐 Agent，语音入口，端到端延迟要求 1 秒内。",
       "should_trigger": true,
-      "expected_output": "优先推荐低延迟栈（CREX + Slot），避免默认 ReAct"
+      "expected_output": "优先推荐低延迟栈（CREX + Slot），禁用 ReAct/Orchestrator"
     },
     {
       "id": 4,
       "prompt": "我要做一个需要跨部门审批的退款流程 Agent。",
       "should_trigger": true,
-      "expected_output": "推荐 Workflow + Handoff，明确 HITL 触发条件"
+      "expected_output": "推荐 Workflow + Handoff，明确 HITL 触发条件和审批节点"
     },
     {
       "id": 5,
       "prompt": "我只想要一个普通 FAQ 页面信息架构建议。",
       "should_trigger": true,
-      "expected_output": "可触发 llm-agent-dev，但应给出轻量化方案，不应过度设计 multi-agent"
+      "expected_output": "可触发，给出轻量化 CREX 方案，不应过度设计多模式栈"
     },
     {
       "id": 6,
       "prompt": "请直接给我一个分支策略模板。",
       "should_trigger": false,
-      "expected_output": "不触发 llm-agent-dev；这不是 agent architecture 设计任务"
+      "expected_output": "不触发；不是 Agent 架构设计任务"
     },
     {
       "id": 7,
       "prompt": "请给我一个客服 Agent 的评估闭环设计。",
       "should_trigger": true,
-      "expected_output": "应包含离线评测、线上 KPI、发布门禁、回滚条件"
+      "expected_output": "应包含三层评估金字塔、质量门禁、回归测试、持续改进飞轮"
     },
     {
       "id": 8,
       "prompt": "把这个项目代码全部重构成多 Agent 架构。",
       "should_trigger": true,
       "expected_output": "应先做 tradeoff 评估，不得默认 multi-agent 是最优"
+    },
+    {
+      "id": 9,
+      "prompt": "帮我给这个 Agent 生成一批评估数据集，要覆盖边界情况。",
+      "should_trigger": true,
+      "expected_output": "触发 Pillar II 数据模拟，按维度生成 happy_path/edge_case/adversarial 数据集"
+    },
+    {
+      "id": 10,
+      "prompt": "我有三个版本的 System Prompt，不知道哪个效果最好。",
+      "should_trigger": true,
+      "expected_output": "触发 Pillar III 收敛迭代流程，设计多版本 A/B 测试并行评估方案"
+    },
+    {
+      "id": 11,
+      "prompt": "我需要一个能生成营销文案并自动迭代质量的 Agent。",
+      "should_trigger": true,
+      "expected_output": "推荐 Evaluator-Optimizer 模式 (⑫)，明确 Generator/Evaluator 分工"
+    },
+    {
+      "id": 12,
+      "prompt": "设计一个知识库问答 Agent，支持从多个数据源检索。",
+      "should_trigger": true,
+      "expected_output": "推荐 Parallelizing + RAG，加载 knowledge-qa 场景蓝图"
+    },
+    {
+      "id": 13,
+      "prompt": "如何设计 Agent 的上下文工程策略？",
+      "should_trigger": true,
+      "expected_output": "加载 context-engineering.md 参考，讲解上下文预算管理和策略"
+    },
+    {
+      "id": 14,
+      "prompt": "帮我批量生成一套 Agent 评估测试数据，要覆盖边界和对抗场景。",
+      "should_trigger": true,
+      "expected_output": "触发 Pillar II 数据模拟生成，Agent 自主调 LLM API 分维度批量生成数据集"
+    },
+    {
+      "id": 15,
+      "prompt": "让几个 Agent 辩论一下这个架构方案。",
+      "should_trigger": false,
+      "expected_output": "不触发；多 Agent 辩论不在此技能范围内"
+    },
+    {
+      "id": 16,
+      "prompt": "把 PRD 拆成多个任务给 Codex 执行。",
+      "should_trigger": false,
+      "expected_output": "不触发；跨 Agent 任务拆解执行不在此技能范围内"
+    },
+    {
+      "id": 17,
+      "prompt": "我的 Agent 需要防御 Prompt Injection 攻击。",
+      "should_trigger": true,
+      "expected_output": "加载 safety-guardrails.md，讲解 5 层安全架构和注入防御策略"
+    },
+    {
+      "id": 18,
+      "prompt": "设计一个编程助手 Agent，类似 Cursor 那种。",
+      "should_trigger": true,
+      "expected_output": "加载 coding-assistant 场景蓝图，推荐 ReAct + Eval-Opt 组合"
+    },
+    {
+      "id": 19,
+      "prompt": "我需要迭代优化 Agent 的 Prompt，怎么做比较科学？",
+      "should_trigger": true,
+      "expected_output": "触发 Pillar III 收敛迭代 + 加载 prompt-patterns.md 参考"
+    },
+    {
+      "id": 20,
+      "prompt": "如何监控 Agent 的线上质量和成本？",
+      "should_trigger": true,
+      "expected_output": "加载 observability.md，讲解 Tracing/Metrics/Logging 三角和 SLO"
     }
   ]
 }

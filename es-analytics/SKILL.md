@@ -1,5 +1,6 @@
 ---
 name: es-analytics
+version: 0.1.0
 description: |
   Elasticsearch / 阿里云 SLS ES 兼容层 数据分析技能。
 
