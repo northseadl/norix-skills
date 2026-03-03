@@ -49,7 +49,7 @@ import {
 import { openBrowser, startServer } from "./lib/server.mjs";
 import { ensureBlackboardDirs, writeContract, appendDecision, appendChangelog, updateTeamDigest, buildTeamContext } from "./lib/blackboard.mjs";
 import { extractArtifacts, generateChangelogEntry } from "./lib/extractor.mjs";
-import { loadWorkflow, saveWorkflow, getPreset, initWorkflowState, resolveReadyPhases, markRoleDone, activatePhase, isWorkflowComplete, getPhase, listPresets } from "./lib/workflow.mjs";
+import { loadWorkflow, saveWorkflow, getPreset, initWorkflowState, resolveReadyPhases, markRoleDone, activatePhase, isWorkflowComplete, getPhase, listPresets, resetPhase } from "./lib/workflow.mjs";
 import { analyzeFindings } from "./lib/review_loop.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -850,6 +850,8 @@ async function cmdServe(global) {
         if (!workflowDef._state) {
             workflowDef._state = initWorkflowState(workflowDef);
         }
+        // Attach to store so processRoleCompletion uses the same in-memory instance
+        store._workflow = workflowDef;
     }
 
     const { server, port } = await startServer(store, global.port, __dirname);
@@ -960,7 +962,8 @@ async function processRoleCompletion(cwd, runId, role, ticketId, reportText, sto
     await updateTeamDigest(cwd, runId, store.getState(), store.getMeta());
 
     // 4. Workflow phase advancement
-    const workflowDef = await loadWorkflow(cwd, runId);
+    // Use store-attached workflow to avoid desync between serve and processRoleCompletion
+    let workflowDef = store._workflow || await loadWorkflow(cwd, runId);
     if (workflowDef && workflowDef._state) {
         const { phaseCompleted, phaseId } = markRoleDone(workflowDef, workflowDef._state, role);
         if (phaseCompleted) {
@@ -975,15 +978,23 @@ async function processRoleCompletion(cwd, runId, role, ticketId, reportText, sto
                 if (result.action === "fix_and_re_review") {
                     workflowDef._state.reviewLoopCount = (workflowDef._state.reviewLoopCount || 0) + 1;
                     log("INFO", `Review Loop: round ${workflowDef._state.reviewLoopCount}, creating ${result.fixTickets.length} fix ticket(s)`);
+
+                    // Reset review + verify phases for re-review cycle
+                    resetPhase(workflowDef._state, phaseId, phase.roles);
+                    const verifyPhase = workflowDef.phases.find((p) => p.id === "verify");
+                    if (verifyPhase) resetPhase(workflowDef._state, "verify", verifyPhase.roles);
+
                     for (const ft of result.fixTickets) {
-                        // Write fix ticket and auto-enqueue
-                        const fixTicketPath = join(cwd, ".agent-team", "tickets", `fix-r${workflowDef._state.reviewLoopCount}-${ft.role}.md`);
+                        // Resolve role type to an available instance for multi-instance mode
+                        const resolvedFixRole = resolveRoleInstance(store, ft.role);
+                        const fixTicketPath = join(cwd, ".agent-team", "tickets", `fix-r${workflowDef._state.reviewLoopCount}-${resolvedFixRole}.md`);
                         await writeTextAtomic(fixTicketPath, ft.ticketContent);
                         await enqueueAssign(cwd, runId, {
-                            role: ft.role,
+                            role: resolvedFixRole,
                             ticketPath: relative(cwd, fixTicketPath),
                             estimate: "S",
                         });
+                        log("INFO", `Review Loop: fix ticket enqueued for ${resolvedFixRole}`);
                     }
                 } else if (result.action === "escalate") {
                     log("WARN", `Review Loop: ESCALATED — ${result.reason}`);
@@ -1000,8 +1011,6 @@ async function processRoleCompletion(cwd, runId, role, ticketId, reportText, sto
                 if (!readyPhase) continue;
                 activatePhase(workflowDef._state, readyId, readyPhase.roles);
                 log("INFO", `Workflow: auto-triggering phase '${readyId}' (roles: ${readyPhase.roles.join(", ")})`);
-                // Note: actual ticket creation for auto-triggered phases requires
-                // Leader to have pre-created tickets. Hub logs the trigger for Leader awareness.
             }
 
             if (isWorkflowComplete(workflowDef, workflowDef._state)) {
@@ -1010,6 +1019,8 @@ async function processRoleCompletion(cwd, runId, role, ticketId, reportText, sto
             }
         }
         await saveWorkflow(cwd, runId, workflowDef);
+        // Update store-attached reference
+        if (store._workflow) store._workflow = workflowDef;
     }
 }
 
