@@ -1,6 +1,6 @@
 {
     "name": "agent-swe-team",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "private": true,
     "type": "module",
     "description": "Role-based multi-engine SWE team with Leader-Hub-Role architecture, git worktree isolation, and BLOCKED→Reply loop",

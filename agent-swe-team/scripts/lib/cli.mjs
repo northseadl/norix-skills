@@ -91,6 +91,37 @@ export function parseCommaList(s) {
         .filter(Boolean);
 }
 
+/**
+ * Expand role specs with optional instance count.
+ * Input: ["backend:2", "frontend:3", "architect", "qa"]
+ * Output: ["backend-1", "backend-2", "frontend-1", "frontend-2", "frontend-3", "architect", "qa"]
+ *
+ * Rules:
+ * - "role:N" where N>1 → role-1, role-2, ..., role-N
+ * - "role:1" or "role" → role (no suffix)
+ */
+export function expandRoleSpecs(specs) {
+    const result = [];
+    for (const spec of specs) {
+        const match = spec.match(/^([a-z][a-z0-9_-]*):(\d+)$/);
+        if (match) {
+            const baseRole = match[1];
+            const count = parseInt(match[2], 10);
+            if (count <= 0) continue;
+            if (count === 1) {
+                result.push(baseRole);
+            } else {
+                for (let i = 1; i <= count; i++) {
+                    result.push(`${baseRole}-${i}`);
+                }
+            }
+        } else {
+            result.push(spec);
+        }
+    }
+    return result;
+}
+
 export function printUsage() {
     console.log(`
 Agent SWE Team — Role-based multi-engine team with local Hub and git worktree isolation
@@ -123,9 +154,10 @@ Commands:
 
 Examples:
   node scripts/team.mjs init --cwd <PROJECT_DIR>
+  node scripts/team.mjs init --cwd <PROJECT_DIR> --roles architect,backend:2,frontend,qa,reviewer
   node scripts/team.mjs --engine claude serve --cwd <PROJECT_DIR> --approval-mode full-auto
   node scripts/team.mjs ticket new --cwd <PROJECT_DIR> --title "Implement OAuth login"
-  node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <PROJECT_DIR>/.agent-team/tickets/001-implement-oauth-login.md
+  node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
   node scripts/team.mjs reply --cwd <PROJECT_DIR> --role backend --text "Use PKCE flow."
   node scripts/team.mjs status --cwd <PROJECT_DIR>
 `);

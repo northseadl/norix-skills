@@ -11,6 +11,7 @@ import {
     blackboardChangelogPath,
     blackboardTeamDigestPath,
 } from "./paths.mjs";
+import { getRoleType } from "./roles.mjs";
 
 // ─── Initialization ───
 
@@ -150,17 +151,19 @@ export async function readChangelog(cwd, runId) {
 
 /**
  * Build team context for a specific role's prompt injection.
- * Filters to only relevant contracts and limits token budget.
+ * Filters by role TYPE (not instance) so backend-1 and backend-2
+ * both get the architect + frontend contracts but not each other's.
  */
 export async function buildTeamContext(cwd, runId, role) {
+    const roleType = getRoleType(role);
     const decisions = await readDecisions(cwd, runId);
     const allContracts = await readContracts(cwd, runId);
     const changelog = await readChangelog(cwd, runId);
 
-    // Filter contracts: exclude this role's own contracts
-    const relevantContracts = allContracts.filter((c) => c.role !== role);
+    // Filter contracts: exclude contracts from same role TYPE
+    const relevantContracts = allContracts.filter((c) => getRoleType(c.role) !== roleType);
 
-    // Context relevance rules per role
+    // Context relevance rules per role TYPE
     const contextRules = {
         architect: { includeContracts: false, includeChangelog: false, maxDecisions: 5 },
         backend: { includeContracts: true, includeChangelog: false, maxDecisions: 10 },
@@ -168,13 +171,13 @@ export async function buildTeamContext(cwd, runId, role) {
         qa: { includeContracts: true, includeChangelog: true, maxDecisions: 5 },
         reviewer: { includeContracts: true, includeChangelog: true, maxDecisions: 10 },
     };
-    const rules = contextRules[role] || { includeContracts: true, includeChangelog: true, maxDecisions: 10 };
+    const rules = contextRules[roleType] || { includeContracts: true, includeChangelog: true, maxDecisions: 10 };
 
     return {
         decisions: decisions.slice(-rules.maxDecisions),
         contracts: rules.includeContracts ? truncateContracts(relevantContracts, 2000) : [],
         changelog: rules.includeChangelog ? truncateText(changelog, 500) : "",
-        findings: [], // populated by review_loop when re-assigning fix tickets
+        findings: [],
     };
 }
 

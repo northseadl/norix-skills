@@ -1,6 +1,6 @@
 ---
 name: agent-swe-team
-version: 0.1.1
+version: 0.1.2
 description: |
   Build large software tasks with a role-based "SWE team" model: one Leader agent (you, the primary user interface)
   dispatches tickets to multiple role-based sub-agents (architect/backend/frontend/qa/reviewer) through a
@@ -85,6 +85,9 @@ cd <SKILLS_DIR>/agent-swe-team && npm install
 # 初始化 run（创建 worktrees）
 node scripts/team.mjs init --cwd <PROJECT_DIR>
 
+# 多实例模式：2 个 backend 工程师并行工作
+node scripts/team.mjs init --cwd <PROJECT_DIR> --roles architect,backend:2,frontend:2,qa,reviewer
+
 # 创建 workflow（可选，启用自动 phase 触发）
 node scripts/team.mjs workflow create --cwd <PROJECT_DIR> --template fullstack
 
@@ -93,6 +96,7 @@ node scripts/team.mjs --engine codex serve --cwd <PROJECT_DIR> --approval-mode f
 
 # 创建 + 分配 ticket
 node scripts/team.mjs ticket new --cwd <PROJECT_DIR> --title "Implement OAuth login"
+# 分配 ticket（自动路由到空闲实例：backend → backend-1）
 node scripts/team.mjs assign --cwd <PROJECT_DIR> --role backend <TICKET_PATH>
 
 # 角色 BLOCKED 时 Reply
@@ -112,6 +116,25 @@ node scripts/team.mjs workflow status --cwd <PROJECT_DIR>
 - `backend-only`: implement(backend) → verify → review
 - `frontend-only`: implement(frontend) → verify
 - `hotfix`: fix → verify
+
+## 多实例角色（Multi-Instance Roles）
+
+当需要多个相同角色并行工作时，使用 `role:N` 语法：
+
+```bash
+# 2 个 backend + 2 个 frontend
+node scripts/team.mjs init --roles architect,backend:2,frontend:2,qa,reviewer
+```
+
+**展开规则**:
+- `backend:2` → `backend-1`, `backend-2`（各自独立 worktree 和分支）
+- `backend:1` 或 `backend` → `backend`（单例，无后缀）
+
+**Assign 智能路由**: 当你 `assign --role backend` 时，Hub 自动选择最空闲的 backend 实例。你也可以指定实例：`assign --role backend-2`。
+
+**Reply 智能路由**: 当你 `reply --role backend` 时，Hub 自动找到被 BLOCKED 的 backend 实例。
+
+**Blackboard 上下文过滤**: 同类型实例共享上下文规则。backend-1 和 backend-2 都能看到 architect 的 contracts，但看不到彼此的（避免信息冗余）。
 
 ## Leader 完整工作流
 

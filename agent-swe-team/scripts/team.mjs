@@ -5,9 +5,9 @@ import { existsSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_ROLES, parseCommaList, parseGlobalArgs, printUsage } from "./lib/cli.mjs";
+import { DEFAULT_ROLES, parseCommaList, expandRoleSpecs, parseGlobalArgs, printUsage } from "./lib/cli.mjs";
 import { writeJsonAtomic, writeTextAtomic } from "./lib/atomic.mjs";
-import { loadRoleTemplate } from "./lib/roles.mjs";
+import { loadRoleTemplate, getRoleType } from "./lib/roles.mjs";
 import { buildAssignPrompt, buildReplyPrompt } from "./lib/prompt.mjs";
 import {
     createRoleWorktrees,
@@ -89,6 +89,36 @@ function validateRole(role) {
     }
 }
 
+/**
+ * Resolve a role type (e.g. "backend") to an available instance.
+ * If the exact instance is specified (e.g. "backend-1"), use it directly.
+ * If a type is specified (e.g. "backend"), find an idle instance of that type.
+ * Returns the resolved instance name or the original role if no instances.
+ */
+function resolveRoleInstance(store, roleInput) {
+    const state = store.getState();
+    // If exact instance exists, use it
+    if (state.roles[roleInput]) return roleInput;
+
+    // Find instances matching this role type
+    const instances = Object.keys(state.roles).filter(
+        (r) => getRoleType(r) === roleInput,
+    );
+    if (instances.length === 0) return roleInput; // fallback
+    if (instances.length === 1) return instances[0];
+
+    // Prefer idle instances, then by queue depth
+    const idle = instances.filter((r) => state.roles[r].status === "idle");
+    if (idle.length > 0) {
+        // Pick the one with lowest queue depth
+        idle.sort((a, b) => (state.roles[a].queueDepth || 0) - (state.roles[b].queueDepth || 0));
+        return idle[0];
+    }
+    // All busy — pick least loaded
+    instances.sort((a, b) => (state.roles[a].queueDepth || 0) - (state.roles[b].queueDepth || 0));
+    return instances[0];
+}
+
 async function writeReports(cwd, store) {
     const meta = store.getMeta();
     const state = store.getState();
@@ -127,7 +157,7 @@ function parseInitArgs(args, fatalFn) {
                 break;
             case "--roles":
                 if (i + 1 >= args.length) fatalFn("--roles requires a value");
-                out.roles = parseCommaList(args[++i]);
+                out.roles = expandRoleSpecs(parseCommaList(args[++i]));
                 i++;
                 break;
             case "--worktree-root":
@@ -393,31 +423,56 @@ async function cmdAssign(global, args) {
     const runId = await resolveRunIdOrFatal(global.cwd, global.runId);
     const meta = await loadRunMeta(global.cwd, runId);
     if (!meta) fatal(`Run not found: ${runId}`);
-    if (!meta.roles.includes(args.role)) fatal(`Role '${args.role}' not in run roles: ${meta.roles.join(", ")}`);
+
+    // Resolve role type to instance (e.g., "backend" → "backend-1")
+    const store = await loadOrInitStore(global.cwd, runId);
+    const resolvedRole = resolveRoleInstance(store, args.role);
+    if (!meta.roles.includes(resolvedRole)) {
+        // Check if any instance of this role type exists
+        const typeInstances = meta.roles.filter((r) => getRoleType(r) === args.role);
+        if (typeInstances.length === 0) {
+            fatal(`Role '${args.role}' not in run roles: ${meta.roles.join(", ")}`);
+        }
+    }
 
     const absTicket = isAbsolute(args.ticketPath) ? args.ticketPath : resolve(global.cwd, args.ticketPath);
     if (!existsSync(absTicket)) fatal(`ticket not found: ${absTicket}`);
 
     const relTicket = relative(global.cwd, absTicket);
     const { path } = await enqueueAssign(global.cwd, runId, {
-        role: args.role,
+        role: resolvedRole,
         ticketPath: relTicket,
         estimate: args.estimate,
     });
-    log("INFO", `Enqueued: ${path}`);
+    log("INFO", `Enqueued: ${path} (resolved instance: ${resolvedRole})`);
 }
 
 async function cmdReply(global, args) {
     const runId = await resolveRunIdOrFatal(global.cwd, global.runId);
     const meta = await loadRunMeta(global.cwd, runId);
     if (!meta) fatal(`Run not found: ${runId}`);
-    if (!meta.roles.includes(args.role)) fatal(`Role '${args.role}' not in run roles: ${meta.roles.join(", ")}`);
+
+    // For reply, resolve role to the blocked instance
+    const store = await loadOrInitStore(global.cwd, runId);
+    let resolvedRole = args.role;
+    if (!meta.roles.includes(resolvedRole)) {
+        // If role type given, find the blocked instance
+        const typeInstances = meta.roles.filter((r) => getRoleType(r) === args.role);
+        const blockedInstance = typeInstances.find((r) => store.getState().roles[r]?.status === "blocked");
+        if (blockedInstance) {
+            resolvedRole = blockedInstance;
+        } else if (typeInstances.length > 0) {
+            resolvedRole = typeInstances[0];
+        } else {
+            fatal(`Role '${args.role}' not in run roles: ${meta.roles.join(", ")}`);
+        }
+    }
 
     const { path } = await enqueueReply(global.cwd, runId, {
-        role: args.role,
+        role: resolvedRole,
         text: args.text,
     });
-    log("INFO", `Enqueued: ${path}`);
+    log("INFO", `Enqueued: ${path} (resolved instance: ${resolvedRole})`);
 }
 
 async function cmdListRuns(global) {
