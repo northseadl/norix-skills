@@ -64,6 +64,24 @@ def build_index(members: List[Dict]) -> Dict[str, str]:
 
 # ─── Member Resolution (importable by other scripts) ────────────────────────
 
+def resolve_id_to_name(open_id: str) -> str:
+    """Reverse resolve open_id to display name from cache. Returns open_id if not found."""
+    cache = load_cache()
+    for m in cache.get("members", []):
+        if m.get("open_id") == open_id:
+            return m.get("name") or m.get("en_name") or open_id
+    return open_id
+
+
+def resolve_ids_to_names(open_ids: list) -> list:
+    """Batch resolve open_ids to display names. Single cache load for efficiency."""
+    cache = load_cache()
+    members = cache.get("members", [])
+    id_map = {m["open_id"]: m.get("name") or m.get("en_name") or m["open_id"]
+              for m in members if m.get("open_id")}
+    return [id_map.get(oid, oid) for oid in open_ids]
+
+
 def resolve_member(name: str, client: Optional[FeishuClient] = None) -> str:
     """Resolve a member name to open_id. Auto-scans if cache is stale."""
     cache = load_cache()

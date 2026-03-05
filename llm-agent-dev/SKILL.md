@@ -1,14 +1,14 @@
 ---
 name: llm-agent-dev
-version: 0.1.1
-description: |
-  Full-stack LLM Agent engineering — architecture to production.
-  Three pillars: Design Paradigms (12-mode pattern matrix), Data Simulation, Convergence Iteration.
-  Use for: agent architecture, chatbot design, intent routing, function calling, workflow agents,
-  ReAct, MCP protocol, prompt chaining, context engineering, guardrails, LLM evaluation,
-  memory architecture, RAG, observability, synthetic data generation, convergence testing.
-  Triggers: "Agent开发", "意图识别", "Function Calling", "MCP协议", "设计一个Agent".
-  NOT for: autonomous coding workflows, multi-agent brainstorming, task decomposition.
+metadata:
+  version: 0.1.2
+description: 'LLM Agent engineering: pattern selection (12-mode matrix), data simulation,
+  convergence iteration.
+
+  Covers intent routing, function calling, ReAct, MCP, prompt chaining, guardrails,
+  evaluation.
+
+  '
 ---
 
 # LLM Agent 全栈工程技能 — Tri-Pillar Protocol v3

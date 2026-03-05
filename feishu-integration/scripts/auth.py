@@ -22,7 +22,11 @@ import urllib.request
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
+from credential_store import CredentialStore
 from feishu_api import API_BASE, CREDENTIALS_FILE, DATA_DIR, Log, safe_clean
+
+_VAULT_SENTINEL = "***vault***"
+_cred_store = CredentialStore("feishu", DATA_DIR)
 
 OAUTH_REDIRECT_PORT = int(os.environ.get("OAUTH_REDIRECT_PORT", "9876"))
 OAUTH_REDIRECT_URI = f"http://localhost:{OAUTH_REDIRECT_PORT}/callback"
@@ -65,11 +69,16 @@ ALL_SCOPES = CORE_SCOPES + [
 # ─── Credentials Storage ────────────────────────────────────────────────────
 
 def save_credentials(creds: dict):
+    # Extract app_secret to encrypted vault
+    secret = creds.get("app_secret", "")
+    if secret and secret != _VAULT_SENTINEL:
+        _cred_store.set("app-secret", secret)
+        creds["app_secret"] = _VAULT_SENTINEL
     os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
     with open(CREDENTIALS_FILE, "w") as f:
         json.dump(creds, f, indent=2, ensure_ascii=False)
     os.chmod(CREDENTIALS_FILE, 0o600)
-    Log.ok(f"Credentials saved to {CREDENTIALS_FILE}")
+    Log.ok(f"Credentials saved to {CREDENTIALS_FILE} (secrets encrypted in vault)")
 
 
 def load_credentials() -> dict:
@@ -85,7 +94,10 @@ def get_app_credentials() -> tuple[str, str]:
     if not app_id or not app_secret:
         creds = load_credentials()
         app_id = app_id or creds.get("app_id", "")
-        app_secret = app_secret or creds.get("app_secret", "")
+        stored_secret = creds.get("app_secret", "")
+        if stored_secret == _VAULT_SENTINEL:
+            stored_secret = _cred_store.get("app-secret") or ""
+        app_secret = app_secret or stored_secret
     return app_id, app_secret
 
 
@@ -395,7 +407,7 @@ def cmd_status():
             if scope:
                 print(f"  Scopes:      {scope[:80]}{'...' if len(scope) > 80 else ''}")
         elif expire_at > 0:
-            print("  Token:       [N] expired -> ./feishu auth refresh")
+            print("  Token:       [N] expired (auto-refreshes on next command)")
 
         if uat:
             stored = creds.get("user_access_token", "")

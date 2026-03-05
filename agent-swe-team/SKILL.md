@@ -1,15 +1,14 @@
 ---
 name: agent-swe-team
-version: 0.1.3
-description: |
-  Build large software tasks with a role-based "SWE team" model: one Leader agent dispatches
-  tickets to role-based sub-agents (architect/backend/frontend/qa/reviewer) through a local Hub.
-  Each role works in an isolated git worktree with structured TEAM_STATUS protocol and BLOCKED→Reply loops.
-  Hub extracts artifacts into a shared Team Blackboard for cross-role awareness.
-  Supports dual engine: Codex SDK and Claude Agent SDK.
-  Use for: role-based delegation, SWE-team collaboration, git worktree isolation, ticket-driven development.
-  Triggers: "agent team", "SWE team", "角色分工", "模拟软件团队", "派发工单".
-  NOT for: task decomposition without roles (use agent-task-orchestration), brainstorming.
+metadata:
+  version: 0.1.9
+  short-description: Role-based multi-agent SWE team with git worktree isolation
+description: 'Role-based multi-agent SWE team: Leader dispatches tickets to sub-agents
+
+  (architect/backend/frontend/qa/reviewer) with git worktree isolation. Mixed Codex/Claude
+  Code engine.
+
+  '
 ---
 
 # Agent SWE Team — Role-Based Multi-Engine Development Team
@@ -64,7 +63,7 @@ User ─── requirement ──→ Leader (你)
 
 ```bash
 # 安装依赖
-cd <SKILLS_DIR>/agent-swe-team && npm install
+cd agent-swe-team && npm install
 
 # 初始化 run（创建 worktrees）
 node scripts/team.mjs init --cwd <PROJECT_DIR>

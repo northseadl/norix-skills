@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repo Doc Engine"
+  short_description: "Repo doc sync, traceability, vector search"
+  default_prompt: "Scan and sync repository documentation"

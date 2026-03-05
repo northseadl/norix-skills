@@ -1,0 +1,4 @@
+interface:
+  display_name: "PM 图表工具"
+  short_description: "Natural language to Mermaid diagrams and prototypes"
+  default_prompt: "Use $pm-toolkit to generate Mermaid diagrams from requirements."

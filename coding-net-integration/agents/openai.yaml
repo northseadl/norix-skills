@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coding.net 集成"
+  short_description: "Coding.net MR, CI, and artifact automation"
+  default_prompt: "Use $coding-net-integration to manage MRs and CI on Coding.net."

@@ -16,6 +16,10 @@ import sys
 import urllib.error
 import urllib.request
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+from credential_store import CredentialStore
+
 import datetime
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -24,6 +28,8 @@ CONFIG_DIR = os.path.expanduser("~/.agents/data/es-analytics")
 PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
 MAX_SIZE = 200
 DEFAULT_TIMEOUT = 30
+_VAULT_SENTINEL = "***vault***"
+_cred_store = CredentialStore("es-analytics", CONFIG_DIR)
 
 def _sls_full_range():
     """Dynamic SLS time range: 5 years back to end of next year."""
@@ -61,6 +67,12 @@ def load_profiles():
 
 def save_profiles(data):
     ensure_config_dir()
+    # Extract passwords to encrypted vault before writing JSON
+    for name, profile in data.get("profiles", {}).items():
+        pw = profile.get("password", "")
+        if pw and pw != _VAULT_SENTINEL:
+            _cred_store.set(f"profile:{name}", pw)
+            profile["password"] = _VAULT_SENTINEL
     with open(PROFILES_FILE, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.chmod(PROFILES_FILE, 0o600)
@@ -130,10 +142,15 @@ def safe_clean(data_dir, skill_name):
 
 # ── HTTP Client ──────────────────────────────────────────────────────────────
 
-def _build_auth_header(profile):
+def _build_auth_header(profile, profile_name=None):
     """Build Basic auth header from profile credentials."""
     user = profile.get("user", "")
     password = profile.get("password", "")
+    # Resolve from vault if sentinel
+    if password == _VAULT_SENTINEL and profile_name:
+        vault_pw = _cred_store.get(f"profile:{profile_name}")
+        if vault_pw:
+            password = vault_pw
     if user or password:
         cred = base64.b64encode(f"{user}:{password}".encode()).decode()
         return f"Basic {cred}"

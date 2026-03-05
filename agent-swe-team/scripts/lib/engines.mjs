@@ -126,9 +126,9 @@ export async function runClaudeSession(sdk, prompt, { approvalMode, workingDirec
         prompt,
         options: {
             cwd: workingDirectory,
-            model: "claude-sonnet-4-20250514",
             permissionMode,
             systemPrompt: { type: "preset", preset: "claude_code" },
+            disallowedTools: ["ToolSearch"],
             settingSources: ["project"],
             maxTurns: 50,
         },
@@ -162,7 +162,7 @@ export async function runClaudeSession(sdk, prompt, { approvalMode, workingDirec
             if (onEvent) {
                 onEvent({
                     kind: "usage",
-                    text: `tokens in=${u.input_tokens || 0} out=${u.output_tokens || 0} cost=$${msg.total_cost_usd?.toFixed(4) || "?"}`,
+                    text: `tokens in=${u.input_tokens || 0} out=${u.output_tokens || 0}`,
                 });
             }
         }

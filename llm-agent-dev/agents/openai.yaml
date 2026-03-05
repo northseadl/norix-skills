@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Agent 开发"
+  short_description: "Agent architecture: patterns, simulation, evaluation"
+  default_prompt: "Use $llm-agent-dev to design an LLM agent architecture."

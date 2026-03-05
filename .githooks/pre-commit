@@ -1,17 +1,18 @@
 #!/bin/sh
-# ─── Pre-Commit Hook: 分支守卫 + 技能版本校验 ──────────────────────
+# ─── Pre-Commit Hook: Norix Skill 质量门控 ──────────────────────────
 #
-# 规则 1: main 只接受来自 develop 的 merge，不允许直接 commit
-# 规则 2: 被修改的技能 SKILL.md 必须包含 version 字段 (semver x.y.z)
-# 规则 3: version 默认只能以 patch 位递增 (x.y.z → x.y.z+1)
-# 规则 4: major/minor 提升需人类用户交互确认
-# 规则 5: 新技能首次提交必须有 version 字段
+# Gate 1: main 分支保护 — 只接受 merge，不允许直接 commit
+# Gate 2: version 递增 — metadata.version 必须 patch +1
+# Gate 3: description 限制 — ≤ 60 words，禁止 Triggers: 独立行
+# Gate 4: name 一致性 — frontmatter name 必须等于目录名
+# Gate 5: credential_store 副本一致 — 若存在必须与 source of truth 相同
+# Gate 6: 隔离性 — 禁止跨目录导入 (../../scripts)
 #
 # 跳过: SKIP_VERSION_CHECK=1 环境变量
 
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 
-# ─── 规则 1: main 分支保护 ─────────────────────────────────────
+# ─── Gate 1: main 分支保护 ─────────────────────────────────────
 if [ "$BRANCH" = "main" ]; then
   if [ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]; then
     exit 0
@@ -30,7 +31,7 @@ if [ "$BRANCH" = "main" ]; then
   exit 1
 fi
 
-# ─── 规则 2-5: 技能版本校验 ─────────────────────────────────────
+# ─── 跳过检查 ──────────────────────────────────────────────────
 if [ "$SKIP_VERSION_CHECK" = "1" ]; then
   exit 0
 fi
@@ -45,7 +46,7 @@ for file in $STAGED_FILES; do
 
   # 跳过非技能目录
   case "$skill_dir" in
-    .*|AGENTS.md|README.md|GIT_WORKFLOW.md|.gitignore) continue ;;
+    .*|scripts|AGENTS.md|README.md|GIT_WORKFLOW.md|SPEC.md|.gitignore) continue ;;
   esac
 
   if [ -f "$skill_dir/SKILL.md" ]; then
@@ -67,97 +68,155 @@ CONFIRM_NEEDED=""
 for skill in $MODIFIED_SKILLS; do
   SKILL_FILE="$skill/SKILL.md"
 
-  # --- 检查 version 字段存在 ---
-  CURRENT_VERSION=$(awk '/^---/{n++} n==1 && /^version:/{print $2; exit}' "$SKILL_FILE")
+  # ─── Gate 2: version 存在与递增 ──────────────────────────────
+
+  CURRENT_VERSION=$(awk '/^---/{n++} n==1 && /^metadata:/{meta=1; next} meta && /^  version:/{print $2; exit} /^[^ ]/ && !/^---/{meta=0} n==1 && /^version:/{print $2; exit}' "$SKILL_FILE")
 
   if [ -z "$CURRENT_VERSION" ]; then
-    ERRORS="${ERRORS}\n  ❌ $skill: SKILL.md 缺少 version 字段"
-    ERRORS="${ERRORS}\n     请在 YAML frontmatter 中添加: version: 0.0.1"
+    ERRORS="${ERRORS}\n  ❌ $skill: SKILL.md 缺少 metadata.version 字段"
     continue
   fi
 
-  # --- 验证版本格式 (semver: x.y.z) ---
   if ! echo "$CURRENT_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-    ERRORS="${ERRORS}\n  ❌ $skill: version '$CURRENT_VERSION' 格式不合法"
-    ERRORS="${ERRORS}\n     必须是语义化版本: x.y.z (例如 0.0.1)"
+    ERRORS="${ERRORS}\n  ❌ $skill: version '$CURRENT_VERSION' 格式不合法 (需要 x.y.z)"
     continue
   fi
 
-  # --- 获取上次提交中的版本 ---
-  PREV_VERSION=$(git show HEAD:"$SKILL_FILE" 2>/dev/null | awk '/^---/{n++} n==1 && /^version:/{print $2; exit}')
+  PREV_VERSION=$(git show HEAD:"$SKILL_FILE" 2>/dev/null | awk '/^---/{n++} n==1 && /^metadata:/{meta=1; next} meta && /^  version:/{print $2; exit} /^[^ ]/ && !/^---/{meta=0} n==1 && /^version:/{print $2; exit}')
 
-  if [ -z "$PREV_VERSION" ]; then
-    # 新技能，只要有合法 version 就放行
-    continue
-  fi
+  if [ -n "$PREV_VERSION" ]; then
+    SKILL_STAGED=$(echo "$STAGED_FILES" | grep "^$skill/SKILL.md$")
 
-  # --- 检查 SKILL.md 是否在 staged 中 ---
-  SKILL_STAGED=$(echo "$STAGED_FILES" | grep "^$skill/SKILL.md$")
-
-  if [ -z "$SKILL_STAGED" ]; then
-    # 技能内容修改了但 SKILL.md 未修改 → 需要 bump version
-    ERRORS="${ERRORS}\n  ❌ $skill: 技能内容已修改但 version 未更新"
-    ERRORS="${ERRORS}\n     当前版本: $PREV_VERSION → 请递增为下一个 patch 版本"
-    continue
-  fi
-
-  # --- 版本未变 ---
-  if [ "$CURRENT_VERSION" = "$PREV_VERSION" ]; then
-    ERRORS="${ERRORS}\n  ❌ $skill: SKILL.md 已修改但 version 未递增"
-    ERRORS="${ERRORS}\n     当前版本仍为: $CURRENT_VERSION"
-    continue
-  fi
-
-  # --- 解析版本号 ---
-  PREV_MAJOR=$(echo "$PREV_VERSION" | cut -d. -f1)
-  PREV_MINOR=$(echo "$PREV_VERSION" | cut -d. -f2)
-  PREV_PATCH=$(echo "$PREV_VERSION" | cut -d. -f3)
-
-  CUR_MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
-  CUR_MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-  CUR_PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
-
-  # --- 判断变更类型 ---
-  if [ "$CUR_MAJOR" -gt "$PREV_MAJOR" ]; then
-    # Major 提升 → 需要人类确认
-    CONFIRM_NEEDED="${CONFIRM_NEEDED}\n  ⚠️  $skill: Major 版本提升 $PREV_VERSION → $CURRENT_VERSION"
-  elif [ "$CUR_MINOR" -gt "$PREV_MINOR" ] && [ "$CUR_MAJOR" -eq "$PREV_MAJOR" ]; then
-    # Minor 提升 → 需要人类确认
-    CONFIRM_NEEDED="${CONFIRM_NEEDED}\n  ⚠️  $skill: Minor 版本提升 $PREV_VERSION → $CURRENT_VERSION"
-  elif [ "$CUR_MAJOR" -eq "$PREV_MAJOR" ] && [ "$CUR_MINOR" -eq "$PREV_MINOR" ]; then
-    # Major 和 Minor 不变 → 检查 patch 只递增 1
-    EXPECTED_PATCH=$((PREV_PATCH + 1))
-    EXPECTED_VERSION="${PREV_MAJOR}.${PREV_MINOR}.${EXPECTED_PATCH}"
-
-    if [ "$CURRENT_VERSION" != "$EXPECTED_VERSION" ]; then
-      ERRORS="${ERRORS}\n  ❌ $skill: patch 版本号必须递增 1"
-      ERRORS="${ERRORS}\n     上次版本: $PREV_VERSION"
-      ERRORS="${ERRORS}\n     当前版本: $CURRENT_VERSION"
-      ERRORS="${ERRORS}\n     期望版本: $EXPECTED_VERSION"
+    if [ -z "$SKILL_STAGED" ]; then
+      ERRORS="${ERRORS}\n  ❌ $skill: 技能内容已修改但 version 未更新 ($PREV_VERSION)"
+      continue
     fi
-  else
-    # 版本降级
-    ERRORS="${ERRORS}\n  ❌ $skill: 版本不可降级"
-    ERRORS="${ERRORS}\n     上次版本: $PREV_VERSION"
-    ERRORS="${ERRORS}\n     当前版本: $CURRENT_VERSION"
+
+    if [ "$CURRENT_VERSION" = "$PREV_VERSION" ]; then
+      ERRORS="${ERRORS}\n  ❌ $skill: SKILL.md 已修改但 version 未递增 ($CURRENT_VERSION)"
+      continue
+    fi
+
+    PREV_MAJOR=$(echo "$PREV_VERSION" | cut -d. -f1)
+    PREV_MINOR=$(echo "$PREV_VERSION" | cut -d. -f2)
+    PREV_PATCH=$(echo "$PREV_VERSION" | cut -d. -f3)
+
+    CUR_MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+    CUR_MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+    CUR_PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+
+    if [ "$CUR_MAJOR" -gt "$PREV_MAJOR" ]; then
+      CONFIRM_NEEDED="${CONFIRM_NEEDED}\n  ⚠️  $skill: Major 版本提升 $PREV_VERSION → $CURRENT_VERSION"
+    elif [ "$CUR_MINOR" -gt "$PREV_MINOR" ] && [ "$CUR_MAJOR" -eq "$PREV_MAJOR" ]; then
+      CONFIRM_NEEDED="${CONFIRM_NEEDED}\n  ⚠️  $skill: Minor 版本提升 $PREV_VERSION → $CURRENT_VERSION"
+    elif [ "$CUR_MAJOR" -eq "$PREV_MAJOR" ] && [ "$CUR_MINOR" -eq "$PREV_MINOR" ]; then
+      EXPECTED_PATCH=$((PREV_PATCH + 1))
+      EXPECTED_VERSION="${PREV_MAJOR}.${PREV_MINOR}.${EXPECTED_PATCH}"
+
+      if [ "$CURRENT_VERSION" != "$EXPECTED_VERSION" ]; then
+        ERRORS="${ERRORS}\n  ❌ $skill: patch 版本号必须递增 1 ($PREV_VERSION → 期望 $EXPECTED_VERSION，实际 $CURRENT_VERSION)"
+      fi
+    else
+      ERRORS="${ERRORS}\n  ❌ $skill: 版本不可降级 ($PREV_VERSION → $CURRENT_VERSION)"
+    fi
   fi
+
+  # ─── Gate 3: description 质量检查 ────────────────────────────
+
+  # 提取 description (YAML frontmatter 中 --- 之间的 description 字段)
+  DESC=$(python3 -c "
+import yaml, sys
+with open('$SKILL_FILE') as f:
+    content = f.read()
+parts = content.split('---', 2)
+if len(parts) >= 3:
+    fm = yaml.safe_load(parts[1])
+    print(fm.get('description', ''))
+" 2>/dev/null)
+
+  if [ -n "$DESC" ]; then
+    # 3a: Word count ≤ 60
+    WORD_COUNT=$(echo "$DESC" | wc -w | tr -d ' ')
+    if [ "$WORD_COUNT" -gt 60 ]; then
+      ERRORS="${ERRORS}\n  ❌ $skill: description 超过 60 words (当前 ${WORD_COUNT}w)"
+    fi
+
+    # 3b: 禁止 Triggers: 独立行
+    if echo "$DESC" | grep -qiE '^Triggers?:'; then
+      ERRORS="${ERRORS}\n  ❌ $skill: description 禁止包含 Triggers: 独立行 (触发语义应自然内嵌)"
+    fi
+  fi
+
+  # ─── Gate 4: name = 目录名一致性 ─────────────────────────────
+
+  FM_NAME=$(python3 -c "
+import yaml
+with open('$SKILL_FILE') as f:
+    content = f.read()
+parts = content.split('---', 2)
+if len(parts) >= 3:
+    fm = yaml.safe_load(parts[1])
+    print(fm.get('name', ''))
+" 2>/dev/null)
+
+  if [ -n "$FM_NAME" ] && [ "$FM_NAME" != "$skill" ]; then
+    ERRORS="${ERRORS}\n  ❌ $skill: frontmatter name '$FM_NAME' ≠ 目录名 '$skill'"
+  fi
+
 done
 
-# --- 输出错误 ---
+# ─── Gate 5: credential_store.py 副本一致性 ──────────────────────
+
+SOURCE_CRED="scripts/credential_store.py"
+if [ -f "$SOURCE_CRED" ]; then
+  for file in $STAGED_FILES; do
+    case "$file" in
+      */scripts/credential_store.py)
+        skill_dir=$(echo "$file" | cut -d'/' -f1)
+        if [ "$skill_dir" != "scripts" ] && [ -f "$skill_dir/scripts/credential_store.py" ]; then
+          if ! diff -q "$SOURCE_CRED" "$skill_dir/scripts/credential_store.py" > /dev/null 2>&1; then
+            ERRORS="${ERRORS}\n  ❌ $skill_dir: credential_store.py 与 source of truth (scripts/) 不一致"
+            ERRORS="${ERRORS}\n     请先运行: cp scripts/credential_store.py $skill_dir/scripts/"
+          fi
+        fi
+        ;;
+    esac
+  done
+fi
+
+# ─── Gate 6: 隔离性检查 — 禁止跨目录导入 ─────────────────────────
+
+for file in $STAGED_FILES; do
+  case "$file" in
+    */scripts/*.py)
+      skill_dir=$(echo "$file" | cut -d'/' -f1)
+      case "$skill_dir" in
+        .*|scripts) continue ;;
+      esac
+      if grep -qE '\.\./\.\./scripts|_REPO_SCRIPTS' "$file" 2>/dev/null; then
+        ERRORS="${ERRORS}\n  ❌ $file: 检测到跨目录导入 (../../scripts) — 违反技能隔离性"
+        ERRORS="${ERRORS}\n     每个技能必须从本地 scripts/ 目录导入共享模块"
+      fi
+      ;;
+  esac
+done
+
+# ─── 输出结果 ────────────────────────────────────────────────────
+
 if [ -n "$ERRORS" ]; then
   echo ""
   echo "  ╔══════════════════════════════════════════╗"
-  echo "  ║   技能版本校验失败 (Skill Version Check) ║"
+  echo "  ║      技能质量门控失败 (Quality Gate)     ║"
   echo "  ╚══════════════════════════════════════════╝"
   printf "$ERRORS\n"
   echo ""
-  echo "  规则: 每次修改技能必须递增 SKILL.md 中的 version (patch +1)"
-  echo "  跳过: SKIP_VERSION_CHECK=1 git commit ..."
+  echo "  规范: SPEC.md | 跳过: SKIP_VERSION_CHECK=1 git commit ..."
   echo ""
   exit 1
 fi
 
-# --- Major/Minor 提升交互确认 ---
+# ─── Major/Minor 提升交互确认 ─────────────────────────────────────
+
 if [ -n "$CONFIRM_NEEDED" ]; then
   echo ""
   echo "  ╔══════════════════════════════════════════════╗"
@@ -166,7 +225,6 @@ if [ -n "$CONFIRM_NEEDED" ]; then
   printf "$CONFIRM_NEEDED\n"
   echo ""
 
-  # 检测是否在交互式终端
   if [ -t 0 ]; then
     printf "  确认提升？(y/N): "
     read -r answer < /dev/tty
@@ -180,7 +238,6 @@ if [ -n "$CONFIRM_NEEDED" ]; then
         ;;
     esac
   else
-    # 非交互式环境（CI/Agent）→ 拒绝
     echo "  ❌ 非交互式环境无法确认大版本提升"
     echo "     Agent 只允许 patch 递增，大版本提升需人类手动提交"
     echo "     或使用: SKIP_VERSION_CHECK=1 git commit ..."

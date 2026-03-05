@@ -1,13 +1,12 @@
 ---
 name: image-studio
-version: 0.1.1
-description: |
-  AI-powered image generation and editing via Nano Banana API (Google Gemini image models).
-  Two workflows: (1) E-commerce image generation with 6 templates (hero/banner/detail/lifestyle/grid/social),
-  (2) Image refinement with 9 templates (background replace/remove, enhance, retouch, style transfer, etc.).
-  Use for: AI image generation, product photos, e-commerce images, marketing banners,
-  background removal/replacement, photo retouching, style transfer, color grading.
-  Triggers: "AI生图", "电商图片", "商品图", "背景替换", "图片精修", "Nano Banana".
+metadata:
+  version: 0.1.2
+description: 'AI image generation and editing: e-commerce templates (hero/banner/detail/lifestyle),
+
+  image refinement (background replace/remove, enhance, retouch, style transfer).
+
+  '
 ---
 
 # Nano Banana — AI Image Generation & Editing

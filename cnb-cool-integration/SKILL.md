@@ -1,6 +1,7 @@
 ---
 name: cnb-cool-integration
-version: 0.1.1
+metadata:
+  version: 0.1.1
 description: |
   针对 cnb.cool 的云原生构建（CNB Build）：生成/修改 .cnb.yml 流水线、触发规则、
   构建环境、runner 资源、缓存、环境变量、手动触发与调试。

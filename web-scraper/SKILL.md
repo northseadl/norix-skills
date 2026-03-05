@@ -1,15 +1,15 @@
 ---
 name: web-scraper
-version: 0.0.4
-description: |
-  Web scraper and content extractor with full SPA/JavaScript rendering support.
-  Two-tier engine: L0 (httpx, pure HTTP) → L1 (crawl4ai, Playwright browser).
-  Smart discovery (sitemap/nav/crawl), batch fetch, stealth mode, OpenAPI extraction.
-  Use when: (1) read_url_content returns empty/broken content (SPA), (2) scraping doc sites,
-  (3) batch-downloading pages as Markdown, (4) extracting OpenAPI/Swagger specs,
-  (5) analyzing site structure, (6) fetching from anti-bot sites.
-  Not for: pages requiring login, binary downloads, or simple static pages where read_url_content works.
-  Triggers: "抓取网页", "文档站抓取", "SPA页面", "Swagger文档", "read_url_content failed", "scrape website".
+metadata:
+  version: 0.0.5
+description: 'Web scraper with SPA/JavaScript rendering. Two-tier engine (HTTP → Playwright
+  browser).
+
+  Smart discovery, batch fetch, stealth mode, OpenAPI extraction.
+
+  Use when read_url_content fails or SPA rendering needed.
+
+  '
 ---
 
 # Web Scraper

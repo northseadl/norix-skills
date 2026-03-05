@@ -1,14 +1,14 @@
 ---
 name: agent-task-orchestration
-version: 0.1.1
-description: |
-  Break down complex requirements and execute them across multiple AI agents (Codex and Claude Code)
-  with automatic retry, checkpoint recovery, and real-time monitoring. Use for: decomposing PRDs
-  into executable tasks, orchestrating parallel/sequential agents, creating task specs,
-  supervised development workflows, resuming from checkpoints, retrying failed tasks.
-  Each task can independently use Codex or Claude Code engine (mixed mode).
-  Triggers: "拆任务", "多任务调度", "任务派发", "并行开发", "Task DAG", "checkpoint恢复".
-  NOT for: brainstorming (use agent-brainstorm), single tasks, Feishu tasks.
+metadata:
+  version: 0.1.7
+  short-description: Task decomposition and multi-agent orchestration
+description: 'Task decomposition and multi-agent orchestration with retry, checkpoint
+  recovery, and real-time monitoring.
+
+  Mixed Codex/Claude Code engine. Parallel/sequential execution.
+
+  '
 ---
 
 # Agent 任务编排技能 (Trinity Architecture)
@@ -132,8 +132,8 @@ T3 + T4        ──→ T5 (集成测试)
 使用 `scripts/dispatch.mjs` 启动 Lieutenant 编排服务:
 
 ```bash
-# 首次安装依赖
-cd <SKILLS_DIR>/agent-task-orchestration && npm install
+# 安装依赖
+cd agent-task-orchestration && npm install
 
 # 预览执行计划（不实际调度）
 node scripts/dispatch.mjs ./tasks/ --dry-run
@@ -289,7 +289,7 @@ needs_fulfilled >= 100% AND quality_ok?
 |:---|:---|:---|
 | **FINAL_REPORT** | 生成最终交付报告，通知用户 | 汇总报告 + 关键发现 |
 | **PLAN_NEXT_BATCH** | 回到 Phase 2，创建下一批次 T*.md，执行 dispatch | 新 task specs + 新 dispatch |
-| **RESUME_RETRY** | `dispatch.mjs --resume --retry-failed` | 恢复执行 |
+| **RESUME_RETRY** | `node dispatch.mjs --resume --retry-failed` | 恢复执行 |
 | **ASK_USER** | 向用户提出具体问题（附带你的建议方案） | 问题 + 推荐选项 |
 | **REPORT_BLOCKER** | 详细说明阻塞原因，建议解决路径 | 阻塞报告 |
 

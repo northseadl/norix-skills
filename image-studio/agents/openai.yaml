@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Image Studio"
+  short_description: "AI image generation and editing for e-commerce"
+  default_prompt: "Use $image-studio to generate or refine product images with AI."
