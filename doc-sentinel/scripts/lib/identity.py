@@ -1,4 +1,4 @@
-"""Traceback Identity System — frontmatter R/W + source hash computation.
+"""Identity Plane — frontmatter R/W + source hash computation.
 
 Manages the doc ↔ code binding via YAML frontmatter embedded in markdown files.
 Uses git tree hashes for O(1) directory-level staleness detection.
@@ -29,7 +29,6 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     if not text.startswith("---"):
         return {}, text
 
-    # Find closing fence (skip the opening one)
     matches = list(_FM_FENCE.finditer(text))
     if len(matches) < 2:
         return {}, text
@@ -41,7 +40,6 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     fm_text = text[fm_start:fm_end].strip()
     body = text[body_start:].lstrip("\n")
 
-    # Minimal YAML parser (stdlib only — no PyYAML dependency)
     meta = _parse_simple_yaml(fm_text)
     return meta, body
 
@@ -62,12 +60,10 @@ def _parse_simple_yaml(text: str) -> dict[str, Any]:
         line = lines[i]
         stripped = line.strip()
 
-        # Skip empty lines and comments
         if not stripped or stripped.startswith("#"):
             i += 1
             continue
 
-        # Block list item (  - value)
         if stripped.startswith("- ") and current_key is not None:
             if current_list is None:
                 current_list = []
@@ -76,9 +72,7 @@ def _parse_simple_yaml(text: str) -> dict[str, Any]:
             i += 1
             continue
 
-        # Key: value pair
         if ":" in stripped and not stripped.startswith("-"):
-            # Flush pending list
             if current_list is not None:
                 current_list = None
 
@@ -89,11 +83,9 @@ def _parse_simple_yaml(text: str) -> dict[str, Any]:
             current_key = key
 
             if raw_val == "" or raw_val == "|":
-                # Could be block list or nested dict — look ahead
                 result[key] = None
                 current_list = None
             elif raw_val.startswith("[") and raw_val.endswith("]"):
-                # Inline list: [a, b, c]
                 items_str = raw_val[1:-1]
                 items = [_yaml_value(v.strip().strip('"').strip("'"))
                          for v in items_str.split(",") if v.strip()]
@@ -116,11 +108,9 @@ def _yaml_value(raw: str) -> Any:
         return True
     if raw in ("false", "False", "no"):
         return False
-    # Quoted string
     if (raw.startswith('"') and raw.endswith('"')) or \
        (raw.startswith("'") and raw.endswith("'")):
         return raw[1:-1]
-    # Integer
     try:
         return int(raw)
     except ValueError:
@@ -142,7 +132,6 @@ def format_frontmatter(meta: dict[str, Any]) -> str:
             if not val:
                 lines.append(f"{key}: []")
             elif all(isinstance(v, str) and len(v) < 60 for v in val):
-                # Short items → inline
                 items = ", ".join(f'"{v}"' for v in val)
                 lines.append(f"{key}: [{items}]")
             else:
@@ -161,7 +150,6 @@ def format_frontmatter(meta: dict[str, Any]) -> str:
                 else:
                     lines.append(f"  {k}: {v}")
         else:
-            # String — quote if contains special chars
             s = str(val)
             if any(c in s for c in ":#{}[]|>&*!%@`"):
                 lines.append(f'{key}: "{s}"')
@@ -214,14 +202,12 @@ def compute_source_hash(repo_root: Path, source_paths: list[str],
             for line in result.stdout.strip().split("\n"):
                 parts = line.split()
                 if len(parts) >= 3:
-                    hashes.append(parts[2])  # tree/blob hash
+                    hashes.append(parts[2])
         elif full_path.exists():
-            # Untracked file/dir — hash content directly
             if full_path.is_file():
                 content = full_path.read_bytes()
                 hashes.append(hashlib.sha256(content).hexdigest())
             elif full_path.is_dir():
-                # Hash directory listing
                 entries = sorted(str(p.relative_to(full_path))
                                  for p in full_path.rglob("*") if p.is_file())
                 hashes.append(hashlib.sha256(
@@ -249,11 +235,11 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat()
 
 
-# ─── Doc Metadata Builder ────────────────────────────────────────────
+# ─── Doc Metadata ────────────────────────────────────────────────────
 
 @dataclass
 class DocMeta:
-    """Structured representation of a document's traceback metadata."""
+    """A document's binding metadata — the Identity Plane truth."""
     doc_id: str
     source_paths: list[str] = field(default_factory=list)
     source_tree_hash: str = ""
@@ -262,8 +248,6 @@ class DocMeta:
     doc_version: int = 1
     status: str = "draft"
     filepath: str = ""
-    # Optional vector mode fields
-    vector: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -277,8 +261,6 @@ class DocMeta:
         }
         if self.filepath:
             d["filepath"] = self.filepath
-        if self.vector:
-            d["vector"] = self.vector
         return d
 
     @classmethod
@@ -292,7 +274,6 @@ class DocMeta:
             doc_version=d.get("doc_version", 1),
             status=d.get("status", "draft"),
             filepath=d.get("filepath", d.get("_filepath", "")),
-            vector=d.get("vector"),
         )
 
     def refresh_hash(self, repo_root: Path) -> bool:

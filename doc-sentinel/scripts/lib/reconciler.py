@@ -1,40 +1,47 @@
-"""Git Diff Change Analyzer — derive doc operations from code changes.
+"""Reconciliation Plane — derive doc operations from git changes.
 
-Parses `git diff --name-status -M` output and maps each file change
-to a document-level operation (UPDATE, RENAME, ARCHIVE, CREATE, etc.).
+Event-driven architecture: git diff → ChangeEvent → Policy → ActionPlan.
+Each action carries confidence, risk, and reason for Agent-consumable output.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from lib.registry import DocRegistry
-from lib.traceback import now_iso
+from lib.registry import DocRegistry, ENGINE_DIR, CHANGE_LOG_FILE
+from lib.identity import now_iso
 
 
-class DocAction(Enum):
-    UPDATE = "update"         # Source modified → doc content may need refresh
-    RENAME = "rename"         # Source renamed → update source_paths + references
-    RELOCATE = "relocate"     # Directory moved → cascade doc_id + source_paths
-    MERGE = "merge"           # Multiple sources merged → consider merging docs
-    SPLIT = "split"           # Source split into multiple → consider splitting doc
-    ARCHIVE = "archive"       # All sources deleted → archive the doc
-    CREATE = "create"         # New source with no tracking doc → may need new doc
-    NOOP = "noop"             # Change doesn't affect documentation
+# Read threshold from environment, fallback to default
+SIGNIFICANCE_THRESHOLD = int(os.environ.get("DOC_SENTINEL_THRESHOLD", "5"))
+
+
+class ActionType(Enum):
+    UPDATE = "update"
+    RENAME = "rename"
+    ARCHIVE = "archive"
+    CREATE = "create"
+    NOOP = "noop"
+
+
+class ActionRisk(Enum):
+    STABLE = "stable"
+    REVIEW = "review"
 
 
 @dataclass
 class DiffEntry:
     """A single entry from git diff --name-status."""
-    status: str               # A, M, D, R, C, T
-    path: str                 # Current path (new path for renames)
-    old_path: str = ""        # Original path (for renames/copies)
-    similarity: int = 100     # Rename similarity percentage
+    status: str
+    path: str
+    old_path: str = ""
+    similarity: int = 100
 
     @classmethod
     def parse_line(cls, line: str) -> DiffEntry | None:
@@ -44,7 +51,7 @@ class DiffEntry:
             return None
 
         status_raw = parts[0].strip()
-        status = status_raw[0]  # R100 → R, C080 → C
+        status = status_raw[0]
 
         if status in ("R", "C") and len(parts) >= 3:
             similarity = int(status_raw[1:]) if len(status_raw) > 1 else 100
@@ -55,50 +62,56 @@ class DiffEntry:
 
 
 @dataclass
-class ActionItem:
-    """A planned document operation."""
-    action: DocAction
-    doc_id: str | None        # Affected doc (None for CREATE)
-    filepath: str             # Affected doc filepath (empty for CREATE)
+class PlanItem:
+    """A planned document operation with confidence metadata."""
+    action: ActionType
+    risk: ActionRisk
+    doc_id: str | None
+    filepath: str
+    reason: str
+    confidence: float = 1.0
     details: dict[str, Any] = field(default_factory=dict)
-    source_change: str = ""   # The git diff entry that triggered this
+    source_change: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "action": self.action.value,
+            "risk": self.risk.value,
             "doc_id": self.doc_id,
             "filepath": self.filepath,
+            "reason": self.reason,
+            "confidence": self.confidence,
             "details": self.details,
             "source_change": self.source_change,
         }
 
 
 @dataclass
-class ChangeReport:
-    """Complete analysis of changes since last sync."""
+class ChangePlan:
+    """Complete reconciliation plan."""
     since_commit: str
     head_commit: str
     diff_entries: list[DiffEntry] = field(default_factory=list)
-    actions: list[ActionItem] = field(default_factory=list)
+    items: list[PlanItem] = field(default_factory=list)
     untracked_changes: list[str] = field(default_factory=list)
-    analysis_timestamp: str = ""
+    timestamp: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "since_commit": self.since_commit,
             "head_commit": self.head_commit,
             "total_diffs": len(self.diff_entries),
-            "total_actions": len(self.actions),
-            "actions_by_type": self._count_by_type(),
-            "actions": [a.to_dict() for a in self.actions],
+            "total_items": len(self.items),
+            "items_by_action": self._count_by_action(),
+            "items": [item.to_dict() for item in self.items],
             "untracked_changes": self.untracked_changes,
-            "analysis_timestamp": self.analysis_timestamp,
+            "timestamp": self.timestamp,
         }
 
-    def _count_by_type(self) -> dict[str, int]:
+    def _count_by_action(self) -> dict[str, int]:
         counts: dict[str, int] = {}
-        for a in self.actions:
-            key = a.action.value
+        for item in self.items:
+            key = item.action.value
             counts[key] = counts.get(key, 0) + 1
         return counts
 
@@ -107,29 +120,28 @@ class ChangeReport:
         lines = [
             f"Change Analysis: {self.since_commit[:8]}..{self.head_commit[:8]}",
             f"  Files changed: {len(self.diff_entries)}",
-            f"  Doc actions:   {len(self.actions)}",
+            f"  Plan items:    {len(self.items)}",
         ]
-        for action_type, count in sorted(self._count_by_type().items()):
+        for action_type, count in sorted(self._count_by_action().items()):
             icon = _ACTION_ICONS.get(action_type, "•")
             lines.append(f"    {icon} {action_type}: {count}")
         if self.untracked_changes:
             lines.append(f"  Untracked:     {len(self.untracked_changes)}")
         return "\n".join(lines)
 
+    @property
+    def stable_items(self) -> list[PlanItem]:
+        return [i for i in self.items if i.risk == ActionRisk.STABLE]
+
+    @property
+    def review_items(self) -> list[PlanItem]:
+        return [i for i in self.items if i.risk == ActionRisk.REVIEW]
+
 
 _ACTION_ICONS = {
-    "update": "📝",
-    "rename": "🔄",
-    "relocate": "📦",
-    "archive": "🗄️",
-    "create": "✨",
-    "merge": "🔀",
-    "split": "✂️",
-    "noop": "·",
+    "update": "📝", "rename": "🔄", "archive": "🗄️",
+    "create": "✨", "noop": "·",
 }
-
-# Minimum lines changed to trigger an UPDATE action
-SIGNIFICANCE_THRESHOLD = 5
 
 
 # ─── Core Analysis ────────────────────────────────────────────────────
@@ -172,18 +184,20 @@ def get_diff_stat(repo_root: Path, filepath: str,
 
 
 def analyze_entry(entry: DiffEntry, registry: DocRegistry,
-                  repo_root: Path, since_commit: str) -> list[ActionItem]:
-    """Derive document actions from a single diff entry."""
-    actions: list[ActionItem] = []
+                  repo_root: Path, since_commit: str) -> list[PlanItem]:
+    """Derive document plan items from a single diff entry."""
+    items: list[PlanItem] = []
 
     if entry.status == "R":
-        # Rename — update source_paths in all tracking docs
         affected = registry.find_by_source(entry.old_path)
         for doc in affected:
-            actions.append(ActionItem(
-                action=DocAction.RENAME,
+            items.append(PlanItem(
+                action=ActionType.RENAME,
+                risk=ActionRisk.STABLE,
                 doc_id=doc.doc_id,
                 filepath=doc.filepath,
+                reason=f"Source renamed: {entry.old_path} → {entry.path}",
+                confidence=entry.similarity / 100.0,
                 details={
                     "old_path": entry.old_path,
                     "new_path": entry.path,
@@ -192,119 +206,118 @@ def analyze_entry(entry: DiffEntry, registry: DocRegistry,
                 source_change=f"R{entry.similarity}\t{entry.old_path}\t{entry.path}",
             ))
         if not affected:
-            # Renamed into an untracked area — might need new doc
-            actions.append(ActionItem(
-                action=DocAction.CREATE,
+            items.append(PlanItem(
+                action=ActionType.CREATE,
+                risk=ActionRisk.REVIEW,
                 doc_id=None,
                 filepath="",
-                details={"source": entry.path, "reason": "renamed_untracked"},
+                reason=f"Renamed file has no tracking doc: {entry.path}",
+                details={"source": entry.path, "origin": entry.old_path},
                 source_change=f"R{entry.similarity}\t{entry.old_path}\t{entry.path}",
             ))
 
     elif entry.status == "D":
-        # Delete — check if all sources for a doc are gone
         affected = registry.find_by_source(entry.path)
         for doc in affected:
             remaining = [sp for sp in doc.source_paths if sp != entry.path]
             if not remaining:
-                actions.append(ActionItem(
-                    action=DocAction.ARCHIVE,
+                items.append(PlanItem(
+                    action=ActionType.ARCHIVE,
+                    risk=ActionRisk.STABLE,
                     doc_id=doc.doc_id,
                     filepath=doc.filepath,
+                    reason=f"All source paths deleted: {entry.path}",
                     details={"deleted_source": entry.path},
                     source_change=f"D\t{entry.path}",
                 ))
             else:
-                actions.append(ActionItem(
-                    action=DocAction.UPDATE,
+                items.append(PlanItem(
+                    action=ActionType.UPDATE,
+                    risk=ActionRisk.STABLE,
                     doc_id=doc.doc_id,
                     filepath=doc.filepath,
+                    reason=f"Source deleted but other paths remain: {entry.path}",
                     details={"removed_source": entry.path,
                              "remaining_sources": remaining},
                     source_change=f"D\t{entry.path}",
                 ))
 
     elif entry.status == "A":
-        # Add — check if it's in a tracked directory
         parent_doc = registry.find_parent_doc(entry.path)
         if parent_doc:
-            actions.append(ActionItem(
-                action=DocAction.UPDATE,
+            items.append(PlanItem(
+                action=ActionType.UPDATE,
+                risk=ActionRisk.STABLE,
                 doc_id=parent_doc.doc_id,
                 filepath=parent_doc.filepath,
+                reason=f"New file added in tracked directory: {entry.path}",
                 details={"new_source": entry.path},
                 source_change=f"A\t{entry.path}",
             ))
         else:
-            # New file in untracked area
-            actions.append(ActionItem(
-                action=DocAction.CREATE,
+            items.append(PlanItem(
+                action=ActionType.CREATE,
+                risk=ActionRisk.REVIEW,
                 doc_id=None,
                 filepath="",
-                details={"source": entry.path, "reason": "new_file"},
+                reason=f"New file in untracked area: {entry.path}",
+                details={"source": entry.path},
                 source_change=f"A\t{entry.path}",
             ))
 
     elif entry.status == "M":
-        # Modify — only trigger UPDATE if change is significant
         affected = registry.find_by_source(entry.path)
         lines_changed = get_diff_stat(repo_root, entry.path, since_commit)
 
         for doc in affected:
             if lines_changed >= SIGNIFICANCE_THRESHOLD:
-                actions.append(ActionItem(
-                    action=DocAction.UPDATE,
+                items.append(PlanItem(
+                    action=ActionType.UPDATE,
+                    risk=ActionRisk.STABLE,
                     doc_id=doc.doc_id,
                     filepath=doc.filepath,
+                    reason=f"Source modified ({lines_changed} lines): {entry.path}",
+                    confidence=min(1.0, lines_changed / 50.0),
                     details={"modified_source": entry.path,
                              "lines_changed": lines_changed},
                     source_change=f"M\t{entry.path}",
                 ))
             else:
-                actions.append(ActionItem(
-                    action=DocAction.NOOP,
+                items.append(PlanItem(
+                    action=ActionType.NOOP,
+                    risk=ActionRisk.STABLE,
                     doc_id=doc.doc_id,
                     filepath=doc.filepath,
+                    reason=f"Minor change ({lines_changed} lines < threshold {SIGNIFICANCE_THRESHOLD}): {entry.path}",
                     details={"modified_source": entry.path,
-                             "lines_changed": lines_changed,
-                             "reason": "below_threshold"},
+                             "lines_changed": lines_changed},
                     source_change=f"M\t{entry.path}",
                 ))
 
-    return actions
+    return items
 
 
-def deduplicate_actions(actions: list[ActionItem]) -> list[ActionItem]:
-    """Merge duplicate actions for the same doc_id.
-
-    Priority: ARCHIVE > RENAME > RELOCATE > UPDATE > CREATE > NOOP
-    """
+def deduplicate_items(items: list[PlanItem]) -> list[PlanItem]:
+    """Merge duplicate items for the same doc_id. Higher priority wins."""
     priority = {
-        DocAction.ARCHIVE: 6,
-        DocAction.RENAME: 5,
-        DocAction.RELOCATE: 4,
-        DocAction.MERGE: 3,
-        DocAction.UPDATE: 2,
-        DocAction.CREATE: 1,
-        DocAction.NOOP: 0,
+        ActionType.ARCHIVE: 6, ActionType.RENAME: 5,
+        ActionType.UPDATE: 2, ActionType.CREATE: 1, ActionType.NOOP: 0,
     }
 
-    by_doc: dict[str | None, list[ActionItem]] = {}
-    for a in actions:
-        key = a.doc_id or a.details.get("source", "")
-        by_doc.setdefault(key, []).append(a)
+    by_doc: dict[str | None, list[PlanItem]] = {}
+    for item in items:
+        key = item.doc_id or item.details.get("source", "")
+        by_doc.setdefault(key, []).append(item)
 
-    result: list[ActionItem] = []
-    for key, group in by_doc.items():
+    result: list[PlanItem] = []
+    for _key, group in by_doc.items():
         if len(group) == 1:
-            if group[0].action != DocAction.NOOP:
+            if group[0].action != ActionType.NOOP:
                 result.append(group[0])
         else:
-            # Keep highest priority action, merge details
             group.sort(key=lambda a: priority.get(a.action, 0), reverse=True)
             best = group[0]
-            if best.action != DocAction.NOOP:
-                # Merge details from lower-priority actions
+            if best.action != ActionType.NOOP:
                 for other in group[1:]:
                     for k, v in other.details.items():
                         if k not in best.details:
@@ -314,11 +327,11 @@ def deduplicate_actions(actions: list[ActionItem]) -> list[ActionItem]:
     return sorted(result, key=lambda a: (a.doc_id or "", a.action.value))
 
 
-# ─── Full Analysis ────────────────────────────────────────────────────
+# ─── Full Reconciliation ─────────────────────────────────────────────
 
-def full_analysis(repo_root: Path, since_commit: str | None = None) -> ChangeReport:
-    """Analyze all changes since last sync and generate operation plan."""
-    from lib.traceback import get_head_commit
+def reconcile(repo_root: Path, since_commit: str | None = None) -> ChangePlan:
+    """Analyze all changes since last sync and generate a reconciliation plan."""
+    from lib.identity import get_head_commit
 
     head = get_head_commit(repo_root)
 
@@ -326,55 +339,46 @@ def full_analysis(repo_root: Path, since_commit: str | None = None) -> ChangeRep
         since_commit = DocRegistry.get_last_sync_commit(repo_root) or ""
 
     if not since_commit:
-        # First run — no previous sync point
-        return ChangeReport(
+        return ChangePlan(
             since_commit="(initial)",
             head_commit=head,
-            analysis_timestamp=now_iso(),
+            timestamp=now_iso(),
         )
 
-    # Get diff entries
     diff_entries = get_diff_entries(repo_root, since_commit, head)
 
-    # Load or scan registry
     registry = DocRegistry.load(repo_root)
     if registry is None:
         registry = DocRegistry.scan(repo_root)
 
-    # Analyze each entry
-    all_actions: list[ActionItem] = []
+    all_items: list[PlanItem] = []
     untracked: list[str] = []
 
     for entry in diff_entries:
-        entry_actions = analyze_entry(entry, registry, repo_root, since_commit)
-        if not entry_actions:
+        entry_items = analyze_entry(entry, registry, repo_root, since_commit)
+        if not entry_items:
             untracked.append(f"{entry.status}\t{entry.path}")
         else:
-            all_actions.extend(entry_actions)
+            all_items.extend(entry_items)
 
-    # Deduplicate
-    actions = deduplicate_actions(all_actions)
+    items = deduplicate_items(all_items)
 
-    return ChangeReport(
+    return ChangePlan(
         since_commit=since_commit,
         head_commit=head,
         diff_entries=diff_entries,
-        actions=actions,
+        items=items,
         untracked_changes=untracked,
-        analysis_timestamp=now_iso(),
+        timestamp=now_iso(),
     )
 
 
-def save_change_report(repo_root: Path, report: ChangeReport) -> Path:
-    """Persist change report to .doc-engine/change_log.json."""
-    from lib.registry import ENGINE_DIR, CHANGE_LOG_FILE
-
+def save_change_plan(repo_root: Path, plan: ChangePlan) -> Path:
+    """Persist change plan to .doc-sentinel/change_log.json."""
     engine_dir = repo_root / ENGINE_DIR
     engine_dir.mkdir(parents=True, exist_ok=True)
 
     log_path = engine_dir / CHANGE_LOG_FILE
-
-    # Append to existing log
     existing: list[dict] = []
     if log_path.is_file():
         try:
@@ -382,9 +386,7 @@ def save_change_report(repo_root: Path, report: ChangeReport) -> Path:
         except (json.JSONDecodeError, OSError):
             existing = []
 
-    existing.append(report.to_dict())
-
-    # Keep last 50 entries
+    existing.append(plan.to_dict())
     if len(existing) > 50:
         existing = existing[-50:]
 

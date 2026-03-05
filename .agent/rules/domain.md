@@ -22,7 +22,7 @@ norix-skills/
 ├── llm-agent-dev/              # LLM Agent 工程全栈（设计/仿真/收敛）
 ├── mobile-testing/             # 移动应用自动化测试与评估
 ├── pm-toolkit/                 # Mermaid 图表 + 网页原型本地预览面板
-├── repo-doc-engine/            # 自治式仓库文档引擎（溯源/Git diff 分析/矢量检索）
+├── doc-sentinel/               # 文档-代码变更通知系统（溯源绑定/Git diff 变更计划/幂等执行）
 ├── web-scraper/                # SPA 网页抓取与 Markdown 转换
 └── scripts/
     ├── sync_global_skills.py   # 全局技能目录同步脚本

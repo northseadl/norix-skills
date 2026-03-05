@@ -1,8 +1,8 @@
 """Document Registry — scan, query, and persist the doc-code mapping.
 
-The registry is the central index of all traceable documents in a repository.
-It scans for markdown files with traceback frontmatter and provides fast
-lookups by doc_id, source_path, and status.
+The registry is the single source of truth for all traceable documents.
+Read operations (status, find) are pure views with ZERO side-effects.
+Write operations are only triggered by explicit bind/apply commands.
 """
 
 from __future__ import annotations
@@ -12,24 +12,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from lib.traceback import (
+from lib.identity import (
     DocMeta,
     compute_source_hash,
-    get_head_commit,
     now_iso,
     read_doc_meta,
 )
 
 
-ENGINE_DIR = ".doc-engine"
+ENGINE_DIR = ".doc-sentinel"
 REGISTRY_FILE = "registry.json"
 LAST_SYNC_FILE = "last_sync_commit"
 CHANGE_LOG_FILE = "change_log.json"
 
-# Directories/files to skip during scan
 IGNORE_DIRS = {
-    ".git", ".doc-engine", "node_modules", "__pycache__",
-    ".venv", ".brainstorm", ".agent-team",
+    ".git", ".doc-sentinel", ".doc-engine",
+    "node_modules", "__pycache__", ".venv",
+    ".brainstorm", ".agent-team",
 }
 IGNORE_FILES = {".DS_Store"}
 
@@ -37,7 +36,7 @@ IGNORE_FILES = {".DS_Store"}
 @dataclass
 class DocRegistry:
     """Central registry of all traceable documents."""
-    docs: dict[str, DocMeta] = field(default_factory=dict)  # doc_id → DocMeta
+    docs: dict[str, DocMeta] = field(default_factory=dict)
     repo_root: Path = field(default_factory=Path)
 
     # ─── Scanning ────────────────────────────────────────────────
@@ -59,19 +58,25 @@ class DocRegistry:
         """All documents sorted by doc_id."""
         return sorted(self.docs.values(), key=lambda d: d.doc_id)
 
-    # ─── Query ───────────────────────────────────────────────────
+    # ─── Query (pure read, zero side-effects) ────────────────────
 
     def find_by_source(self, source_path: str) -> list[DocMeta]:
-        """Find all documents tracking a given source path."""
+        """Find all documents tracking a given source path.
+
+        Uses boundary-safe matching to prevent 'src' matching 'src10'.
+        """
         results = []
+        normalized = source_path.rstrip("/")
         for doc in self.docs.values():
             for sp in doc.source_paths:
-                # Match exact path or parent directory
-                if source_path == sp or source_path.startswith(sp + "/"):
+                sp_norm = sp.rstrip("/")
+                if normalized == sp_norm:
                     results.append(doc)
                     break
-                # Match if source_path is a prefix of sp (doc tracks a child)
-                if sp.startswith(source_path + "/"):
+                if normalized.startswith(sp_norm + "/"):
+                    results.append(doc)
+                    break
+                if sp_norm.startswith(normalized + "/"):
                     results.append(doc)
                     break
         return results
@@ -80,10 +85,12 @@ class DocRegistry:
         """Find the most specific parent document for a source path."""
         best: DocMeta | None = None
         best_depth = -1
+        normalized = source_path.rstrip("/")
         for doc in self.docs.values():
             for sp in doc.source_paths:
-                if source_path.startswith(sp + "/") or source_path.startswith(sp):
-                    depth = sp.count("/")
+                sp_norm = sp.rstrip("/")
+                if normalized == sp_norm or normalized.startswith(sp_norm + "/"):
+                    depth = sp_norm.count("/")
                     if depth > best_depth:
                         best = doc
                         best_depth = depth
@@ -97,12 +104,12 @@ class DocRegistry:
         """Get a document by its doc_id."""
         return self.docs.get(doc_id)
 
-    # ─── Staleness Check ─────────────────────────────────────────
+    # ─── Staleness Check (read-only view, NO mutation) ───────────
 
-    def check_all(self) -> dict[str, str]:
-        """Check staleness of all documents.
+    def check_staleness(self) -> dict[str, str]:
+        """Compute staleness of all documents WITHOUT modifying any state.
 
-        Returns: {doc_id: "synced" | "stale" | "source_missing"}
+        Returns: {doc_id: "synced" | "stale" | "source_missing" | "draft"}
         """
         results: dict[str, str] = {}
         for doc_id, doc in self.docs.items():
@@ -110,34 +117,25 @@ class DocRegistry:
                 results[doc_id] = "draft"
                 continue
 
-            # Check if sources still exist
-            any_exists = False
-            for sp in doc.source_paths:
-                if (self.repo_root / sp).exists():
-                    any_exists = True
-                    break
+            any_exists = any(
+                (self.repo_root / sp).exists() for sp in doc.source_paths
+            )
             if not any_exists:
                 results[doc_id] = "source_missing"
-                doc.status = "source_missing"
                 continue
 
             current_hash = compute_source_hash(self.repo_root, doc.source_paths)
-            if current_hash == doc.source_tree_hash:
-                results[doc_id] = "synced"
-                doc.status = "synced"
-            else:
-                results[doc_id] = "stale"
-                doc.status = "stale"
+            results[doc_id] = "synced" if current_hash == doc.source_tree_hash else "stale"
 
         return results
 
-    # ─── Health Report ───────────────────────────────────────────
+    # ─── Health Report (read-only) ───────────────────────────────
 
     def health_report(self) -> dict[str, Any]:
-        """Generate a health report for the documentation."""
-        statuses = self.check_all()
+        """Generate a health report. Pure read-only, no side-effects."""
+        statuses = self.check_staleness()
         total = len(statuses)
-        counts = {}
+        counts: dict[str, int] = {}
         for s in statuses.values():
             counts[s] = counts.get(s, 0) + 1
 
@@ -160,7 +158,7 @@ class DocRegistry:
     # ─── Persistence ─────────────────────────────────────────────
 
     def save(self, repo_root: Path | None = None) -> Path:
-        """Persist registry to .doc-engine/registry.json."""
+        """Persist registry to .doc-sentinel/registry.json."""
         root = repo_root or self.repo_root
         engine_dir = root / ENGINE_DIR
         engine_dir.mkdir(parents=True, exist_ok=True)
@@ -183,7 +181,7 @@ class DocRegistry:
 
     @classmethod
     def load(cls, repo_root: Path) -> DocRegistry | None:
-        """Load registry from .doc-engine/registry.json."""
+        """Load registry from .doc-sentinel/registry.json."""
         registry_path = repo_root / ENGINE_DIR / REGISTRY_FILE
         if not registry_path.is_file():
             return None

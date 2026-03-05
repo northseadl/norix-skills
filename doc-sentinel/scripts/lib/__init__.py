@@ -1,0 +1,1 @@
+"""doc-sentinel internal library."""

@@ -33,6 +33,7 @@ status: "synced"                     # 文档当前状态
 - 优先使用**目录**而非单文件（git tree hash 对目录 O(1)）
 - 一份文档可追踪多个 source_paths
 - 多份文档可追踪同一个 source_path
+- **路径匹配使用边界安全规则**：`src` 不会匹配 `src10`
 
 ```yaml
 # 好：追踪目录
@@ -71,7 +72,7 @@ source_tree_hash = SHA256(combined)[:12]
 ## status 状态机
 
 ```
-draft ──scan──→ synced
+draft ──bind──→ synced
                     │
               [源码变更]
                     ↓
