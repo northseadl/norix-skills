@@ -602,6 +602,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--token", required=True, help="File token to trash")
     p.add_argument("--type", default="docx", help="File type (docx, sheet, bitable, folder)")
 
+    p = sub.add_parser("copy", help="Copy a Drive file to target folder")
+    p.add_argument("--token", required=True, help="Source file token")
+    p.add_argument("--type", default="docx", help="File type (docx, doc, sheet, bitable)")
+    p.add_argument("--folder-token", required=True, help="Target folder token")
+    p.add_argument("--name", default="", help="New name (default: original name)")
+
     return parser
 
 
@@ -830,6 +836,23 @@ def main():
             Log.ok(f"Moved {args.token} to _trash folder.")
         else:
             Log.error(f"Move failed: {result.get('msg', '?')}")
+            output(result)
+
+    elif args.command == "copy":
+        body: dict = {
+            "type": args.type,
+            "folder_token": args.folder_token,
+        }
+        if args.name:
+            body["name"] = args.name
+        result = client.post(f"/drive/v1/files/{args.token}/copy", body)
+        if result.get("code", -1) == 0:
+            f = result.get("data", {}).get("file", {})
+            Log.ok(f"Copied: {f.get('token', '?')} ({f.get('name', '?')})")
+            Log.info(f"URL: {f.get('url', '')}")
+            output(result)
+        else:
+            Log.error(f"Copy failed: {result.get('msg', '?')}")
             output(result)
 
     elif args.command == "shared-add":
