@@ -42,7 +42,6 @@ description: |                            # 必需，≤ 60 words / ≤ 500 char
   ES/SLS 只读数据分析：索引探索、聚合统计、日志搜索、mapping 文档、多 Profile。
 metadata:
   version: 0.1.0                          # 必需，pre-commit hook 强制 patch 递增
-  short-description: under 64 chars       # openai.yaml 同步来源
 ---
 ```
 

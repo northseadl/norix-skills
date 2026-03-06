@@ -48,6 +48,7 @@ USAGE:
 COMMANDS:
     discover <url>     Analyze page structure, detect framework, list links
     fetch <url>        Fetch page(s) and convert to Markdown
+    exec <url>         Execute JavaScript on a page
     openapi <url>      Discover and convert OpenAPI/Swagger spec to Markdown
 
 DISCOVER OPTIONS:
@@ -73,6 +74,20 @@ FETCH OPTIONS:
     --engine MODE      Engine: auto (default), http, cdp
     --raw              Output full page (skip content filtering)
     --selector CSS     CSS selector for content area (precision mode)
+    --js CODE          JavaScript to execute before content extraction
+    --js-file PATH     JavaScript file to execute before extraction
+    --wait-for CSS     Wait for CSS selector to appear before extraction
+    --expand-all       Auto-expand collapsed/folded sections
+    --scroll-full      Scroll entire page to trigger lazy loading
+
+EXEC OPTIONS:
+    --js CODE          JavaScript to execute on the page
+    --js-file PATH     JavaScript file to execute
+    --then-fetch       After JS execution, also fetch page as markdown
+    --session ID       Reuse browser session for multi-step interactions
+    --js-only          Skip navigation, execute JS on existing session
+    -o, --output PATH  Output directory or file path
+    --raw              Output full page (skip content filtering)
 
 OPENAPI OPTIONS:
     -o, --output FILE  Output markdown file path
@@ -83,6 +98,10 @@ EXAMPLES:
     ./scrape fetch https://open.feishu.cn/document/server-docs/im-v1/message/create
     ./scrape fetch https://docs.example.com --auto --merge -o ./docs/all-docs.md
     ./scrape fetch --from-file urls.txt -o ./docs/
+    ./scrape fetch URL --expand-all --wait 5000 -o ./docs/
+    ./scrape fetch URL --js "document.querySelectorAll('.btn').forEach(e => e.click())"
+    ./scrape exec URL --js "return document.title"
+    ./scrape exec URL --js "expandAll()" --then-fetch -o result.md
     ./scrape openapi https://petstore.swagger.io/v2/swagger.json -o api.md
 
 REQUIREMENTS:
@@ -94,7 +113,7 @@ EOF
 CMD="${1:-help}"
 
 case "$CMD" in
-    discover|fetch|openapi)
+    discover|fetch|exec|openapi)
         exec "$PYTHON" "$SCRIPTS_DIR/scrape_cli.py" "$@"
         ;;
     help|--help|-h)

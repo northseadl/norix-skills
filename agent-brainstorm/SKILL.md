@@ -1,12 +1,12 @@
 ---
 name: agent-brainstorm
 metadata:
-  version: 0.0.8
-  short-description: Multi-agent brainstorming with async opinion collision
+  version: 0.1.1
 description: 'Multi-agent brainstorming: async opinion collision with expert personas.
-  Mixed Codex/Claude Code engine.
-
-  '
+  Mixed Codex/Claude Code engine. Use when multiple AI agents need to collaboratively
+  discuss, debate, and converge on solutions through structured dialog. Triggers:
+  brainstorm, multi-perspective discussion, opinion collision, expert debate, war room,
+  collective intelligence, 头脑风暴, 多视角讨论, 集思广益.'
 ---
 
 # Agent 头脑风暴技能 — 异步观点碰撞空间
@@ -17,19 +17,19 @@ description: 'Multi-agent brainstorming: async opinion collision with expert per
 头脑风暴的 Agent 通过一个**共享讨论空间**异步交换观点、质疑与建设性辩论，最终收敛到高质量方案。
 
 支持两种 Agent 引擎：
-- **Codex SDK** (`openai-codex-sdk`) — OpenAI Codex 代理
-- **Claude Agent SDK** (`claude-agent-sdk`) — Anthropic Claude Code 代理
+- **Codex SDK** (`@openai/codex-sdk`) — OpenAI Codex 代理
+- **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) — Anthropic Claude Code 代理
 
 **架构**:
 
 ```
 你 (Orchestrator)
   │
-  ├── 启动 Brainstorm Engine (HTTP Server + Web 面板)
+  ├── 启动 Brainstorm Engine (Node.js HTTP Server + Web 面板)
   │     └── 讨论空间 API: 供 Agent 发表/阅读/回应观点
   │
   ├── 派发 N 个 Agent (每个可独立选择 Codex 或 Claude Code 引擎)
-  │     └── 每个 Agent 通过 discuss.py CLI 与讨论空间交互
+  │     └── 每个 Agent 通过运行时生成的 discuss.py CLI 与讨论空间交互
   │
   └── 讨论结束后生成 synthesis.md 综合报告
 ```
@@ -46,22 +46,17 @@ description: 'Multi-agent brainstorming: async opinion collision with expert per
 
 ## Fan-out / Fan-in（观点发散 → 综合收敛）
 
-- **Fan-out**：每个 Agent 独立阅读代码/资料，先产出“立场明确 + 有证据”的首轮观点（opinion）。
+- **Fan-out**：每个 Agent 独立阅读代码/资料，先产出"立场明确 + 有证据"的首轮观点（opinion）。
 - **碰撞**：通过 `challenge/build/respond` 机制让观点互相校正，而不是并列堆叠。
 - **Fan-in**：由 Orchestrator 生成 `synthesis.md`，把共识/分歧/决策点收敛成一个可执行结论。
 
 ## 前置条件
 
-运行需要 **Python ≥3.10** 和至少一个引擎已认证。
+运行需要 **Node.js ≥18.0.0** 和至少一个引擎已认证。
 
-**推荐路径**: `uv run` 自动处理 SDK 依赖（通过 PEP 723 inline metadata），无需手动安装。
-
-若 `uv` 不可用:
 ```bash
-# 安装 uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# 或用 pip 手动安装 SDK
-pip install openai-codex-sdk claude-agent-sdk
+# 安装依赖（在技能目录下）
+cd <SKILLS_DIR>/agent-brainstorm && npm install
 ```
 
 **引擎认证** (至少完成一个):
@@ -71,23 +66,20 @@ pip install openai-codex-sdk claude-agent-sdk
 ## 工具
 
 ```bash
-# 使用 uv 自动安装依赖并运行（推荐）
-uv run <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py <session-file> [options]
-
-# 或直接运行（需先完成 pip install）
-python3 <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py <session-file> [options]
+# 启动头脑风暴（推荐）
+node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs <session-file> [options]
 
 # 使用 Claude Code 引擎
-python3 scripts/brainstorm.py <session-file> --engine claude [options]
+node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs <session-file> --engine claude [options]
 
 # 查看历史
-python3 scripts/brainstorm.py --list --cwd <project-dir>
+node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs --list --cwd <project-dir>
 
 # 查看状态
-python3 scripts/brainstorm.py --status --cwd <project-dir>
+node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs --status --cwd <project-dir>
 
 # 清理
-python3 scripts/brainstorm.py --clean --cwd <project-dir>
+node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs --clean --cwd <project-dir>
 ```
 
 ## 工作流
@@ -156,7 +148,7 @@ python3 scripts/brainstorm.py --clean --cwd <project-dir>
 ### Phase 3: 启动讨论
 
 ```bash
-uv run <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py \
+node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs \
   .brainstorm/session.json \
   --cwd <project-dir> \
   --approval-mode full-auto \
@@ -176,24 +168,28 @@ uv run <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py \
 | `--no-open` | false | 不自动打开浏览器面板 |
 | `--dry-run` | false | 预览不执行 |
 
-启动后:
-1. Engine 开启 HTTP 讨论服务 + Web 面板
-2. 生成 `discuss.py` 工具到 `.brainstorm/`
-3. 按需加载 SDK（仅加载实际使用的引擎）
-4. 并行派发所有 Agent（每个 Agent 使用其指定的引擎）
-5. Agent 自主阅读代码、发表观点、回应他人、投票收敛
+**⚠️ 关键：此命令是阻塞式的** — 进程在所有 Agent 完成讨论并生成 `synthesis.md` 后才退出。
+你**不需要**手动轮询状态、不需要 sleep/wait、不需要后台运行。直接执行并等待命令返回即可。
 
-### Phase 4: 监控讨论
+**这意味着**：无论你是 Codex、Claude Code 还是其他 Agent 引擎，只要执行此命令并等待退出，一切都由引擎自动处理。
 
-讨论启动后，你可以:
+启动后引擎内部流程:
+1. 开启 HTTP 讨论服务 + **自动打开浏览器面板**（用户可实时监控）
+2. 动态生成 `discuss.py` CLI 工具到 `.brainstorm/`
+3. 按需加载 SDK，并行派发所有 Agent
+4. Agent 自主讨论（Session Renewal Loop 确保全员同开同停）
+5. 多数投票 conclude → 生成 `synthesis.md` → 进程退出
 
-1. **查看 Web 面板**: 浏览器中实时查看讨论进展
-2. **查询状态**:
-   ```bash
-   python3 scripts/brainstorm.py --status --cwd <project-dir>
-   ```
-3. **等待自然收敛**: 当超过半数 Agent 投票 conclude，讨论自动进入 synthesizing 阶段
-4. **超时兜底**: 到达 timeout 后自动结束
+### Phase 4: 等待完成
+
+**引擎进程会自动阻塞直到讨论结束**，你只需等待 Phase 3 的命令返回。
+
+- 进程退出码 `0` = 讨论正常完成
+- 进程退出码 `1` = 有 Agent 失败
+- 超时兜底：到达 `--timeout` 后引擎自动强制结束并退出
+
+> **禁止**：不要把引擎命令放到后台然后手动轮询。这会浪费 Agent turns 且容易出错。
+> **正确做法**：直接执行命令，让它阻塞到完成。引擎内部已包含所有监控、续期、超时逻辑。
 
 ### Phase 5: 交付报告
 
@@ -214,7 +210,7 @@ uv run <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py \
 
 ### Agent 如何交互
 
-每个 Agent 通过 `discuss.py` CLI 工具参与讨论:
+每个 Agent 通过运行时生成的 `discuss.py` CLI 工具参与讨论:
 
 ```bash
 python3 .brainstorm/discuss.py <agent_id> <command> [args...]
@@ -270,8 +266,7 @@ concluded  → 所有 Agent 完成或超时
 
 | 症状 | 原因 | 解决 |
 |:---|:---|:---|
-| `command not found: uv` | uv 未安装 | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| `ModuleNotFoundError` | SDK 未安装且非 uv 路径 | `pip install openai-codex-sdk claude-agent-sdk` |
+| `Cannot find module` | npm 依赖未安装 | `cd <SKILLS_DIR>/agent-brainstorm && npm install` |
 | `Preflight failed` | CLI 未安装或未认证 | 见"前置条件"完成认证 |
 | Agent 长时间 0 posts | 模型不兼容标准工具集 | 确认 Claude Code 使用官方模型（非第三方代理模型） |
 | `API Error 400` | Agent 使用了不存在的工具 | 同上，模型兼容性问题 |

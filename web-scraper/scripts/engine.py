@@ -100,8 +100,19 @@ async def fetch_http(url: str, client: httpx.AsyncClient | None = None) -> dict:
 async def fetch_browser(urls: list[str], output_dir: str | None = None,
                         merge: bool = False, wait_ms: int = 2000,
                         raw: bool = False,
-                        selector: str | None = None) -> list[dict]:
-    """L1: crawl4ai browser rendering with content filtering."""
+                        selector: str | None = None,
+                        js_code: str | list[str] | None = None,
+                        wait_for: str | None = None,
+                        scan_full_page: bool = False,
+                        delay_after_js: float = 0.1) -> list[dict]:
+    """L1: crawl4ai browser rendering with content filtering.
+
+    Args:
+        js_code: JavaScript to execute before content extraction.
+        wait_for: CSS selector to wait for before extraction.
+        scan_full_page: Scroll through entire page to trigger lazy loading.
+        delay_after_js: Seconds to wait after JS execution before extraction.
+    """
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
     from crawl4ai.content_filter_strategy import PruningContentFilter
     from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
@@ -125,6 +136,10 @@ async def fetch_browser(urls: list[str], output_dir: str | None = None,
         page_timeout=max(wait_ms * 5, 30000),
         markdown_generator=md_gen,
         css_selector=selector,
+        js_code=js_code,
+        wait_for=wait_for,
+        scan_full_page=scan_full_page,
+        delay_before_return_html=delay_after_js,
     )
 
     results = []
@@ -162,6 +177,49 @@ async def fetch_browser(urls: list[str], output_dir: str | None = None,
                 save_markdown(entry, output_dir)
 
     return results
+
+
+async def exec_js(url: str, js_code: str | list[str],
+                  wait_ms: int = 3000,
+                  session_id: str | None = None,
+                  js_only: bool = False) -> dict:
+    """Execute JavaScript on a page and return the result.
+
+    Unlike fetch_browser, this returns the JS execution result directly,
+    not the page markdown. Useful for extracting data from page state,
+    interacting with SPAs, or reading dynamic content.
+
+    Args:
+        url: Page URL to navigate to (ignored if js_only=True with existing session).
+        js_code: JavaScript to execute. Use 'return X' to get a value back.
+        wait_ms: Wait time for page load.
+        session_id: Reuse browser session for multi-step interactions.
+        js_only: Skip navigation, execute JS on existing session page.
+    """
+    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+
+    browser_conf = BrowserConfig(headless=True)
+    run_conf = CrawlerRunConfig(
+        cache_mode=CacheMode.BYPASS,
+        wait_until="networkidle",
+        page_timeout=max(wait_ms * 3, 15000),
+        js_code=js_code,
+        js_only=js_only,
+        session_id=session_id,
+        delay_before_return_html=1.0,
+    )
+
+    async with AsyncWebCrawler(config=browser_conf) as crawler:
+        result = await crawler.arun(url, config=run_conf)
+        return {
+            "url": url,
+            "success": result.success,
+            "title": (result.metadata or {}).get("title", "") if result.success else "",
+            "html_length": len(result.html or "") if result.success else 0,
+            "markdown_length": len(result.markdown.raw_markdown or "") if result.success and result.markdown else 0,
+            "console": getattr(result, "console_messages", []) or [],
+            "error": result.error_message if not result.success else None,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -305,11 +363,27 @@ async def discover(url: str, max_pages: int = 200, engine: str = "auto") -> list
 async def batch_fetch(urls: list[str], output_dir: str | None = None,
                       engine: str = "auto", merge: bool = False,
                       wait_ms: int = 2000, raw: bool = False,
-                      selector: str | None = None) -> list[dict]:
+                      selector: str | None = None,
+                      js_code: str | list[str] | None = None,
+                      wait_for: str | None = None,
+                      scan_full_page: bool = False,
+                      delay_after_js: float = 0.1) -> list[dict]:
     """Smart batch fetch: HTTP-first probe → browser fallback."""
 
+    # If JS interaction is requested, force browser engine
+    if js_code or wait_for or scan_full_page:
+        engine = "cdp"
+
+    browser_kwargs = dict(
+        js_code=js_code, wait_for=wait_for,
+        scan_full_page=scan_full_page, delay_after_js=delay_after_js,
+    )
+
     if engine == "cdp":
-        return await fetch_browser(urls, output_dir, merge, wait_ms, raw=raw, selector=selector)
+        return await fetch_browser(
+            urls, output_dir, merge, wait_ms,
+            raw=raw, selector=selector, **browser_kwargs,
+        )
 
     if engine == "http":
         async with httpx.AsyncClient(follow_redirects=True, timeout=10,
@@ -356,7 +430,8 @@ async def batch_fetch(urls: list[str], output_dir: str | None = None,
     browser_results = []
     if need_browser:
         browser_results = await fetch_browser(
-            need_browser, output_dir, merge, wait_ms, raw=raw, selector=selector,
+            need_browser, output_dir, merge, wait_ms,
+            raw=raw, selector=selector, **browser_kwargs,
         )
 
     return http_ok + browser_results

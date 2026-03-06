@@ -1,8 +1,7 @@
 ---
 name: agent-task-orchestration
 metadata:
-  version: 0.1.7
-  short-description: Task decomposition and multi-agent orchestration
+  version: 0.1.8
 description: 'Task decomposition and multi-agent orchestration with retry, checkpoint
   recovery, and real-time monitoring.
 
@@ -138,8 +137,8 @@ cd agent-task-orchestration && npm install
 # 预览执行计划（不实际调度）
 node scripts/dispatch.mjs ./tasks/ --dry-run
 
-# 并行调度，全自动模式
-node scripts/dispatch.mjs ./tasks/ --parallel --approval-mode full-auto --no-open
+# 并行调度，全自动模式（自动打开 Dashboard）
+node scripts/dispatch.mjs ./tasks/ --parallel --approval-mode full-auto
 
 # 使用 Claude Code 引擎
 node scripts/dispatch.mjs ./tasks/ --parallel --engine claude --approval-mode full-auto
@@ -161,11 +160,12 @@ cat ./tasks/.dispatch-logs/{runId}/signal
 - **Token 告警**: 超过预估阈值时写入 signal `ATTENTION token_budget_exceeded`
 - **预飞行检查**: 验证 API Key、Git 工作区干净度，问题前置暴露
 
-**Dashboard 能力**:
+**Dashboard（默认自动打开浏览器）**:
 - 实时 DAG 依赖图（SVG 渲染，状态着色 + 动画边）
 - 每个 Agent 的实时事件流（命令执行、文件变更、推理过程）
 - Token 用量追踪（input / cached / output）
 - 任务进度条 + 整体完成率
+- Dashboard 确保用户在 Agent 出发时即有监控窗口，不可跳过
 
 **SDK 模式映射**:
 

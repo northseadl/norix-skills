@@ -6,7 +6,6 @@ description: |
   Use when maintaining documentation freshness, detecting stale docs, or binding docs to source code.
 metadata:
   version: 0.2.0
-  short-description: "Doc-code binding, staleness detection, change plans"
 ---
 
 # Doc Sentinel — 文档-代码变更通知系统

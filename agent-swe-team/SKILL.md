@@ -1,8 +1,7 @@
 ---
 name: agent-swe-team
 metadata:
-  version: 0.1.9
-  short-description: Role-based multi-agent SWE team with git worktree isolation
+  version: 0.1.10
 description: 'Role-based multi-agent SWE team: Leader dispatches tickets to sub-agents
 
   (architect/backend/frontend/qa/reviewer) with git worktree isolation. Mixed Codex/Claude
@@ -74,7 +73,7 @@ node scripts/team.mjs init --cwd <PROJECT_DIR> --roles architect,backend:2,front
 # 创建 workflow（可选，启用自动 phase 触发）
 node scripts/team.mjs workflow create --cwd <PROJECT_DIR> --template fullstack
 
-# 启动 Hub（dashboard + 队列 worker）
+# 启动 Hub（dashboard + 队列 worker，自动打开浏览器面板）
 node scripts/team.mjs --engine codex serve --cwd <PROJECT_DIR> --approval-mode full-auto
 
 # 创建 + 分配 ticket
@@ -177,8 +176,8 @@ node scripts/team.mjs init --cwd <PROJECT_DIR> --roles architect,backend,fronten
 # 创建 workflow（Hub 将根据 phase 依赖自动调度）
 node scripts/team.mjs workflow create --cwd <PROJECT_DIR> --template fullstack
 
-# 启动 Hub
-node scripts/team.mjs --engine codex serve --cwd <PROJECT_DIR> --approval-mode full-auto --no-open
+# 启动 Hub（自动打开 Dashboard，确保用户在 Agent 出发前即有监控窗口）
+node scripts/team.mjs --engine codex serve --cwd <PROJECT_DIR> --approval-mode full-auto
 ```
 
 ### Phase 4: 分配 Tickets

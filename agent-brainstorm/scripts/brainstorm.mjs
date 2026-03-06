@@ -405,10 +405,8 @@ class DiscussionSpace extends EventEmitter {
     // exploring → debating: all codex agents posted at least 1 opinion
     if (this.phase === "exploring" && agentsWithPosts.size >= agentCount) {
       this.#setPhase("debating");
-    }
-
-    // debating → converging: more agreements than challenges in recent interactions
-    if (this.phase === "debating") {
+    } else if (this.phase === "debating") {
+      // debating → converging: more agreements than challenges
       const allReactions = this.posts.flatMap((p) => p.reactions);
       const agrees = allReactions.filter((r) => r.reaction === "agree" || r.reaction === "build-on").length;
       const challenges = allReactions.filter((r) => r.reaction === "challenge").length;
@@ -416,10 +414,8 @@ class DiscussionSpace extends EventEmitter {
       if (responses >= agentCount && agrees > challenges) {
         this.#setPhase("converging");
       }
-    }
-
-    // converging → synthesizing: majority voted to conclude
-    if (this.phase === "converging" && this.concludeVotes.size > agentCount / 2) {
+    } else if (this.phase === "converging" && this.concludeVotes.size > agentCount / 2) {
+      // converging → synthesizing: majority voted to conclude
       this.#setPhase("synthesizing");
     }
   }
@@ -862,7 +858,64 @@ OPINION
 - **保持焦点**: 始终围绕议题和目标展开讨论
 - **至少发表 3 次**: 首次观点 + 回应他人 + 结论/方案
 
+### ⚠️ 退出约束（强制）
+- **禁止过早 conclude**: 在确认所有其他参与者都至少发表过 1 个观点之前，禁止投票 conclude
+- **回应优先**: 至少回应过 2 个不同参与者的观点后，才可以 conclude
+- **检查新帖**: conclude 前必须先执行 \`new\` 命令确认没有未读新观点
+- **持续在线**: 即使你认为自己说完了，继续用 \`new\` 检查是否有人 challenge 了你并回应
+
 开始吧。先阅读代码，理解上下文，然后参与讨论。`;
+}
+
+// ─── Renewal Prompt for Session Loop ───
+
+function buildRenewalPrompt(agent, space) {
+  const status = space.getStatusView();
+  const recentPosts = space.posts.slice(-10);
+  const postsText = recentPosts.map((p) => {
+    const a = space.agents.get(p.agent_id);
+    const typeIcon = { opinion: "\u{1F4A1}", response: "\u21A9\uFE0F", proposal: "\u{1F4CB}", conclude_vote: "\u{1F3C1}" }[p.type] || "\u{1F4AC}";
+    return `${typeIcon} **${a?.name || p.agent_id}** (#${p.id}): ${p.content.slice(0, 300)}`;
+  }).join("\n\n");
+
+  return `# Session \u7EED\u671F \u2014 ${agent.name}
+
+\u4F60\u7684\u4E0A\u4E00\u8F6E\u8BA8\u8BBA session \u5DF2\u7ED3\u675F\uFF0C\u4F46\u8BA8\u8BBA\u4ECD\u5728\u8FDB\u884C\u4E2D\u3002\u4F60\u9700\u8981\u7EE7\u7EED\u53C2\u4E0E\u3002
+
+## \u4F60\u7684\u8EAB\u4EFD
+\u4F60\u662F **${agent.name}** (ID: \`${agent.id}\`)\uFF0C\u4E13\u4E1A\u9886\u57DF: ${agent.expertise}
+
+## \u5F53\u524D\u8BA8\u8BBA\u72B6\u6001
+- Phase: ${status.phase}
+- \u603B\u5E16\u6570: ${status.totalPosts}
+- \u6536\u655B\u5EA6: ${(status.convergence * 100).toFixed(0)}%
+- Conclude \u6295\u7968: ${status.concludeVotes}/${status.agentCount}
+
+## \u6700\u8FD1\u7684\u8BA8\u8BBA\u52A8\u6001
+
+${postsText}
+
+## \u8BA8\u8BBA\u5DE5\u5177
+
+\`\`\`bash
+python3 .brainstorm/discuss.py ${agent.id} <command> [args...]
+\`\`\`
+
+\u6838\u5FC3\u547D\u4EE4:
+- \`python3 .brainstorm/discuss.py ${agent.id} new\` \u2014 \u67E5\u770B\u65B0\u89C2\u70B9
+- \`python3 .brainstorm/discuss.py ${agent.id} post "\u5185\u5BB9"\` \u2014 \u53D1\u8868\u89C2\u70B9
+- \`python3 .brainstorm/discuss.py ${agent.id} respond <id> "\u5185\u5BB9"\` \u2014 \u56DE\u5E94
+- \`python3 .brainstorm/discuss.py ${agent.id} agree <id>\` \u2014 \u540C\u610F
+- \`python3 .brainstorm/discuss.py ${agent.id} challenge <id> "\u7406\u7531"\` \u2014 \u8D28\u7591
+- \`python3 .brainstorm/discuss.py ${agent.id} conclude "\u603B\u7ED3"\` \u2014 \u6295\u7968\u7ED3\u675F
+
+## \u7EED\u671F\u884C\u4E3A\u51C6\u5219
+1. \u5148\u7528 \`new\` \u547D\u4EE4\u67E5\u770B\u6700\u65B0\u8BA8\u8BBA\u52A8\u6001
+2. \u56DE\u5E94\u6240\u6709\u5C1A\u672A\u5904\u7406\u7684\u5206\u6B67\u6216 challenge
+3. \u5982\u679C\u6CA1\u6709\u65B0\u5185\u5BB9\u9700\u8981\u56DE\u5E94\uFF0C\u4E14\u4F60\u5DF2\u5145\u5206\u8868\u8FBE\u89C2\u70B9\uFF0C\u4F7F\u7528 \`conclude\` \u6295\u7968\u7ED3\u675F
+4. **\u4E0D\u8981\u91CD\u590D\u4F60\u4E4B\u524D\u5DF2\u7ECF\u53D1\u8868\u7684\u89C2\u70B9**
+
+\u7EE7\u7EED\u8BA8\u8BBA\u3002`;
 }
 
 // ─── Agent Orchestration (Dual-Engine) ───
@@ -931,7 +984,7 @@ async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
       systemPrompt: { type: "preset", preset: "claude_code" },
       disallowedTools: ["ToolSearch"],
       settingSources: ["project"],
-      maxTurns: 30,
+      maxTurns: agent.maxTurns || config.maxTurns || 80,
     },
   });
 
@@ -1013,20 +1066,45 @@ async function spawnAgent(sdks, agent, prompt, config, space) {
     return { agent_id: agent.id, success: true, dryRun: true };
   }
 
-  try {
-    if (engine === "claude") {
-      await spawnClaudeAgent(sdks.claude, agent, prompt, config, space);
-    } else {
-      await spawnCodexAgent(sdks.codex, agent, prompt, config, space);
+  const maxRenewals = agent.maxRenewals || 5;
+  let renewCount = 0;
+  let currentPrompt = prompt;
+
+  while (true) {
+    try {
+      if (engine === "claude") {
+        await spawnClaudeAgent(sdks.claude, agent, currentPrompt, config, space);
+      } else {
+        await spawnCodexAgent(sdks.codex, agent, currentPrompt, config, space);
+      }
+    } catch (err) {
+      space.markAgentFailed(agent.id, err.message);
+      log("ERROR", `Agent ${agent.id} failed: ${err.message}`);
+      return { agent_id: agent.id, success: false, error: err.message };
     }
-    space.markAgentDone(agent.id);
-    log("INFO", `Agent ${agent.id} completed`);
-    return { agent_id: agent.id, success: true };
-  } catch (err) {
-    space.markAgentFailed(agent.id, err.message);
-    log("ERROR", `Agent ${agent.id} failed: ${err.message}`);
-    return { agent_id: agent.id, success: false, error: err.message };
+
+    // Session ended — check if discussion has concluded
+    if (space.phase === "concluded" || space.phase === "synthesizing") {
+      log("INFO", `Agent ${agent.id}: discussion ${space.phase}, exiting normally`);
+      break;
+    }
+
+    // Renewal gate
+    renewCount++;
+    if (renewCount > maxRenewals) {
+      log("WARN", `Agent ${agent.id}: max renewals (${maxRenewals}) reached, exiting`);
+      break;
+    }
+
+    log("INFO", `Agent ${agent.id}: session ended but discussion active, renewing (${renewCount}/${maxRenewals})`);
+    space.updateAgentActivity(agent.id, { text: `Rejoining discussion (${renewCount}/${maxRenewals})` });
+    await new Promise((r) => setTimeout(r, 3000)); // cool-down before renewal
+    currentPrompt = buildRenewalPrompt(agent, space);
   }
+
+  space.markAgentDone(agent.id);
+  log("INFO", `Agent ${agent.id} completed`);
+  return { agent_id: agent.id, success: true };
 }
 
 // ─── Synthesis Report ───

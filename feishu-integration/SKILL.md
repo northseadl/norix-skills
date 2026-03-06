@@ -1,7 +1,7 @@
 ---
 name: feishu-integration
 metadata:
-  version: 0.2.0
+  version: 0.2.1
 description: 'Feishu (Lark) unified CLI: tasks, documents, wiki, bitable (multi-table),
   and Drive management.
 
