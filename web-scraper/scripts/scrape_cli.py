@@ -2,8 +2,13 @@
 """
 scrape_cli.py — Unified CLI entry point for web-scraper.
 
-Supports: discover, fetch, openapi commands.
+Supports: discover, fetch, exec, openapi commands.
 """
+
+# Suppress noisy warnings before any imports
+import warnings
+warnings.filterwarnings("ignore", "urllib3.*chardet.*charset_normalizer")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import argparse
 import asyncio
@@ -12,7 +17,7 @@ import sys
 from pathlib import Path
 
 from engine import (
-    batch_fetch, discover, fetch_browser, fetch_http,
+    batch_fetch, discover, exec_js,
     merge_results, save_markdown,
 )
 
@@ -56,6 +61,34 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Output full page (skip content filtering)")
     p_fetch.add_argument("--selector", type=str, default=None,
                          help="CSS selector for content area (precision extraction)")
+    p_fetch.add_argument("--js", type=str, default=None,
+                         help="JavaScript to execute before content extraction")
+    p_fetch.add_argument("--js-file", type=str, default=None,
+                         help="Path to JavaScript file to execute before extraction")
+    p_fetch.add_argument("--wait-for", type=str, default=None,
+                         help="CSS selector to wait for before extraction")
+    p_fetch.add_argument("--expand-all", action="store_true",
+                         help="Auto-expand collapsed/folded sections")
+    p_fetch.add_argument("--scroll-full", action="store_true",
+                         help="Scroll through entire page to trigger lazy loading")
+
+    # -- exec --
+    p_exec = sub.add_parser("exec", help="Execute JavaScript on a page")
+    p_exec.add_argument("url", help="URL to navigate to")
+    p_exec.add_argument("--js", type=str, default=None,
+                        help="JavaScript to execute")
+    p_exec.add_argument("--js-file", type=str, default=None,
+                        help="Path to JavaScript file to execute")
+    p_exec.add_argument("--wait", type=int, default=3000)
+    p_exec.add_argument("--session", type=str, default=None,
+                        help="Session ID for multi-step interactions")
+    p_exec.add_argument("--js-only", action="store_true",
+                        help="Skip navigation, execute JS on existing session")
+    p_exec.add_argument("--then-fetch", action="store_true",
+                        help="After JS execution, also fetch page as markdown")
+    p_exec.add_argument("-o", "--output", type=str)
+    p_exec.add_argument("--raw", action="store_true")
+    p_exec.add_argument("--selector", type=str, default=None)
 
     # -- openapi --
     p_api = sub.add_parser("openapi", help="Extract OpenAPI/Swagger spec as Markdown")
@@ -63,6 +96,35 @@ def build_parser() -> argparse.ArgumentParser:
     p_api.add_argument("-o", "--output", type=str)
 
     return parser
+
+
+# ---------------------------------------------------------------------------
+# Expand-all preset: universal JS to expand collapsed content
+# ---------------------------------------------------------------------------
+
+EXPAND_ALL_JS = """
+// Universal expand: click common accordion/expand triggers
+const expandSelectors = [
+    '[aria-expanded="false"]',
+    'details:not([open])',
+    '[class*="expand"][class*="icon"]',
+    '[class*="expand"][class*="btn"]',
+    '[class*="collapse"][class*="btn"]',
+    '[class*="toggle"][class*="close"]',
+    '[class*="param-expand"]',
+    'button[class*="Expand"]',
+    '.accordion-header:not(.active)',
+    '[data-testid*="expand"]',
+    '[data-action="expand"]',
+];
+for (const sel of expandSelectors) {
+    document.querySelectorAll(sel).forEach(el => {
+        try { el.click(); } catch(e) {}
+    });
+}
+// Force-open HTML5 <details> elements
+document.querySelectorAll('details:not([open])').forEach(el => { el.open = true; });
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +300,20 @@ async def cmd_fetch(args):
             output_dir = args.output
         # If merge, output is a file path
 
+    # Resolve JS code
+    js_code = None
+    js_parts = []
+    if args.expand_all:
+        js_parts.append(EXPAND_ALL_JS)
+    if args.js:
+        js_parts.append(args.js)
+    if args.js_file:
+        js_parts.append(Path(args.js_file).read_text(encoding="utf-8"))
+    if js_parts:
+        js_code = js_parts if len(js_parts) > 1 else js_parts[0]
+
+    delay_after_js = 2.0 if (js_code or args.scroll_full) else 0.1
+
     # Fetch
     results = await batch_fetch(
         urls,
@@ -247,6 +323,10 @@ async def cmd_fetch(args):
         wait_ms=args.wait,
         raw=args.raw,
         selector=args.selector,
+        js_code=js_code,
+        wait_for=args.wait_for,
+        scan_full_page=args.scroll_full,
+        delay_after_js=delay_after_js,
     )
 
     # Apply max-lines
@@ -363,6 +443,50 @@ async def cmd_openapi(args):
         print(markdown)
 
 
+async def cmd_exec(args):
+    """Execute JavaScript on a page and return results."""
+    # Resolve JS
+    js = None
+    if args.js:
+        js = args.js
+    elif args.js_file:
+        js = Path(args.js_file).read_text(encoding="utf-8")
+    else:
+        print("ERROR: Provide --js or --js-file", file=sys.stderr)
+        sys.exit(1)
+
+    if args.then_fetch:
+        # Execute JS then fetch page as markdown
+        results = await batch_fetch(
+            [args.url],
+            output_dir=args.output if args.output and args.output.endswith("/") else None,
+            engine="cdp",
+            wait_ms=args.wait,
+            raw=args.raw,
+            selector=args.selector,
+            js_code=js,
+            delay_after_js=2.0,
+        )
+        if args.output and not args.output.endswith("/"):
+            merged = merge_results(results)
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(merged, encoding="utf-8")
+            print(f"✅ Saved → {args.output}", file=sys.stderr)
+        elif not args.output:
+            for r in results:
+                if r.get("markdown"):
+                    print(r["markdown"])
+    else:
+        result = await exec_js(
+            args.url,
+            js_code=js,
+            wait_ms=args.wait,
+            session_id=args.session,
+            js_only=args.js_only,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -379,6 +503,8 @@ def main():
         asyncio.run(cmd_discover(args))
     elif args.command == "fetch":
         asyncio.run(cmd_fetch(args))
+    elif args.command == "exec":
+        asyncio.run(cmd_exec(args))
     elif args.command == "openapi":
         asyncio.run(cmd_openapi(args))
 

@@ -1,15 +1,12 @@
 ---
 name: web-scraper
+description: >-
+  Web scraper with SPA/JavaScript rendering, page interaction, and JS execution.
+  Two-tier engine (HTTP → Playwright browser).
+  Smart discovery, batch fetch, interactive content extraction, OpenAPI parsing.
+  Use when read_url_content fails, SPA rendering needed, or page interaction required.
 metadata:
-  version: 0.0.5
-description: 'Web scraper with SPA/JavaScript rendering. Two-tier engine (HTTP → Playwright
-  browser).
-
-  Smart discovery, batch fetch, stealth mode, OpenAPI extraction.
-
-  Use when read_url_content fails or SPA rendering needed.
-
-  '
+  version: 0.2.0
 ---
 
 # Web Scraper
@@ -35,8 +32,8 @@ L0: Pure HTTP (httpx + selectolax + markdownify)
     fetch → strip boilerplate → markdownify → clean content
 
 L1: Browser (crawl4ai + Playwright, networkidle wait)
-    fetch → PruningContentFilter → fit_markdown → clean content
-    Handles: SPAs, anti-bot, JS-rendered content
+    fetch → [JS interaction] → PruningContentFilter → fit_markdown → clean content
+    Handles: SPAs, anti-bot, JS-rendered content, folded/lazy content
 
 Auto mode: L0 probe → detect SPA/empty → fallback to L1
 
@@ -50,13 +47,48 @@ Smart Discovery (3-tier):
 
 ```bash
 # Auto-detects if browser needed
-./scrape fetch https://open.feishu.cn/document/server-docs/im-v1/message/create
+./scrape fetch https://docs.example.com/api/create
 
 # Force browser for known SPA sites
-./scrape fetch https://developer.work.weixin.qq.com/document/path/90664 --engine cdp
+./scrape fetch https://open.feishu.cn/document/... --engine cdp
 
 # Precision extraction with CSS selector
 ./scrape fetch https://developer.work.weixin.qq.com/document/path/90196 --engine cdp --selector ".ep-doc-area"
+```
+
+### Interactive content extraction (SPA/folded content)
+
+```bash
+# Auto-expand all collapsed/folded sections (universal preset)
+./scrape fetch https://open.feishu.cn/document/... --expand-all --wait 5000
+
+# Scroll through entire page to trigger lazy loading
+./scrape fetch https://example.com/infinite-scroll --scroll-full
+
+# Custom JavaScript before extraction
+./scrape fetch URL --js "document.querySelectorAll('.expand-btn').forEach(e => e.click())"
+
+# JS from file (for complex interactions)
+./scrape fetch URL --js-file /path/to/interact.js --wait 5000
+
+# Wait for specific element before extraction
+./scrape fetch URL --wait-for ".api-response-table"
+
+# Combine: expand + custom JS + wait
+./scrape fetch URL --expand-all --js "extraAction()" --wait-for ".loaded" -o /tmp/docs/
+```
+
+### Execute JavaScript on a page
+
+```bash
+# Execute JS and return metadata (no markdown conversion)
+./scrape exec URL --js "return document.title"
+
+# Extract data from page's JavaScript state
+./scrape exec URL --js "return JSON.stringify(window.__NEXT_DATA__)"
+
+# Execute JS then fetch page as markdown
+./scrape exec URL --js "expandAll()" --then-fetch -o /tmp/result.md
 ```
 
 ### Batch-download documentation
@@ -96,11 +128,19 @@ Files are automatically named by page title (e.g., `读取成员.md`, `Getting_S
 | Option | Commands | Description |
 |--------|----------|-------------|
 | `--engine MODE` | discover, fetch | `auto` (default), `http` (L0 only), `cdp` (L1 only) |
-| `--selector CSS` | fetch | CSS selector for content area (precision mode) |
-| `--raw` | fetch | Output full page (skip content filtering) |
+| `--selector CSS` | fetch, exec | CSS selector for content area (precision mode) |
+| `--raw` | fetch, exec | Output full page (skip content filtering) |
+| `--js CODE` | fetch, exec | JavaScript to execute before extraction |
+| `--js-file PATH` | fetch, exec | JavaScript file to execute before extraction |
+| `--wait-for CSS` | fetch | Wait for CSS selector to appear before extraction |
+| `--expand-all` | fetch | Auto-expand collapsed/folded sections (universal preset) |
+| `--scroll-full` | fetch | Scroll entire page to trigger lazy loading |
+| `--then-fetch` | exec | After JS execution, also fetch page as markdown |
+| `--session ID` | exec | Reuse browser session for multi-step interactions |
+| `--js-only` | exec | Skip navigation, execute JS on existing session |
 | `--auto` | fetch | Auto-discover pages then fetch all |
 | `--from-file FILE` | fetch | Read URLs from file (one per line) |
-| `-o PATH` | fetch, openapi | Output directory or file path |
+| `-o PATH` | fetch, exec, openapi | Output directory or file path |
 | `--merge` | fetch | Merge all pages into single markdown |
 | `--json` | discover, fetch | Machine-readable JSON output |
 | `--summary-only` | fetch | Only show URL, title, char count |

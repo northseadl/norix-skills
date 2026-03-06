@@ -60,6 +60,24 @@
             "prompt": "帮我在本地建一套飞书消息 API 的参考文档，按接口分文件",
             "expected_output": "Agent follows 'Build organized local documentation' workflow: discover → filter URLs → write to file → fetch --from-file -o dir/ → organize files by API category",
             "files": []
+        },
+        {
+            "id": 11,
+            "prompt": "飞书 API 文档的响应体字段是折叠的，抓取时展开不了，帮我把完整内容抓下来",
+            "expected_output": "Agent uses --js flag with targeted JS to click expand buttons before extraction, or uses --expand-all preset. Falls back to custom JS if preset insufficient",
+            "files": []
+        },
+        {
+            "id": 12,
+            "prompt": "I need to execute some JavaScript on a SPA page to extract hidden data from window.__NEXT_DATA__",
+            "expected_output": "Agent uses web-scraper exec command with --js to execute JS on the page and return the result as JSON",
+            "files": []
+        },
+        {
+            "id": 13,
+            "prompt": "这个页面有无限滚动加载，普通抓取只能拿到一部分内容",
+            "expected_output": "Agent uses --scroll-full flag to scroll through entire page triggering lazy loading before content extraction",
+            "files": []
         }
     ]
 }
