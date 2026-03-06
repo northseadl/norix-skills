@@ -1,4 +1,4 @@
 interface:
   display_name: "飞书集成"
-  short_description: "Feishu tasks, docs, wiki, bitable, Drive CLI"
-  default_prompt: "Use $feishu-integration to manage Feishu documents and tasks."
+  short_description: "Feishu tasks, docs, wiki, bitable, messaging, approval CLI"
+  default_prompt: "Use $feishu-integration to search, read, write Feishu documents, manage tasks, send messages, or handle approvals."

@@ -591,8 +591,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--token", default="", help="Folder token to remove")
     p.add_argument("--all", action="store_true", help="Remove all cached shared folders")
 
-    p = sub.add_parser("search", help="Search files by name")
+    p = sub.add_parser("search", help="Search files by name (Drive only, filename match)")
     p.add_argument("--name", required=True, help="File name keyword")
+
+    p = sub.add_parser("search-content", help="Full-text search across all docs/wiki (Feishu search API)")
+    p.add_argument("--query", required=True, help="Search keyword")
+    p.add_argument("--count", type=int, default=20, help="Max results (default: 20, max: 50)")
+    p.add_argument("--type", default="", help="Filter by doc type: docx, doc, sheet, bitable, wiki (comma-separated)")
+    p.add_argument("--read", action="store_true", help="Auto-read the first matched document")
 
     p = sub.add_parser("read-raw", help="Read document as raw text (fast)")
     p.add_argument("--document-id", default="", help="Document token")
@@ -607,6 +613,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--type", default="docx", help="File type (docx, doc, sheet, bitable)")
     p.add_argument("--folder-token", required=True, help="Target folder token")
     p.add_argument("--name", default="", help="New name (default: original name)")
+
+    p = sub.add_parser("export", help="Export document to local Markdown file")
+    p.add_argument("--document-id", default="", help="Document token")
+    p.add_argument("--name", default="", help="Find by name (alternative to --document-id)")
+    p.add_argument("--output", default="", help="Output file path (default: <title>.md)")
 
     return parser
 
@@ -792,6 +803,60 @@ def main():
             print(f"  [{f.get('type', '?'):7}] {f.get('name', ''):40} {f.get('token', '')}")
         print(f"\n  Matched: {len(matched)}/{len(files)}")
 
+    elif args.command == "search-content":
+        # Full-text search via Feishu search API
+        body: dict = {
+            "search_key": args.query,
+            "count": min(args.count, 50),
+            "offset": 0,
+            "owner_ids": [],
+            "chat_ids": [],
+            "docs_types": [],
+        }
+        if args.type:
+            body["docs_types"] = [t.strip() for t in args.type.split(",")]
+
+        result = client.post("/suite/docs-api/search/object", body)
+        data = result.get("data", {})
+        docs = data.get("docs_entities", [])
+        total = data.get("total", 0)
+        has_more = data.get("has_more", False)
+
+        if not docs:
+            Log.warn(f"No results for '{args.query}'")
+            sys.exit(0)
+
+        FEISHU_BASE = "https://feishu.cn"
+        for i, doc in enumerate(docs, 1):
+            dtype = doc.get("docs_type", "?")
+            title = doc.get("title", "(untitled)")
+            token = doc.get("docs_token", "")
+            url = f"{FEISHU_BASE}/{dtype}/{token}" if dtype in ("docx", "doc", "sheet") else f"{FEISHU_BASE}/wiki/{token}"
+            print(f"  {i:2}. [{dtype:7}] {title}")
+            print(f"       token: {token}  url: {url}")
+
+        suffix = " (more available)" if has_more else ""
+        print(f"\n  Showing: {len(docs)}/{total}{suffix}")
+
+        # Auto-read first result if --read flag is set
+        if args.read and docs:
+            first = docs[0]
+            first_token = first.get("docs_token", "")
+            first_type = first.get("docs_type", "")
+            Log.info(f"Reading: {first.get('title', '?')} ({first_token})")
+            if first_type in ("docx", "doc"):
+                items = client.get_all(
+                    f"/docx/v1/documents/{first_token}/blocks",
+                    params={"page_size": "500", "document_revision_id": "-1"},
+                )
+                for block in items:
+                    bt = block.get("block_type", 0)
+                    text = _extract_text(block, bt)
+                    if text is not None:
+                        print(text)
+            else:
+                Log.warn(f"Auto-read only supports docx/doc, got '{first_type}'")
+
     elif args.command == "read-raw":
         doc_id = args.document_id
         if not doc_id and args.name:
@@ -905,6 +970,57 @@ def main():
         else:
             Log.error("Provide --token or --all.")
             sys.exit(1)
+
+    elif args.command == "export":
+        # Export document to local Markdown file
+        doc_id = args.document_id
+        if not doc_id and args.name:
+            files = client.get_all("/drive/v1/files", params={
+                "page_size": "200", "order_by": "EditedTime", "direction": "DESC",
+            }, items_key="files")
+            keyword = args.name.lower()
+            matched = [f for f in files
+                       if f.get("type") == "docx" and keyword in f.get("name", "").lower()]
+            if not matched:
+                Log.error(f"No docx matching '{args.name}'")
+                sys.exit(1)
+            doc_id = matched[0]["token"]
+            Log.info(f"Found: {matched[0].get('name', '?')} ({doc_id})")
+
+        if not doc_id:
+            Log.error("Specify --document-id or --name")
+            sys.exit(1)
+
+        # Get document title for default filename
+        doc_info = client.get(f"/docx/v1/documents/{doc_id}")
+        title = doc_info.get("data", {}).get("document", {}).get("title", "untitled")
+
+        # Read all blocks
+        items = client.get_all(
+            f"/docx/v1/documents/{doc_id}/blocks",
+            params={"page_size": "500", "document_revision_id": "-1"},
+        )
+
+        # Render to markdown
+        md_lines = []
+        for block in items:
+            bt = block.get("block_type", 0)
+            text = _extract_text(block, bt)
+            if text is not None:
+                md_lines.append(text)
+
+        md_content = "\n\n".join(md_lines)
+
+        # Determine output path
+        out_path = args.output
+        if not out_path:
+            # Sanitize title for filename
+            safe_title = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
+            out_path = f"{safe_title}.md"
+
+        with open(out_path, "w") as f:
+            f.write(md_content)
+        Log.ok(f"Exported: {out_path} ({len(md_lines)} blocks, {len(md_content)} chars)")
 
 
 def _render_elements_to_md(elems: List[dict]) -> str:

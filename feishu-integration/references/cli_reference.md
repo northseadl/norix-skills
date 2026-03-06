@@ -45,7 +45,13 @@
 # Browse
 ./feishu doc list [--type docx|sheet|bitable] [--folder "token"] [--shared]
 ./feishu doc tree [--depth N] [--shared]
-./feishu doc search --name "keyword"
+./feishu doc search --name "keyword"              # Filename match (Drive only)
+
+# Full-text search (all docs + wiki, powered by Feishu search API)
+./feishu doc search-content --query "退款"                     # Search all docs
+./feishu doc search-content --query "库存" --count 10          # Limit results
+./feishu doc search-content --query "数据" --type docx,wiki    # Filter by type
+./feishu doc search-content --query "退款" --read              # Search + auto-read first match
 
 # Shared folders (Feishu API cannot auto-discover shared folders)
 ./feishu doc shared-add --url "https://xxx.feishu.cn/drive/folder/TOKEN"
@@ -69,6 +75,11 @@
 
 # Delete
 ./feishu doc trash --token "file_token" [--type sheet|docx]
+
+# Export to local Markdown file
+./feishu doc export --document-id "token" --output path.md       # Export by token
+./feishu doc export --name "keyword" --output path.md            # Export by name
+./feishu doc export --document-id "token"                        # Auto-named: <title>.md
 ```
 
 ## Wiki
@@ -83,7 +94,54 @@
 ./feishu wiki node-update --space-id "xxxx" --node-token "xxx" --title "New"
 ./feishu wiki node-move --space-id "xxxx" --node-token "xxx" --target-parent-token "yyy"
 ./feishu wiki create-from-markdown --space-id "xxxx" --title "Title" --file path.md
+
+# Search wiki nodes by title keyword
+./feishu wiki search --query "退款"                     # Search all spaces
+./feishu wiki search --query "退款" --space-id "xxxx"   # Search specific space
+./feishu wiki search --query "退款" --read              # Search + auto-read first match
 ```
+
+## Message (IM)
+
+```bash
+# Send message
+./feishu msg send --chat-id "oc_xxx" --text "消息内容"      # Send text to chat
+./feishu msg send --user "张三" --text "消息内容"            # Send text to user
+./feishu msg send --chat-id "oc_xxx" --card card.json       # Send interactive card
+./feishu msg send --chat-id "oc_xxx" --post "**重要**通知\n详情见[链接](https://...)" --title "标题"   # Rich-text post
+
+# Chats
+./feishu msg chats                          # List all joined chats
+./feishu msg chats --name "产品"            # Filter by name
+./feishu msg chat-info --chat-id "oc_xxx"   # Get chat details
+
+# History
+./feishu msg history --chat-id "oc_xxx" [--count 20]   # Message history
+```
+
+> **Note**: IM commands require `im:message`, `im:chat:readonly` scopes.
+> Enable them in Feishu Developer Console → Application → Permissions first.
+
+## Approval (审批)
+
+```bash
+# Definitions (templates)
+./feishu approval list-definitions [--limit 20]                    # List available templates
+./feishu approval get-definition --code "approval_code"            # Get template details + form fields
+
+# Instances
+./feishu approval create --code "approval_code" --form '{"field_id": "value"}' [--approvers "ou_xxx,ou_yyy"]
+./feishu approval get --instance-id "instance_id"                  # Get instance status + timeline
+./feishu approval list --code "approval_code" [--status PENDING]   # List instances
+
+# Actions
+./feishu approval approve --instance-id "id" --task-id "tid" [--comment "同意"]
+./feishu approval reject --instance-id "id" --task-id "tid" [--comment "理由"]
+./feishu approval cancel --instance-id "id" [--reason "理由"]
+```
+
+> **Note**: Approval list/get definitions use tenant_access_token (auto-handled).
+> Requires `approval:approval` scope in Feishu Developer Console.
 
 ## Bitable
 
