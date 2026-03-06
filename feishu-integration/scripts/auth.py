@@ -51,6 +51,9 @@ CORE_SCOPES = [
     "drive:file:readonly",
     "wiki:wiki:readonly", "wiki:wiki",
     "bitable:app:readonly", "bitable:app",
+    # IM — messaging and chat (requires app-level permission in Feishu console first)
+    "im:message", "im:message:send_as_bot",
+    "im:chat:readonly", "im:chat",
 ]
 
 FEATURE_SCOPES = {

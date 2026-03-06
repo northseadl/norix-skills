@@ -7,6 +7,8 @@
 #   task     Task management (task.py)
 #   wiki     Knowledge base (wiki.py)
 #   bitable  Bitable / 多维表格 (bitable.py)
+#   msg      Messaging — send, chats, history (msg.py)
+#   approval Approval workflows (approval.py)
 #   member   Member directory (members.py)
 #   auth     Authentication (auth.py)
 
@@ -28,20 +30,30 @@ case "$module" in
     exec python3 "$SCRIPT_DIR/members.py" "$@" ;;
   auth)
     exec python3 "$SCRIPT_DIR/auth.py" "$@" ;;
+  msg|message|im)
+    exec python3 "$SCRIPT_DIR/msg.py" "$@" ;;
+  approval|approve)
+    exec python3 "$SCRIPT_DIR/approval.py" "$@" ;;
   help|--help|-h)
     echo "Usage: feishu <module> <command> [options]"
     echo ""
     echo "Modules:"
-    echo "  doc      Documents & Drive (list, search, read-raw, create, trash)"
+    echo "  doc      Documents & Drive (list, search, search-content, read-raw, create)"
     echo "  task     Tasks (create, list, get, update, complete, delete)"
     echo "  wiki     Knowledge base (space-list, node-list, node-read, tree)"
     echo "  bitable  多维表格 (list-tables, list-records, export, create-record)"
+    echo "  msg      Messaging (send, chats, chat-info, history)"
+    echo "  approval Approval (审批: list-definitions, create, get, approve, reject)"
     echo "  member   Members (scan, find, list, whoami)"
     echo "  auth     Authentication (login, relogin, refresh, status)"
     echo ""
     echo "Examples:"
+    echo "  feishu doc search-content --query \"退款\"      # Full-text search"
+    echo "  feishu doc search-content --query \"库存\" --read  # Search + auto-read"
     echo "  feishu doc list"
     echo "  feishu doc read-raw --name \"数据采集\""
+    echo "  feishu msg send --chat-id oc_xxx --text \"消息内容\""
+    echo "  feishu msg chats --name \"产品\""
     echo "  feishu task list --keyword \"project-x\""
     echo "  feishu wiki node-read --token \"xxx\""
     echo "  feishu bitable list-records --app-token \"xxx\" --table-id \"yyy\""

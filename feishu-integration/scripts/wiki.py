@@ -87,6 +87,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--parent-node-token", default="", help="Target parent node (empty = root)")
     p.add_argument("--dry-run", action="store_true", help="Preview without executing")
 
+    p = sub.add_parser("search", help="按关键词搜索知识空间节点标题")
+    p.add_argument("--query", required=True, help="Search keyword")
+    p.add_argument("--space-id", default="", help="Limit to specific space (default: all spaces)")
+    p.add_argument("--read", action="store_true", help="Auto-read the first matched node")
+
     return parser
 
 
@@ -310,6 +315,79 @@ def main():
             parent_node_token=args.parent_node_token,
             dry_run=args.dry_run,
         )
+
+    elif args.command == "search":
+        # Collect all nodes from target space(s), filter by keyword
+        keyword = args.query.lower()
+
+        # Determine which spaces to search
+        if args.space_id:
+            spaces = [{"space_id": args.space_id, "name": args.space_id}]
+        else:
+            spaces = client.get_all("/wiki/v2/spaces", params={"page_size": "50"})
+            if not spaces:
+                Log.warn("No wiki spaces accessible.")
+                sys.exit(0)
+
+        # Recursive node collector
+        def _collect_nodes(space_id: str, parent_token: str = "", path: str = "") -> list:
+            params: dict = {"page_size": "50"}
+            if parent_token:
+                params["parent_node_token"] = parent_token
+            items = client.get_all(f"/wiki/v2/spaces/{space_id}/nodes", params=params)
+            results = []
+            for n in items:
+                title = n.get("title", "")
+                node_path = f"{path}/{title}" if path else title
+                n["_path"] = node_path
+                n["_space_id"] = space_id
+                results.append(n)
+                if n.get("has_child"):
+                    results.extend(_collect_nodes(space_id, n.get("node_token", ""), node_path))
+                    time.sleep(0.1)
+            return results
+
+        # Search across spaces
+        all_matches = []
+        for space in spaces:
+            sid = space.get("space_id", "")
+            sname = space.get("name", sid)
+            Log.info(f"Scanning: {sname} ...")
+            nodes = _collect_nodes(sid)
+            matched = [n for n in nodes if keyword in n.get("title", "").lower()]
+            for m in matched:
+                m["_space_name"] = sname
+            all_matches.extend(matched)
+
+        if not all_matches:
+            Log.warn(f"No wiki nodes matching '{args.query}'")
+            sys.exit(0)
+
+        for i, m in enumerate(all_matches, 1):
+            obj_type = m.get("obj_type", "?")
+            title = m.get("title", "")
+            node_token = m.get("node_token", "")
+            space_name = m.get("_space_name", "")
+            path = m.get("_path", "")
+            print(f"  {i:2}. [{obj_type:6}] {title}")
+            print(f"       space: {space_name}  path: {path}  token: {node_token}")
+        print(f"\n  Matched: {len(all_matches)}")
+
+        # Auto-read first match
+        if args.read and all_matches:
+            first = all_matches[0]
+            ft = first.get("node_token", "")
+            obj_token = first.get("obj_token", "")
+            obj_type = first.get("obj_type", "")
+            Log.info(f"Reading: {first.get('title', '?')}")
+            if obj_type == "docx" and obj_token:
+                result = client.get(f"/docx/v1/documents/{obj_token}/raw_content")
+                if result.get("code", -1) == 0:
+                    print(result.get("data", {}).get("content", ""))
+                else:
+                    Log.error(f"Read failed: {result.get('msg', '?')}")
+            else:
+                Log.warn(f"Auto-read only supports docx, got '{obj_type}'")
 
 
 # ─── Drive → Wiki Import Engine ─────────────────────────────────────────────

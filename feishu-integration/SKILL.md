@@ -1,13 +1,13 @@
 ---
 name: feishu-integration
 metadata:
-  version: 0.2.1
-description: 'Feishu (Lark) unified CLI: tasks, documents, wiki, bitable (multi-table),
-  and Drive management.
-
-  Supports create/edit/publish/export across all modules.
-
-  '
+  version: 0.4.0
+description: >
+  Feishu (Lark) unified CLI for tasks, documents, wiki, bitable, messaging,
+  approval, and Drive. Supports search/create/edit/publish/export across all
+  modules. Use when reading/writing Feishu docs, searching docs or wiki,
+  managing tasks, sending messages, creating approvals, exporting to Markdown,
+  or any 飞书/Lark interaction.
 ---
 
 # Feishu Integration
@@ -45,10 +45,15 @@ If no credentials exist, guide user through first-use setup:
 |---|---|
 | 浏览文件 | `doc list` or `doc tree` |
 | 搜索+读取 | `doc read-raw --name "keyword"` |
+| **全文搜索** | `doc search-content --query "退款"` |
+| **搜索+自动读取** | `doc search-content --query "库存" --read` |
+| **按类型过滤搜索** | `doc search-content --query "数据" --type docx,wiki` |
 | 从 MD 创建 | `doc create-from-markdown --file path.md` |
 | 追加内容 | `doc append-markdown --document-id ID --file content.md` |
 | 清理 | `doc list` → `doc trash --token TOKEN` |
 | 共享 | `doc shared-add --url "..."` (user provides URL) |
+| **导出为 Markdown** | `doc export --document-id TOKEN --output path.md` |
+| **按名称导出** | `doc export --name "方案"` |
 
 #### Batch Upload with Cross-Document Linking
 
@@ -72,12 +77,42 @@ Auto-handled by `create-from-markdown`:
 | 看知识库 | `wiki space-list` → `wiki tree --space-id ID` |
 | 读页面 | `wiki node-read --token TOKEN` |
 | 发方案到 wiki | `wiki create-from-markdown --space-id ID --file path.md` |
+| **搜索知识库** | `wiki search --query "关键词"` |
+| **搜索+读取** | `wiki search --query "退款" --read` |
+| **搜索指定空间** | `wiki search --query "退款" --space-id ID` |
+
+### Message
+
+| Intent | Command |
+|---|---|
+| 发消息到群 | `msg send --chat-id oc_xxx --text "消息内容"` |
+| 发消息给个人 | `msg send --user "张三" --text "消息内容"` |
+| 发卡片消息 | `msg send --chat-id oc_xxx --card card.json` |
+| 查看群列表 | `msg chats` |
+| 按名称找群 | `msg chats --name "产品"` |
+| 查看群详情 | `msg chat-info --chat-id oc_xxx` |
+| 查看消息记录 | `msg history --chat-id oc_xxx [--count 20]` |
+| **发富文本消息** | `msg send --chat-id oc_xxx --post "内容" --title "标题"` |
+
+### Approval (审批)
+
+| Intent | Command |
+|---|---|
+| 查看审批模板 | `approval list-definitions` |
+| 查看模板详情 | `approval get-definition --code CODE` |
+| 创建审批 | `approval create --code CODE --form '{...}'` |
+| 查看审批详情 | `approval get --instance-id ID` |
+| 列出审批实例 | `approval list --code CODE [--status PENDING]` |
+| 同意审批 | `approval approve --instance-id ID --task-id TID` |
+| 拒绝审批 | `approval reject --instance-id ID --task-id TID --comment "理由"` |
+| 撤销审批 | `approval cancel --instance-id ID` |
 
 ### Bitable
 
 | Intent | Command |
 |---|---|
 | 看表格数据 | `bitable list-tables` → `bitable list-records --json` |
+| **按条件筛选** | `bitable list-records --filter 'CurrentValue.[status]="active"'` |
 | 导出 | `bitable export --format csv --output path.csv` |
 | 写入/更新 | `bitable create-record` / `bitable update-record` |
 | 批量 | `bitable batch-create --file records.json` (auto-chunks at 500) |
@@ -129,9 +164,11 @@ feishu-integration/
 │   ├── feishu_api.py     ← Core (auth + HTTP + retry + pagination)
 │   ├── auth.py           ← OAuth2 (login/refresh/relogin/incremental)
 │   ├── task.py           ← Task v2 (table + JSON output)
-│   ├── docx.py           ← Document & Drive
+│   ├── docx.py           ← Document & Drive (+ full-text search)
 │   ├── wiki.py           ← Knowledge base
 │   ├── bitable.py        ← Bitable (多维表格)
+│   ├── msg.py            ← Messaging (send/chats/history + rich-text post)
+│   ├── approval.py       ← Approval (审批: create/get/list/approve/reject)
 │   └── members.py        ← Member directory (scan/cache/resolve/reverse-resolve)
 ├── evals/
 │   └── evals.json        ← Test cases
