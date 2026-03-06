@@ -1,13 +1,12 @@
 ---
 name: agent-front-design
-version: 0.1.1
-description: |
-  前端卓越设计技能 — 输出可实施的高质量前端方案规格。
-  核心能力：设计哲学锚定、反 AI 审美同质化、Design Token 三层架构、
-  现代 CSS 工程实践、动效体系、七维质量门禁、React/Vue 工程交接。
-  Use for: frontend design, UI/UX blueprints, design systems, component design,
-  page layout, design review, design handoff, visual specifications.
-  Triggers: "前端设计方案", "UI方案", "设计系统", "Design Token", "设计评审", "design spec".
+metadata:
+  version: 0.1.2
+description: 'Frontend design blueprints with quality scoring and engineering handoff.
+
+  Anti-AI-aesthetic-homogeneity, Design Token architecture, CSS engineering.
+
+  '
 ---
 
 # 前端卓越设计技能

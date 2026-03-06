@@ -19,6 +19,10 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+from credential_store import CredentialStore
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -75,19 +79,29 @@ CREDENTIALS_FILE = Path.home() / ".agents" / "data" / "image-studio" / "credenti
 # Support both naming conventions
 ENV_KEY_NAMES = ["NANOBANANA_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"]
 
+_VAULT_ACCOUNT = "api-key"
+_cred_store = CredentialStore("image-studio", str(CREDENTIALS_FILE.parent))
+
 
 def _resolve_api_key() -> str:
-    """Resolve API key from environment or credentials file. Never hardcode."""
+    """Resolve API key from environment, vault, or credentials file. Never hardcode."""
     for env_name in ENV_KEY_NAMES:
         key = os.environ.get(env_name)
         if key:
             return key
 
+    # Try encrypted vault first
+    vault_key = _cred_store.get(_VAULT_ACCOUNT)
+    if vault_key:
+        return vault_key
+
+    # Legacy: read from plaintext JSON file (auto-migrate to vault on first read)
     if CREDENTIALS_FILE.exists():
         try:
             data = json.loads(CREDENTIALS_FILE.read_text())
             key = data.get("api_key")
-            if key:
+            if key and not key.startswith("***"):
+                _cred_store.set(_VAULT_ACCOUNT, key)
                 return key
         except (json.JSONDecodeError, KeyError):
             pass
@@ -99,20 +113,21 @@ def _resolve_api_key() -> str:
 
 
 def save_credentials(api_key: str) -> None:
-    """Persist API key to ~/.agents/data/image-studio/credentials.json."""
+    """Persist API key to encrypted vault + masked JSON file."""
+    _cred_store.set(_VAULT_ACCOUNT, api_key)
+    # Write masked file for status display
     CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CREDENTIALS_FILE.write_text(json.dumps({"api_key": api_key}, indent=2))
+    CREDENTIALS_FILE.write_text(json.dumps({"api_key": "***vault***"}, indent=2))
     CREDENTIALS_FILE.chmod(0o600)
-    print(f"Credentials saved to {CREDENTIALS_FILE}")
+    print(f"Credentials saved to encrypted vault ({CREDENTIALS_FILE.parent})")
 
 
 def clear_credentials() -> None:
-    """Remove stored credentials."""
+    """Remove stored credentials from vault and file."""
+    _cred_store.delete(_VAULT_ACCOUNT)
     if CREDENTIALS_FILE.exists():
         CREDENTIALS_FILE.unlink()
-        print("Credentials cleared.")
-    else:
-        print("No credentials file found.")
+    print("Credentials cleared.")
 
 
 def resolve_model(model_input: str) -> str:

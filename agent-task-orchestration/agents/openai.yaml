@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent 任务编排"
+  short_description: "Multi-agent task decomposition and orchestration"
+  default_prompt: "Use $agent-task-orchestration to decompose and execute tasks."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent 头脑风暴"
+  short_description: "Multi-agent async brainstorm with expert personas"
+  default_prompt: "Use $agent-brainstorm to run a multi-perspective discussion."

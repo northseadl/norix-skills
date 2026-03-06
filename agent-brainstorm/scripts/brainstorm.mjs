@@ -929,6 +929,7 @@ async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
       cwd: config.cwd,
       permissionMode,
       systemPrompt: { type: "preset", preset: "claude_code" },
+      disallowedTools: ["ToolSearch"],
       settingSources: ["project"],
       maxTurns: 30,
     },
@@ -959,8 +960,8 @@ async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
     }
     if (msg.type === "result") {
       const usage = msg.usage || {};
-      log("INFO", `  ${agent.id} | tokens: in=${usage.input_tokens || 0} out=${usage.output_tokens || 0} cost=$${msg.total_cost_usd?.toFixed(4) || "?"}`);
-      space.updateAgentActivity(agent.id, { text: `Done (${msg.num_turns || 0} turns, $${msg.total_cost_usd?.toFixed(4) || "?"})` });
+      log("INFO", `  ${agent.id} | tokens: in=${usage.input_tokens || 0} out=${usage.output_tokens || 0} turns=${msg.num_turns || 0}`);
+      space.updateAgentActivity(agent.id, { text: `Done (${msg.num_turns || 0} turns, ${(usage.input_tokens || 0) + (usage.output_tokens || 0)} tokens)` });
     }
   }
 }

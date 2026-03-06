@@ -17,7 +17,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
 from feishu_api import FeishuClient, Log, iso_to_timestamp, output
-from members import resolve_members
+from members import resolve_members, resolve_ids_to_names
 
 AGENT_SIGNATURE = "[Agent] Automated action"
 
@@ -73,6 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--page-token", default="")
     p.add_argument("--completed", default="", help="true/false")
     p.add_argument("--keyword", default="", help="Filter by keyword in summary")
+    p.add_argument("--format", choices=["table", "json"], default="table",
+                   help="Output format (default: table)")
 
     # add-member / remove-member
     for cmd_name in ("add-member", "remove-member"):
@@ -238,17 +240,19 @@ def main():
 
         if args.keyword:
             # Fetch all tasks for client-side filtering
-            all_tasks = client.get_all("/task/v2/tasks", params={"page_size": "100"}, items_key="items")
+            tasks = client.get_all("/task/v2/tasks", params={"page_size": "100"}, items_key="items")
             kw = args.keyword.lower()
-            matched = [t for t in all_tasks
-                       if kw in t.get("summary", "").lower()
-                       or kw in t.get("description", "").lower()]
-            for t in matched:
-                status = "done" if t.get("completed_at", "0") != "0" else "todo"
-                print(f"  [{status:4}] {t.get('summary', '?'):50} {t.get('guid', '')}")
-            print(f"\n  Matched: {len(matched)}/{len(all_tasks)}")
+            tasks = [t for t in tasks
+                     if kw in t.get("summary", "").lower()
+                     or kw in t.get("description", "").lower()]
         else:
-            output(client.get("/task/v2/tasks", params=params))
+            result = client.get("/task/v2/tasks", params=params)
+            tasks = result.get("data", {}).get("items", [])
+
+        if args.format == "json":
+            output({"tasks": tasks, "count": len(tasks)})
+        else:
+            _print_task_table(tasks)
 
     # ── Members ───────────────────────────────────────────────────────────
 
@@ -360,6 +364,58 @@ def main():
                 "page_size": str(args.page_size),
             },
         ))
+
+
+def _format_ts(ms_str: str) -> str:
+    """Convert millisecond timestamp string to YYYY-MM-DD. Returns '—' for empty/zero."""
+    if not ms_str or ms_str == "0":
+        return "—"
+    try:
+        ts = int(ms_str) / 1000
+        return time.strftime("%Y-%m-%d", time.localtime(ts))
+    except (ValueError, OSError):
+        return ms_str
+
+
+def _print_task_table(tasks: list):
+    """Print tasks as a Markdown table with member name resolution."""
+    if not tasks:
+        print("  (no tasks)")
+        return
+
+    # Collect all unique member ids for batch resolution
+    all_ids = set()
+    for t in tasks:
+        for m in t.get("members", []):
+            mid = m.get("id", "")
+            if mid:
+                all_ids.add(mid)
+
+    id_list = sorted(all_ids)
+    name_list = resolve_ids_to_names(id_list)
+    id_to_name = dict(zip(id_list, name_list))
+
+    # Build rows
+    rows = []
+    for t in tasks:
+        status = "✅" if t.get("completed_at", "0") != "0" else "⬚"
+        summary = t.get("summary", "?")[:50]
+        due_ts = t.get("due", {}).get("timestamp", "") if isinstance(t.get("due"), dict) else ""
+        due = _format_ts(due_ts)
+        assignees = [id_to_name.get(m["id"], m["id"][:10])
+                     for m in t.get("members", []) if m.get("role") == "assignee"]
+        assignee_str = ", ".join(assignees) if assignees else "—"
+        guid = t.get("guid", "")
+        url = t.get("url", "")
+        rows.append((status, summary, due, assignee_str, guid, url))
+
+    # Print Markdown table
+    print(f"  {'状态':<4} | {'标题':<50} | {'截止时间':<12} | {'负责人':<12} | Task ID")
+    print(f"  {'----':<4}-+-{'-'*50}-+-{'-'*12}-+-{'-'*12}-+--------")
+    for status, summary, due, assignee, guid, url in rows:
+        ref = f"[{guid[:8]}]({url})" if url else guid[:8]
+        print(f"  {status:<4} | {summary:<50} | {due:<12} | {assignee:<12} | {ref}")
+    print(f"\n  Total: {len(rows)} task(s)")
 
 
 if __name__ == "__main__":

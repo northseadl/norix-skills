@@ -259,9 +259,9 @@ async function runClaudeSession(sdk, task, config, store, estimate) {
         prompt,
         options: {
             cwd: config.cwd,
-            model: "claude-sonnet-4-20250514",
             permissionMode,
             systemPrompt: { type: "preset", preset: "claude_code" },
+            disallowedTools: ["ToolSearch"],
             settingSources: ["project"],
             maxTurns: 50,
         },
@@ -323,7 +323,7 @@ async function runClaudeSession(sdk, task, config, store, estimate) {
             });
             log(
                 "INFO",
-                `  T${task.id} | tokens: in=${usage.input_tokens || 0} out=${usage.output_tokens || 0} cost=$${msg.total_cost_usd?.toFixed(4) || "?"}`,
+                `  T${task.id} | tokens: in=${usage.input_tokens || 0} out=${usage.output_tokens || 0}`,
             );
 
             if (!tokenWarned && totalTokens > tokenThreshold) {

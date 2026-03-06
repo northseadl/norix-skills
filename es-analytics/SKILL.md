@@ -1,12 +1,10 @@
 ---
 name: es-analytics
-version: 0.1.1
-description: |
-  Elasticsearch / 阿里云 SLS ES 兼容层数据分析技能。通过纯 Python（urllib）连接 ES 或 SLS ES 兼容 API，
-  提供只读查询与分析：索引探索、mapping 查看、聚合统计、时间序列、search_after 分页。
-  多 Profile 管理，支持多集群快速切换。安全策略：只读模式，拦截写入，限制返回 200 条。
-  Use for: ES queries, log search, index exploration, mapping inspection, aggregations.
-  Triggers: "ES查询", "日志搜索", "SLS查询", "ES聚合", "Elasticsearch", "查日志".
+metadata:
+  version: 0.1.2
+description: 'Elasticsearch / SLS 只读数据分析：索引探索、mapping、聚合统计、日志搜索、时间序列、多 Profile。
+
+  '
 ---
 
 # ES 数据分析技能

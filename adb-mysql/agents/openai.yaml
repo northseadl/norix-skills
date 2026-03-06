@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADB MySQL 数据分析"
+  short_description: "AnalyticDB 只读 SQL 分析、Schema 文档生成"
+  default_prompt: "Use $adb-mysql to query and analyze AnalyticDB data."

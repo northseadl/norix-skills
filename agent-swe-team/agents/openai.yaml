@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent SWE Team"
+  short_description: "Role-based multi-agent team with git worktree"
+  default_prompt: "Use $agent-swe-team to build features with a role-based dev team."

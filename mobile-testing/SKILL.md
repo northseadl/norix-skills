@@ -1,14 +1,13 @@
 ---
 name: mobile-testing
-version: 0.0.2
-description: |
-  Mobile app automated testing and evaluation for Android and iOS.
-  Zero-dependency Python scripts wrapping adb and xcrun simctl for unified device management,
-  app installation, performance profiling, log analysis, screenshot capture/comparison,
-  and Maestro E2E test orchestration. Use for: testing apps, mobile evaluation,
-  performance profiling, E2E tests, device management, crash analysis, visual regression,
-  APK installation, app launch time measurement, logcat filtering, ANR detection.
-  Triggers: "测试App", "手机测试", "模拟器测试", "App性能", "崩溃分析", "Maestro测试".
+metadata:
+  version: 0.0.3
+description: 'Android/iOS automated testing: device management, app install, performance
+  profiling,
+
+  log analysis, screenshot comparison, Maestro E2E orchestration.
+
+  '
 ---
 
 # Mobile Testing — 移动应用自动化测试与评估

@@ -11,7 +11,7 @@
 
 # Read
 ./feishu task get --task-id "guid"
-./feishu task list [--completed true|false] [--keyword "text"] [--page-size N]
+./feishu task list [--completed true|false] [--keyword "text"] [--page-size N] [--format table|json]
 
 # Update
 ./feishu task update --task-id "guid" [--summary "new"] [--description "new"] [--due "ISO8601"] [--start "ISO8601"] [--clear-due] [--clear-start]

@@ -1,6 +1,10 @@
 # OS
 .DS_Store
 
+# Runtime output (skills)
+.brainstorm/
+.agent-team/
+
 # Node
 node_modules/
 package-lock.json

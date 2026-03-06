@@ -1,14 +1,12 @@
 ---
 name: agent-brainstorm
-version: 0.0.2
-description: |
-  Multi-agent brainstorming through async opinion collision spaces powered by Codex SDK or Claude Agent SDK.
-  Use for: brainstorming with multiple AI perspectives, structured multi-agent debate,
-  "war room" discussions with expert personas, converging on solutions from different angles.
-  Supports mixed engine mode: some agents on Codex, others on Claude Code.
-  Triggers: "头脑风暴", "多视角讨论", "Agent讨论", "方案选型讨论", "观点碰撞", "brainstorm".
-  NOT for: single-agent code review, task decomposition (use agent-task-orchestration),
-  document writing, or diagram generation.
+metadata:
+  version: 0.0.8
+  short-description: Multi-agent brainstorming with async opinion collision
+description: 'Multi-agent brainstorming: async opinion collision with expert personas.
+  Mixed Codex/Claude Code engine.
+
+  '
 ---
 
 # Agent 头脑风暴技能 — 异步观点碰撞空间
@@ -19,8 +17,8 @@ description: |
 头脑风暴的 Agent 通过一个**共享讨论空间**异步交换观点、质疑与建设性辩论，最终收敛到高质量方案。
 
 支持两种 Agent 引擎：
-- **Codex SDK** (`@openai/codex-sdk`) — OpenAI Codex 代理
-- **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) — Anthropic Claude Code 代理
+- **Codex SDK** (`openai-codex-sdk`) — OpenAI Codex 代理
+- **Claude Agent SDK** (`claude-agent-sdk`) — Anthropic Claude Code 代理
 
 **架构**:
 
@@ -52,26 +50,44 @@ description: |
 - **碰撞**：通过 `challenge/build/respond` 机制让观点互相校正，而不是并列堆叠。
 - **Fan-in**：由 Orchestrator 生成 `synthesis.md`，把共识/分歧/决策点收敛成一个可执行结论。
 
+## 前置条件
+
+运行需要 **Python ≥3.10** 和至少一个引擎已认证。
+
+**推荐路径**: `uv run` 自动处理 SDK 依赖（通过 PEP 723 inline metadata），无需手动安装。
+
+若 `uv` 不可用:
+```bash
+# 安装 uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# 或用 pip 手动安装 SDK
+pip install openai-codex-sdk claude-agent-sdk
+```
+
+**引擎认证** (至少完成一个):
+- **Claude**: 在终端运行 `claude` 完成交互登录，或 `export ANTHROPIC_API_KEY='sk-ant-...'`
+- **Codex**: 运行 `codex login`，或 `export OPENAI_API_KEY='sk-...'`
+
 ## 工具
 
 ```bash
-# 首次安装依赖
-cd <SKILLS_DIR>/agent-brainstorm && npm install
+# 使用 uv 自动安装依赖并运行（推荐）
+uv run <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py <session-file> [options]
 
-# 使用 Codex 引擎（默认）
-node scripts/brainstorm.mjs <session-file> [options]
+# 或直接运行（需先完成 pip install）
+python3 <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py <session-file> [options]
 
 # 使用 Claude Code 引擎
-node scripts/brainstorm.mjs <session-file> --engine claude [options]
+python3 scripts/brainstorm.py <session-file> --engine claude [options]
 
 # 查看历史
-node scripts/brainstorm.mjs --list --cwd <project-dir>
+python3 scripts/brainstorm.py --list --cwd <project-dir>
 
 # 查看状态
-node scripts/brainstorm.mjs --status --cwd <project-dir>
+python3 scripts/brainstorm.py --status --cwd <project-dir>
 
 # 清理
-node scripts/brainstorm.mjs --clean --cwd <project-dir>
+python3 scripts/brainstorm.py --clean --cwd <project-dir>
 ```
 
 ## 工作流
@@ -126,6 +142,7 @@ node scripts/brainstorm.mjs --clean --cwd <project-dir>
 - 每个 agent 可通过 `"engine": "codex"` 或 `"engine": "claude"` 指定引擎
 - 未指定则继承 CLI 的 `--engine` 参数（默认 codex）
 - 支持混合模式：同一场讨论中不同 agent 使用不同引擎
+- **引擎降级**：若指定引擎不可用，自动切换所有受影响 Agent 到可用引擎（而非阻断）
 
 **Agent 数量建议**: 3-5 个。太少缺乏碰撞，太多产生噪声。
 
@@ -139,7 +156,7 @@ node scripts/brainstorm.mjs --clean --cwd <project-dir>
 ### Phase 3: 启动讨论
 
 ```bash
-node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs \
+uv run <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.py \
   .brainstorm/session.json \
   --cwd <project-dir> \
   --approval-mode full-auto \
@@ -173,7 +190,7 @@ node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs \
 1. **查看 Web 面板**: 浏览器中实时查看讨论进展
 2. **查询状态**:
    ```bash
-   node scripts/brainstorm.mjs --status --cwd <project-dir>
+   python3 scripts/brainstorm.py --status --cwd <project-dir>
    ```
 3. **等待自然收敛**: 当超过半数 Agent 投票 conclude，讨论自动进入 synthesizing 阶段
 4. **超时兜底**: 到达 timeout 后自动结束
@@ -244,8 +261,22 @@ concluded  → 所有 Agent 完成或超时
 | 阀 | 值 | 触发后 |
 |:---|:---|:---|
 | 全局超时 | `--timeout` (默认 30min) | 强制 concluded |
+| SIGINT 保护 | 3 次 Ctrl+C | 讨论中 Ctrl+C 被拦截，3 次强制退出（保存状态） |
+| 引擎降级 | 自动 | 一个引擎不可用时自动切换到另一可用引擎 |
 | Agent session 上限 | SDK 内部控制 | Agent 自然结束 |
 | 最终产出 | synthesis.md | 即使讨论不完美也有记录 |
+
+## 故障诊断
+
+| 症状 | 原因 | 解决 |
+|:---|:---|:---|
+| `command not found: uv` | uv 未安装 | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `ModuleNotFoundError` | SDK 未安装且非 uv 路径 | `pip install openai-codex-sdk claude-agent-sdk` |
+| `Preflight failed` | CLI 未安装或未认证 | 见"前置条件"完成认证 |
+| Agent 长时间 0 posts | 模型不兼容标准工具集 | 确认 Claude Code 使用官方模型（非第三方代理模型） |
+| `API Error 400` | Agent 使用了不存在的工具 | 同上，模型兼容性问题 |
+| SIGINT 被拦截 | 讨论中 Ctrl+C 保护 | 连按 3 次 Ctrl+C 强制退出 |
+| 引擎降级日志 | 指定引擎不可用 | 正常行为，已自动切换 |
 
 ## 参考文档
 

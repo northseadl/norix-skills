@@ -10,10 +10,16 @@ import shutil
 import subprocess
 import sys
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+from credential_store import CredentialStore
+
 CONFIG_DIR = os.path.expanduser("~/.agents/data/adb-mysql")
 PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
 SCHEMA_DIR = os.path.join(CONFIG_DIR, "schema")
 MAX_ROWS = 200
+_VAULT_SENTINEL = "***vault***"
+_cred_store = CredentialStore("adb-mysql", CONFIG_DIR)
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +46,12 @@ def load_profiles():
 
 def save_profiles(data):
     ensure_config_dir()
+    # Extract passwords to encrypted vault before writing JSON
+    for name, profile in data.get("profiles", {}).items():
+        pw = profile.get("password", "")
+        if pw and pw != _VAULT_SENTINEL:
+            _cred_store.set(f"profile:{name}", pw)
+            profile["password"] = _VAULT_SENTINEL
     with open(PROFILES_FILE, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.chmod(PROFILES_FILE, 0o600)
@@ -161,6 +173,15 @@ def safe_clean(data_dir, skill_name):
 
 # ── Connection ───────────────────────────────────────────────────────────────
 
+def _resolve_password(profile_name: str, profile: dict) -> str:
+    """Resolve password: vault (NX1 encrypted) → JSON fallback."""
+    pw = profile.get("password", "")
+    if pw == _VAULT_SENTINEL or not pw:
+        vault_pw = _cred_store.get(f"profile:{profile_name}")
+        if vault_pw:
+            return vault_pw
+    return pw
+
 def connect(profile_name=None, database=None):
     """Create a pymysql connection from a named profile."""
     pymysql = ensure_pymysql()
@@ -173,7 +194,7 @@ def connect(profile_name=None, database=None):
             host=profile["host"],
             port=int(profile.get("port", 3306)),
             user=profile["user"],
-            password=profile["password"],
+            password=_resolve_password(name, profile),
             database=db if db else None,
             charset="utf8mb4",
             connect_timeout=10,
