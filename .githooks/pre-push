@@ -28,12 +28,12 @@ while read local_ref local_sha remote_ref remote_sha; do
         exit 1
       fi
 
-      # Verify main is reachable from develop (main's commits are subset of develop's)
-      if ! git merge-base --is-ancestor "$remote_sha" "$DEVELOP_SHA" 2>/dev/null; then
-        # remote_sha is 0000... for new branch, skip this check
-        if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+      # Verify previous main HEAD is reachable from what we're pushing
+      # (i.e. we're moving main forward, not force-pushing or diverging)
+      if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+        if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
           echo ""
-          echo "  ⚠️  无法验证合并方向，请确认 main 的变更来自 develop"
+          echo "  ⚠️  推送将丢失 main 上的已有提交，请确认这是预期行为"
           echo ""
         fi
       fi
