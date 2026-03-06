@@ -1,7 +1,7 @@
 ---
 name: agent-brainstorm
 metadata:
-  version: 0.1.0
+  version: 0.1.1
 description: 'Multi-agent brainstorming: async opinion collision with expert personas.
   Mixed Codex/Claude Code engine. Use when multiple AI agents need to collaboratively
   discuss, debate, and converge on solutions through structured dialog. Triggers:
@@ -168,28 +168,28 @@ node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs \
 | `--no-open` | false | 不自动打开浏览器面板 |
 | `--dry-run` | false | 预览不执行 |
 
-启动后:
-1. Engine 开启 HTTP 讨论服务 + Web 面板
-2. **自动打开浏览器面板**（默认行为，确保用户在 Agent 出发前即可监控讨论）
-3. 动态生成 `discuss.py` CLI 工具到 `.brainstorm/`（Python 脚本，Agent 通过此工具与讨论空间交互）
-4. 按需加载 SDK（仅加载实际使用的引擎）
-5. 并行派发所有 Agent（每个 Agent 使用其指定的引擎）
-6. Agent 自主阅读代码、发表观点、回应他人、投票收敛
+**⚠️ 关键：此命令是阻塞式的** — 进程在所有 Agent 完成讨论并生成 `synthesis.md` 后才退出。
+你**不需要**手动轮询状态、不需要 sleep/wait、不需要后台运行。直接执行并等待命令返回即可。
 
-### Phase 4: 阻塞式监控（必须等待讨论结束）
+**这意味着**：无论你是 Codex、Claude Code 还是其他 Agent 引擎，只要执行此命令并等待退出，一切都由引擎自动处理。
 
-讨论可能持续数十分钟。作为 Orchestrator，你**必须持续监控并等待讨论结束后再继续后续流程**——不可启动后离开。
+启动后引擎内部流程:
+1. 开启 HTTP 讨论服务 + **自动打开浏览器面板**（用户可实时监控）
+2. 动态生成 `discuss.py` CLI 工具到 `.brainstorm/`
+3. 按需加载 SDK，并行派发所有 Agent
+4. Agent 自主讨论（Session Renewal Loop 确保全员同开同停）
+5. 多数投票 conclude → 生成 `synthesis.md` → 进程退出
 
-监控方式:
-1. **Web 面板**（已在 Phase 3 自动打开）: 实时查看讨论进展、各 Agent 状态、收敛度
-2. **轮询状态**: 定期执行以下命令检查讨论是否结束:
-   ```bash
-   node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs --status --cwd <project-dir>
-   ```
-3. **收敛信号**: 当 `phase` 变为 `concluded` 或 `synthesizing` 时，讨论即将结束
-4. **超时兜底**: 到达 `--timeout` 后自动结束，无需人工干预
+### Phase 4: 等待完成
 
-**只有确认讨论已结束（phase = concluded），才进入 Phase 5 交付报告。**
+**引擎进程会自动阻塞直到讨论结束**，你只需等待 Phase 3 的命令返回。
+
+- 进程退出码 `0` = 讨论正常完成
+- 进程退出码 `1` = 有 Agent 失败
+- 超时兜底：到达 `--timeout` 后引擎自动强制结束并退出
+
+> **禁止**：不要把引擎命令放到后台然后手动轮询。这会浪费 Agent turns 且容易出错。
+> **正确做法**：直接执行命令，让它阻塞到完成。引擎内部已包含所有监控、续期、超时逻辑。
 
 ### Phase 5: 交付报告
 
