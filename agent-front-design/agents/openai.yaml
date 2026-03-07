@@ -1,4 +1,4 @@
 interface:
   display_name: "前端卓越设计"
-  short_description: "Anti-AI-aesthetic frontend design blueprints"
-  default_prompt: "使用 $agent-front-design 输出前端设计方案，遵循反 AI 审美协议，输出质量评分与发布建议。"
+  short_description: "Aesthetic intelligence for stunning frontend design with self-critique"
+  default_prompt: "使用 $agent-front-design 输出前端设计方案，追求精工品质，运行自我批评循环。"
