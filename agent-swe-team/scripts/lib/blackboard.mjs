@@ -1,4 +1,5 @@
-// Team Blackboard — shared knowledge layer for cross-role awareness
+// Living Blackboard — the team's shared consciousness
+// Extends original blackboard with goal tracking, discussion context, and codemap.
 
 import { mkdir, readFile, readdir, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -12,22 +13,20 @@ import {
     blackboardTeamDigestPath,
 } from "./paths.mjs";
 import { getRoleType } from "./roles.mjs";
+import { readThreadSummaries, readRecentMessages } from "./discussion.mjs";
+import { updateGoalFile, computeProgress, resolveTicketDAG } from "./goal_tracker.mjs";
 
 // ─── Initialization ───
 
 export async function ensureBlackboardDirs(cwd, runId) {
     await mkdir(blackboardDir(cwd, runId), { recursive: true });
     await mkdir(blackboardContractsDir(cwd, runId), { recursive: true });
+    await mkdir(join(blackboardDir(cwd, runId), "threads"), { recursive: true });
+    await mkdir(join(blackboardDir(cwd, runId), "plan-revisions"), { recursive: true });
 }
 
 // ─── Write Operations (called by Hub after role completes) ───
 
-/**
- * Write a contract artifact to the blackboard.
- * @param {string} cwd
- * @param {string} runId
- * @param {{ role: string, ticketId: string, type: string, content: string }} artifact
- */
 export async function writeContract(cwd, runId, artifact) {
     await ensureBlackboardDirs(cwd, runId);
     const filename = `${artifact.ticketId}-${artifact.role}-${artifact.type}.md`;
@@ -36,9 +35,6 @@ export async function writeContract(cwd, runId, artifact) {
     await writeTextAtomic(filePath, header + artifact.content + "\n");
 }
 
-/**
- * Append a decision to the decisions log.
- */
 export async function appendDecision(cwd, runId, { role, question, answer, ticketId }) {
     await ensureBlackboardDirs(cwd, runId);
     const entry = JSON.stringify({
@@ -51,9 +47,6 @@ export async function appendDecision(cwd, runId, { role, question, answer, ticke
     await appendFile(blackboardDecisionsPath(cwd, runId), entry + "\n", "utf-8");
 }
 
-/**
- * Append a changelog entry.
- */
 export async function appendChangelog(cwd, runId, { role, ticketId, summary }) {
     await ensureBlackboardDirs(cwd, runId);
     const line = `- **${role}** (${ticketId}): ${summary} [${new Date().toISOString()}]\n`;
@@ -61,8 +54,20 @@ export async function appendChangelog(cwd, runId, { role, ticketId, summary }) {
 }
 
 /**
- * Regenerate the team-digest.md from current state.
+ * Write a plan revision proposal from a role.
  */
+export async function writePlanRevision(cwd, runId, { role, ticketId, content }) {
+    await ensureBlackboardDirs(cwd, runId);
+    const id = Date.now();
+    const filename = `${id}-${role}.md`;
+    const filePath = join(blackboardDir(cwd, runId), "plan-revisions", filename);
+    const header = `# Plan Revision from ${role} (ticket ${ticketId})\n*${new Date().toISOString()}*\n\n`;
+    await writeTextAtomic(filePath, header + content + "\n");
+    return { id, path: filePath };
+}
+
+// ─── Team Digest (regenerated from current state) ───
+
 export async function updateTeamDigest(cwd, runId, state, meta) {
     await ensureBlackboardDirs(cwd, runId);
     const lines = [`# Team Digest\n`];
@@ -74,8 +79,31 @@ export async function updateTeamDigest(cwd, runId, state, meta) {
         const r = state.roles?.[role];
         if (!r) continue;
         const status = r.status?.toUpperCase() || "UNKNOWN";
-        const ticket = r.current?.ticketId ? ` (ticket ${r.current.ticketId})` : "";
-        lines.push(`- **${role}**: ${status}${ticket}`);
+        const ticket = r.current?.ticketId ? ` ticket=${r.current.ticketId}` : "";
+        const queue = r.queueDepth ? ` q=${r.queueDepth}` : "";
+        lines.push(`- **${role}**: ${status}${ticket}${queue}`);
+    }
+
+    // Progress summary
+    const { overall, active } = computeProgress(state);
+    lines.push(`\n## Progress: ${overall}%\n`);
+    if (active.length > 0) {
+        for (const a of active) {
+            lines.push(`- ${a.role}: ${a.id} (${a.status}, ${a.elapsed})`);
+        }
+    }
+
+    // Ticket DAG summary
+    const { ready, waiting, done } = resolveTicketDAG(state);
+    lines.push(`\n## Tickets: ${done.length} done, ${ready.length} ready, ${waiting.size} waiting\n`);
+
+    // Thread summaries
+    const threads = await readThreadSummaries(cwd, runId);
+    if (threads.length > 0) {
+        lines.push(`\n## Discussions\n`);
+        for (const t of threads.slice(-5)) {
+            lines.push(`- [${t.status}] ${t.topic} (${t.messageCount} msgs, ${t.participants.join(",")})`);
+        }
     }
 
     // Recent decisions
@@ -95,13 +123,13 @@ export async function updateTeamDigest(cwd, runId, state, meta) {
     }
 
     await writeTextAtomic(blackboardTeamDigestPath(cwd, runId), lines.join("\n") + "\n");
+
+    // Also update goal.md
+    await updateGoalFile(cwd, runId, state, meta);
 }
 
 // ─── Read Operations (used by Prompt Enricher) ───
 
-/**
- * Read all decisions from the JSONL file.
- */
 export async function readDecisions(cwd, runId) {
     const p = blackboardDecisionsPath(cwd, runId);
     if (!existsSync(p)) return [];
@@ -116,9 +144,6 @@ export async function readDecisions(cwd, runId) {
         .filter(Boolean);
 }
 
-/**
- * Read all contracts from the contracts directory.
- */
 export async function readContracts(cwd, runId) {
     const dir = blackboardContractsDir(cwd, runId);
     if (!existsSync(dir)) return [];
@@ -127,7 +152,6 @@ export async function readContracts(cwd, runId) {
     for (const e of entries) {
         if (!e.isFile() || !e.name.endsWith(".md")) continue;
         const content = await readFile(join(dir, e.name), "utf-8");
-        // Parse role and ticketId from filename: ticketId-role-type.md
         const match = e.name.match(/^(.+?)-(\w+)-(\w+)\.md$/);
         contracts.push({
             filename: e.name,
@@ -140,9 +164,6 @@ export async function readContracts(cwd, runId) {
     return contracts;
 }
 
-/**
- * Read changelog text.
- */
 export async function readChangelog(cwd, runId) {
     const p = blackboardChangelogPath(cwd, runId);
     if (!existsSync(p)) return "";
@@ -150,20 +171,19 @@ export async function readChangelog(cwd, runId) {
 }
 
 /**
- * Build team context for a specific role's prompt injection.
- * Filters by role TYPE (not instance) so backend-1 and backend-2
- * both get the architect + frontend contracts but not each other's.
+ * Build full team context for a role's prompt injection (Three-Layer Cognitive Model).
+ * Returns: teamContext + goalContext + discussionContext
  */
-export async function buildTeamContext(cwd, runId, role) {
+export async function buildTeamContext(cwd, runId, role, state, meta) {
     const roleType = getRoleType(role);
     const decisions = await readDecisions(cwd, runId);
     const allContracts = await readContracts(cwd, runId);
     const changelog = await readChangelog(cwd, runId);
 
-    // Filter contracts: exclude contracts from same role TYPE
+    // Filter contracts by role type (exclude same-type contracts)
     const relevantContracts = allContracts.filter((c) => getRoleType(c.role) !== roleType);
 
-    // Context relevance rules per role TYPE
+    // Context relevance rules per role type
     const contextRules = {
         architect: { includeContracts: false, includeChangelog: false, maxDecisions: 5 },
         backend: { includeContracts: true, includeChangelog: false, maxDecisions: 10 },
@@ -173,12 +193,41 @@ export async function buildTeamContext(cwd, runId, role) {
     };
     const rules = contextRules[roleType] || { includeContracts: true, includeChangelog: true, maxDecisions: 10 };
 
-    return {
+    // Team context (Layer 3 - Environment)
+    const teamContext = {
         decisions: decisions.slice(-rules.maxDecisions),
         contracts: rules.includeContracts ? truncateContracts(relevantContracts, 2000) : [],
         changelog: rules.includeChangelog ? truncateText(changelog, 500) : "",
         findings: [],
     };
+
+    // Goal context (Layer 1 - Goal)
+    const { categories, overall, active } = computeProgress(state);
+    const { ready, waiting, done } = resolveTicketDAG(state);
+    const progressLines = Object.entries(categories)
+        .map(([cat, { done: d, total: t }]) => `${cat}: ${d}/${t}`)
+        .join(" | ");
+    const dagLines = [
+        `Done: ${done.join(", ") || "none"}`,
+        `Ready: ${ready.join(", ") || "none"}`,
+        waiting.size > 0
+            ? `Waiting: ${[...waiting.entries()].map(([id, deps]) => `${id}(→${deps.join(",")})`).join(", ")}`
+            : null,
+    ].filter(Boolean).join("\n");
+
+    const goalContext = {
+        goal: meta.goal || "No goal defined",
+        progress: `Overall: ${overall}% | ${progressLines}`,
+        dagStatus: dagLines,
+    };
+
+    // Discussion context (Layer 3 - Environment)
+    const discussionContext = await readRecentMessages(cwd, runId, {
+        maxThreads: 3,
+        maxCharsPerThread: 400,
+    });
+
+    return { teamContext, goalContext, discussionContext };
 }
 
 // ─── Token Budget Helpers ───
@@ -194,7 +243,6 @@ function truncateContracts(contracts, maxTotalChars) {
     for (const c of contracts) {
         const len = c.content?.length || 0;
         if (total + len > maxTotalChars) {
-            // Include truncated version
             const remaining = maxTotalChars - total;
             if (remaining > 100) {
                 result.push({ ...c, content: c.content.slice(0, remaining) + "\n...(truncated)" });

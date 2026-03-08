@@ -44,10 +44,13 @@ import {
     initStateFromRunMeta,
 } from "./lib/store.mjs";
 import { openBrowser, startServer } from "./lib/server.mjs";
-import { ensureBlackboardDirs, writeContract, appendDecision, appendChangelog, updateTeamDigest, buildTeamContext } from "./lib/blackboard.mjs";
+import { ensureBlackboardDirs, writeContract, appendDecision, appendChangelog, writePlanRevision, updateTeamDigest, buildTeamContext } from "./lib/blackboard.mjs";
 import { extractArtifacts, generateChangelogEntry } from "./lib/extractor.mjs";
-import { loadWorkflow, saveWorkflow, getPreset, initWorkflowState, resolveReadyPhases, markRoleDone, activatePhase, isWorkflowComplete, getPhase, listPresets, resetPhase } from "./lib/workflow.mjs";
+import { WORKFLOW_PRESETS, initWorkflow, resolveReadyPhases, markRoleDone, activatePhase, resetPhase, getWorkflowSummary } from "./lib/workflow.mjs";
 import { analyzeFindings } from "./lib/review_loop.mjs";
+import { createIntegrationBranch, mergeRoleToIntegration, propagateToAllWorktrees } from "./lib/integration.mjs";
+import { extractDiscussionEntries, createThread, addThreadResponse, ensureThreadsDir } from "./lib/discussion.mjs";
+import { Scheduler } from "./lib/scheduler.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -307,20 +310,26 @@ async function cmdInit(global, args) {
     await mkdir(logsDir(global.cwd, runId), { recursive: true });
     await ensureQueueDirs(global.cwd, runId);
     await ensureBlackboardDirs(global.cwd, runId);
+    await ensureThreadsDir(global.cwd, runId);
 
     const meta = {
-        version: 1,
+        version: 2,
         runId,
         createdAt,
         baseRef: args.baseRef,
         baseSha,
         roles,
         worktreeRootRel,
+        goal: args.goal || "",
     };
 
     const state = initStateFromRunMeta(meta);
 
     if (!global.dryRun) {
+        // Create integration branch
+        log("INFO", `Creating integration branch: integration/${runId}`);
+        await createIntegrationBranch(global.cwd, runId, baseSha);
+
         log("INFO", `Creating ${roles.length} role worktrees under ${worktreeRootRel}`);
         await createRoleWorktrees({
             cwd: global.cwd,
@@ -332,6 +341,7 @@ async function cmdInit(global, args) {
         });
     } else {
         log("INFO", "[dry-run] Skipping git worktree add; planned commands:");
+        console.log(`  git branch integration/${runId} ${baseSha}`);
         for (const role of roles) {
             const branch = `team/${runId}/${role}`;
             const wtPath = join(worktreeRootAbs, role);
@@ -342,7 +352,7 @@ async function cmdInit(global, args) {
     await saveRunMeta(global.cwd, runId, meta);
     await saveStateFile(global.cwd, runId, state);
     await saveCheckpointFile(global.cwd, runId, {
-        version: 1,
+        version: 2,
         runId,
         phase: state.phase,
         createdAt: state.createdAt,
@@ -356,6 +366,7 @@ async function cmdInit(global, args) {
     await writeTextAtomic(statusPath(global.cwd, runId), generateStatus(state, meta));
 
     log("INFO", `Run created: ${runId}`);
+    log("INFO", `Integration branch: integration/${runId}`);
     log("INFO", `Tip: add runtime dir to your project .gitignore: echo \".agent-team/\" >> ${join(global.cwd, ".gitignore")}`);
     console.log("");
     console.log(`signal: ${signalPath(global.cwd, runId)}`);
@@ -391,8 +402,19 @@ async function cmdTicketNew(global, args) {
 
     const template = `# ${id3} · ${args.title}
 
+<!-- ticket-meta
+depends_on: []
+role_type: frontend
+estimate: M
+priority: 3
+-->
+
+## Goal Context
+
+What team-level goal does this ticket advance?
+
 ## Context
-- Goal:
+- Background:
 - Constraints:
 - References (files/links):
 
@@ -620,7 +642,7 @@ async function handleAssign(global, store, role, req) {
     }
 
     const roleTemplate = await loadRoleTemplate(role);
-    const teamContext = await buildTeamContext(global.cwd, runId, role);
+    const { teamContext, goalContext, discussionContext } = await buildTeamContext(global.cwd, runId, role, store.getState(), meta);
     const prompt = buildAssignPrompt({
         role,
         roleTemplate,
@@ -631,6 +653,8 @@ async function handleAssign(global, store, role, req) {
         baseSha: meta.baseSha,
         approvalMode: global.approvalMode,
         teamContext,
+        goalContext,
+        discussionContext,
     });
 
     let finalText = "";
@@ -734,7 +758,7 @@ async function handleReply(global, store, role, req) {
         return { ok: false, error: "missing_worktree" };
     }
     const roleTemplate = await loadRoleTemplate(role);
-    const teamContext = await buildTeamContext(global.cwd, runId, role);
+    const { teamContext, goalContext, discussionContext } = await buildTeamContext(global.cwd, runId, role, store.getState(), meta);
     const prompt = buildReplyPrompt({
         role,
         roleTemplate,
@@ -745,6 +769,8 @@ async function handleReply(global, store, role, req) {
         branch,
         baseSha: meta.baseSha,
         teamContext,
+        goalContext,
+        discussionContext,
     });
 
     // Archive BLOCKED→Reply decision to blackboard
@@ -838,16 +864,31 @@ async function cmdServe(global) {
     await ensureQueueDirs(global.cwd, runId);
     await ensureBlackboardDirs(global.cwd, runId);
 
-    // Load workflow if it exists (auto-trigger phases)
-    const workflowDef = await loadWorkflow(global.cwd, runId);
-    if (workflowDef) {
-        log("INFO", `Workflow loaded: ${workflowDef.phases.length} phases`);
-        if (!workflowDef._state) {
-            workflowDef._state = initWorkflowState(workflowDef);
-        }
-        // Attach to store so processRoleCompletion uses the same in-memory instance
-        store._workflow = workflowDef;
+    // Load or initialize workflow
+    const workflowStatePath = join(runDir(global.cwd, runId), "workflow.json");
+    let workflowData = null;
+    if (existsSync(workflowStatePath)) {
+        try {
+            workflowData = JSON.parse(await readFile(workflowStatePath, "utf-8"));
+            log("INFO", `Workflow loaded: ${workflowData.def.phases.length} phases`);
+        } catch { /* proceed without workflow */ }
     }
+    // Attach to store so processRoleCompletion uses the same in-memory instance
+    store._workflow = workflowData;
+
+    // Initialize Scheduler
+    const scheduler = new Scheduler(store, global.cwd, runId, {
+        onAssign: async (role, ticketPath) => {
+            const relTicket = relative(global.cwd, ticketPath);
+            await enqueueAssign(global.cwd, runId, { role, ticketPath: relTicket, estimate: "M" });
+            log("INFO", `Scheduler auto-assigned ${role} to ${ticketPath}`);
+        },
+        onSignal: async (signal) => {
+            await writeTextAtomic(signalPath(global.cwd, runId), signal);
+            log("INFO", `Scheduler signal: ${signal}`);
+        },
+    });
+    store._scheduler = scheduler;
 
     const { server, port } = await startServer(store, global.port, __dirname);
     store.setDashboard(port);
@@ -863,12 +904,19 @@ async function cmdServe(global) {
 
     const tick = async () => {
         await refreshQueueDepths(global.cwd, store);
+        // Process scheduler events (progressive merge, dependency resolution, etc.)
+        const schedulerResult = await scheduler.processEvents();
+        for (const action of schedulerResult.actions) {
+            log("INFO", `Scheduler action: ${action.type}${action.role ? ` role=${action.role}` : ""}`);
+        }
         await saveStateFile(global.cwd, runId, store.getState());
         await saveCheckpointFile(global.cwd, runId, store.toCheckpoint());
         await writeReports(global.cwd, store);
     };
 
     const interval = setInterval(() => {
+        // Periodic tick for idle detection and convergence checking
+        scheduler.pushEvent({ type: "tick" });
         tick().catch(() => { });
     }, 5000);
 
@@ -947,49 +995,108 @@ async function processRoleCompletion(cwd, runId, role, ticketId, reportText, sto
                 answer: artifact.content.slice(0, 200),
             });
         }
+        if (artifact.type === "plan_revision") {
+            await writePlanRevision(cwd, runId, {
+                role,
+                ticketId,
+                content: artifact.content,
+            });
+            log("INFO", `Plan Revision proposed by ${role}`);
+        }
     }
 
-    // 2. Append changelog
+    // 2. Extract and process discussion entries
+    const discussionEntries = extractDiscussionEntries(reportText);
+    for (const entry of discussionEntries) {
+        if (entry.action === "create") {
+            await createThread(cwd, runId, {
+                role,
+                topic: entry.topic,
+                position: entry.position,
+                evidence: entry.evidence,
+                question: entry.question,
+            });
+        } else if (entry.action === "respond") {
+            // Find matching thread by number
+            const threadId = String(entry.threadNum).padStart(3, "0");
+            // Best-effort match — prefix search
+            const { readdir } = await import("node:fs/promises");
+            const threadsPath = join(cwd, ".agent-team", "runs", runId, "blackboard", "threads");
+            if (existsSync(threadsPath)) {
+                const files = await readdir(threadsPath);
+                const match = files.find((f) => f.startsWith(threadId));
+                if (match) {
+                    await addThreadResponse(cwd, runId, {
+                        threadId: match.replace(".md", ""),
+                        role,
+                        type: entry.type || "respond",
+                        content: entry.content,
+                    });
+                }
+            }
+        }
+    }
+
+    // 3. Append changelog
     const changelogEntry = generateChangelogEntry(role, ticketId, reportText);
     await appendChangelog(cwd, runId, changelogEntry);
 
-    // 3. Update team digest
+    // 4. Progressive merge: merge role branch to integration
+    const roleState = store.getState().roles[role];
+    if (roleState?.branch) {
+        const mergeResult = await mergeRoleToIntegration(cwd, runId, role, roleState.branch);
+        if (mergeResult.success) {
+            log("INFO", `Progressive merge: ${role} → integration/${runId}`);
+            // Propagate to downstream worktrees
+            await propagateToAllWorktrees(cwd, runId, store.getState(), role);
+            log("INFO", `Propagated integration to active worktrees`);
+        } else if (mergeResult.conflicted) {
+            log("WARN", `Merge conflict: ${role} → integration/${runId}. Signaling Leader.`);
+            await writeTextAtomic(
+                signalPath(cwd, runId),
+                `MERGE_CONFLICT role=${role} ticket=${ticketId}`,
+            );
+        }
+    }
+
+    // 5. Push scheduler event (if scheduler is attached)
+    if (store._scheduler) {
+        store._scheduler.pushEvent({ type: "ticket_done", role, ticketId });
+    }
+
+    // 6. Update team digest + goal
     await updateTeamDigest(cwd, runId, store.getState(), store.getMeta());
 
-    // 4. Workflow phase advancement
-    // Use store-attached workflow to avoid desync between serve and processRoleCompletion
-    let workflowDef = store._workflow || await loadWorkflow(cwd, runId);
-    if (workflowDef && workflowDef._state) {
-        const { phaseCompleted, phaseId } = markRoleDone(workflowDef, workflowDef._state, role);
+    // 7. Workflow phase advancement
+    const workflowData = store._workflow;
+    if (workflowData?.def && workflowData?.state) {
+        const { phaseCompleted, phaseId } = markRoleDone(workflowData.def, workflowData.state, role);
         if (phaseCompleted) {
             log("INFO", `Workflow: phase '${phaseId}' completed`);
 
-            // 5. Review Loop: if review phase completed, check findings
-            const phase = getPhase(workflowDef, phaseId);
+            // Review Loop: if review phase completed, check findings
+            const phase = workflowData.def.phases.find((p) => p.id === phaseId);
             if (phase?.roles?.includes("reviewer")) {
                 const findingItems = artifacts.filter((a) => a.type === "finding_item");
-                const result = analyzeFindings(findingItems, workflowDef._state.reviewLoopCount || 0);
+                const result = analyzeFindings(findingItems, workflowData.state.reviewLoopCount || 0);
 
                 if (result.action === "fix_and_re_review") {
-                    workflowDef._state.reviewLoopCount = (workflowDef._state.reviewLoopCount || 0) + 1;
-                    log("INFO", `Review Loop: round ${workflowDef._state.reviewLoopCount}, creating ${result.fixTickets.length} fix ticket(s)`);
+                    workflowData.state.reviewLoopCount = (workflowData.state.reviewLoopCount || 0) + 1;
+                    log("INFO", `Review Loop: round ${workflowData.state.reviewLoopCount}`);
 
-                    // Reset review + verify phases for re-review cycle
-                    resetPhase(workflowDef._state, phaseId, phase.roles);
-                    const verifyPhase = workflowDef.phases.find((p) => p.id === "verify");
-                    if (verifyPhase) resetPhase(workflowDef._state, "verify", verifyPhase.roles);
+                    resetPhase(workflowData.state, phaseId);
+                    const verifyPhase = workflowData.def.phases.find((p) => p.id === "verify");
+                    if (verifyPhase) resetPhase(workflowData.state, "verify");
 
                     for (const ft of result.fixTickets) {
-                        // Resolve role type to an available instance for multi-instance mode
                         const resolvedFixRole = resolveRoleInstance(store, ft.role);
-                        const fixTicketPath = join(cwd, ".agent-team", "tickets", `fix-r${workflowDef._state.reviewLoopCount}-${resolvedFixRole}.md`);
+                        const fixTicketPath = join(cwd, ".agent-team", "tickets", `fix-r${workflowData.state.reviewLoopCount}-${resolvedFixRole}.md`);
                         await writeTextAtomic(fixTicketPath, ft.ticketContent);
                         await enqueueAssign(cwd, runId, {
                             role: resolvedFixRole,
                             ticketPath: relative(cwd, fixTicketPath),
                             estimate: "S",
                         });
-                        log("INFO", `Review Loop: fix ticket enqueued for ${resolvedFixRole}`);
                     }
                 } else if (result.action === "escalate") {
                     log("WARN", `Review Loop: ESCALATED — ${result.reason}`);
@@ -999,23 +1106,24 @@ async function processRoleCompletion(cwd, runId, role, ticketId, reportText, sto
                 }
             }
 
-            // 6. Auto-trigger ready phases
-            const readyPhases = resolveReadyPhases(workflowDef, workflowDef._state);
+            // Auto-trigger ready phases
+            const readyPhases = resolveReadyPhases(workflowData.def, workflowData.state);
             for (const readyId of readyPhases) {
-                const readyPhase = getPhase(workflowDef, readyId);
+                const readyPhase = workflowData.def.phases.find((p) => p.id === readyId);
                 if (!readyPhase) continue;
-                activatePhase(workflowDef._state, readyId, readyPhase.roles);
-                log("INFO", `Workflow: auto-triggering phase '${readyId}' (roles: ${readyPhase.roles.join(", ")})`);
+                activatePhase(workflowData.state, readyId, readyPhase.expandedRoles || readyPhase.roles);
+                log("INFO", `Workflow: auto-triggering phase '${readyId}'`);
             }
 
-            if (isWorkflowComplete(workflowDef, workflowDef._state)) {
+            // Check full completion
+            const allDone = workflowData.def.phases.every(
+                (p) => workflowData.state.phases[p.id]?.status === "done",
+            );
+            if (allDone) {
                 store.setPhase("completed");
                 log("INFO", "Workflow: ALL PHASES COMPLETE");
             }
         }
-        await saveWorkflow(cwd, runId, workflowDef);
-        // Update store-attached reference
-        if (store._workflow) store._workflow = workflowDef;
     }
 }
 
@@ -1024,33 +1132,37 @@ async function processRoleCompletion(cwd, runId, role, ticketId, reportText, sto
 async function cmdWorkflow(global, args) {
     if (args[0] === "create") {
         const runId = await resolveRunIdOrFatal(global.cwd, global.runId);
+        const meta = await loadRunMeta(global.cwd, runId);
+        if (!meta) fatal(`Run not found: ${runId}`);
         let template = "fullstack";
         for (let i = 1; i < args.length; i++) {
             if (args[i] === "--template" && i + 1 < args.length) {
                 template = args[++i];
             }
         }
-        const preset = getPreset(template);
-        if (!preset) fatal(`Unknown workflow template: ${template}. Available: ${listPresets().join(", ")}`);
-        const wf = { ...preset, _state: initWorkflowState(preset) };
-        await saveWorkflow(global.cwd, runId, wf);
-        log("INFO", `Workflow created: ${template} (${preset.phases.length} phases)`);
-        for (const p of preset.phases) {
+        if (!WORKFLOW_PRESETS[template]) {
+            fatal(`Unknown workflow template: ${template}. Available: ${Object.keys(WORKFLOW_PRESETS).join(", ")}`);
+        }
+        const { def, state } = initWorkflow(template, meta.roles);
+        const wfData = { def, state };
+        await writeJsonAtomic(join(runDir(global.cwd, runId), "workflow.json"), wfData);
+        log("INFO", `Workflow created: ${template} (${def.phases.length} phases)`);
+        for (const p of def.phases) {
             const deps = p.dependsOn?.join(", ") || "(start)";
-            console.log(`  ${p.id}: roles=[${p.roles.join(",")}] depends=[${deps}]`);
+            const roles = p.expandedRoles || p.roles;
+            console.log(`  ${p.id}: roles=[${roles.join(",")}] depends=[${deps}]`);
         }
         return;
     }
     if (args[0] === "status") {
         const runId = await resolveRunIdOrFatal(global.cwd, global.runId);
-        const wf = await loadWorkflow(global.cwd, runId);
-        if (!wf) { log("INFO", "No workflow defined for this run."); return; }
-        console.log(`\nWorkflow (${wf.phases.length} phases):\n`);
-        for (const p of wf.phases) {
-            const ps = wf._state?.phases?.[p.id];
-            const status = ps?.status?.toUpperCase() || "?";
-            const roleStatuses = p.roles.map((r) => `${r}=${ps?.roles?.[r] || "?"}`).join(" ");
-            console.log(`  ${p.id}: ${status} [${roleStatuses}]`);
+        const wfPath = join(runDir(global.cwd, runId), "workflow.json");
+        if (!existsSync(wfPath)) { log("INFO", "No workflow defined for this run."); return; }
+        const wfData = JSON.parse(await readFile(wfPath, "utf-8"));
+        const summary = getWorkflowSummary(wfData.def, wfData.state);
+        console.log(`\nWorkflow (${summary.length} phases):\n`);
+        for (const p of summary) {
+            console.log(`  ${p.id}: ${p.status.toUpperCase()} [${p.roles}]`);
         }
         console.log("");
         return;

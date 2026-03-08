@@ -90,12 +90,13 @@ export function initStateFromRunMeta(meta) {
     );
 
     return {
-        version: 1,
+        version: 2,
         runId: meta.runId,
         phase: "idle",
         createdAt: meta.createdAt,
         updatedAt: new Date().toISOString(),
         dashboard: { port: null, url: null },
+        goal: meta.goal || "",
         roles,
         tickets: {},
     };
@@ -201,15 +202,20 @@ export class TeamStore extends EventEmitter {
                 threadId: t.threadId,
                 reportPath: t.reportPath,
                 updatedAt: t.updatedAt,
+                depends_on: t.depends_on || [],
+                category: t.category || null,
+                priority: t.priority || 3,
+                role_type: t.role_type || null,
             };
         }
 
         return {
-            version: 1,
+            version: 2,
             runId: this.#state.runId,
             phase: this.#state.phase,
             createdAt: this.#state.createdAt,
             updatedAt: this.#state.updatedAt,
+            goal: this.#state.goal || "",
             roles,
             tickets,
         };

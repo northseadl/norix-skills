@@ -62,6 +62,11 @@ export function extractArtifacts(reportText, role, ticketId) {
         artifacts.push({ type: "breaking_changes", role, ticketId, content: breakingChanges });
     }
 
+    const planRevision = extractSection(reportText, "Plan Revision");
+    if (planRevision) {
+        artifacts.push({ type: "plan_revision", role, ticketId, content: planRevision });
+    }
+
     return artifacts;
 }
 

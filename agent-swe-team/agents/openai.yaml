@@ -1,4 +1,4 @@
 interface:
   display_name: "Agent SWE Team"
-  short_description: "Role-based multi-agent team with git worktree"
-  default_prompt: "Assemble a role-based dev team (architect/backend/frontend/qa/reviewer) to implement [feature]. Use git worktree isolation and BLOCKED→Reply for decisions."
+  short_description: "Self-governing SWE team with depth and adversarial QA"
+  default_prompt: "Assemble a self-governing dev team (architect/backend/frontend/qa/reviewer) for [feature]. Roles collaborate via discussion threads, progressive merge, and continuous adversarial review."

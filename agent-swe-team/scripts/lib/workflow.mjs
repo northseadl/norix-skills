@@ -1,150 +1,116 @@
-// Workflow Engine — declarative phase definitions with auto-trigger
+// Workflow Engine — phase management with multi-instance awareness and ticket DAG integration
 
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { writeJsonAtomic } from "./atomic.mjs";
-import { workflowPath } from "./paths.mjs";
 import { log } from "./logger.mjs";
+import { getRoleType } from "./roles.mjs";
 
-// ─── Preset Templates ───
+// ─── Preset Workflow Templates ───
 
-const PRESETS = {
+export const WORKFLOW_PRESETS = {
     fullstack: {
         phases: [
-            {
-                id: "design",
-                roles: ["architect"],
-                autoTrigger: "on_start",
-                outputs: ["contracts"],
-            },
-            {
-                id: "implement",
-                roles: ["backend", "frontend"],
-                parallel: true,
-                dependsOn: ["design"],
-                inputs: ["contracts"],
-                outputs: ["api_surface", "components"],
-            },
-            {
-                id: "verify",
-                roles: ["qa"],
-                dependsOn: ["implement"],
-                inputs: ["changelog", "contracts"],
-                outputs: ["findings"],
-            },
-            {
-                id: "review",
-                roles: ["reviewer"],
-                dependsOn: ["verify"],
-                inputs: ["changelog", "contracts", "findings"],
-                outputs: ["approval"],
-                onChangesRequested: "loop_to_implement",
-            },
-        ],
-    },
-    "backend-only": {
-        phases: [
-            {
-                id: "implement",
-                roles: ["backend"],
-                autoTrigger: "on_start",
-                outputs: ["api_surface"],
-            },
-            {
-                id: "verify",
-                roles: ["qa"],
-                dependsOn: ["implement"],
-                inputs: ["changelog"],
-                outputs: ["findings"],
-            },
-            {
-                id: "review",
-                roles: ["reviewer"],
-                dependsOn: ["verify"],
-                inputs: ["changelog", "findings"],
-                outputs: ["approval"],
-            },
+            { id: "design", roles: ["architect"], autoTrigger: "on_start" },
+            { id: "implement", roles: ["backend", "frontend"], dependsOn: ["design"] },
+            { id: "verify", roles: ["qa"], dependsOn: ["implement"] },
+            { id: "review", roles: ["reviewer"], dependsOn: ["implement"] },
         ],
     },
     "frontend-only": {
         phases: [
-            {
-                id: "implement",
-                roles: ["frontend"],
-                autoTrigger: "on_start",
-                outputs: ["components"],
-            },
-            {
-                id: "verify",
-                roles: ["qa"],
-                dependsOn: ["implement"],
-                inputs: ["changelog"],
-                outputs: ["findings"],
-            },
+            { id: "design", roles: ["architect"], autoTrigger: "on_start" },
+            { id: "implement", roles: ["frontend"], dependsOn: ["design"] },
+            { id: "verify", roles: ["qa"], dependsOn: ["implement"] },
+            { id: "review", roles: ["reviewer"], dependsOn: ["implement"] },
+        ],
+    },
+    "backend-only": {
+        phases: [
+            { id: "implement", roles: ["backend"], autoTrigger: "on_start" },
+            { id: "verify", roles: ["qa"], dependsOn: ["implement"] },
+            { id: "review", roles: ["reviewer"], dependsOn: ["implement"] },
         ],
     },
     hotfix: {
         phases: [
-            {
-                id: "fix",
-                roles: ["backend"],
-                autoTrigger: "on_start",
-                outputs: [],
-            },
-            {
-                id: "verify",
-                roles: ["qa"],
-                dependsOn: ["fix"],
-                inputs: ["changelog"],
-                outputs: ["findings"],
-            },
+            { id: "fix", roles: ["backend", "frontend"], autoTrigger: "on_start" },
+            { id: "verify", roles: ["qa"], dependsOn: ["fix"] },
         ],
     },
 };
 
-// ─── Workflow State ───
+// ─── Instance-Aware Initialization ───
 
-export function initWorkflowState(workflowDef) {
+/**
+ * Expand role types to instance names using run metadata.
+ * e.g. "frontend" with meta.roles ["frontend-1","frontend-2"] → ["frontend-1","frontend-2"]
+ * @param {string[]} roleTypes - Role types from preset (e.g. ["frontend"])
+ * @param {string[]} actualRoles - Actual role instances from run meta
+ * @returns {string[]} - Expanded instance names
+ */
+function expandRoleInstances(roleTypes, actualRoles) {
+    const expanded = [];
+    for (const rt of roleTypes) {
+        const matches = actualRoles.filter((r) => getRoleType(r) === rt);
+        if (matches.length > 0) {
+            expanded.push(...matches);
+        } else {
+            expanded.push(rt); // No expansion needed (single instance)
+        }
+    }
+    return expanded;
+}
+
+/**
+ * Initialize workflow state from a preset, expanding role types to instances.
+ * @param {string} presetName
+ * @param {string[]} actualRoles - Role instances from run meta (e.g. ["frontend-1","frontend-2","qa"])
+ * @returns {{ def: object, state: object }}
+ */
+export function initWorkflow(presetName, actualRoles) {
+    const preset = WORKFLOW_PRESETS[presetName];
+    if (!preset) {
+        log("WARN", `Unknown workflow preset: ${presetName}, using fullstack`);
+        return initWorkflow("fullstack", actualRoles);
+    }
+
+    // Expand phases with actual role instances
+    const expandedPhases = preset.phases.map((phase) => ({
+        ...phase,
+        expandedRoles: expandRoleInstances(phase.roles, actualRoles),
+    }));
+
     const phases = {};
-    for (const phase of workflowDef.phases) {
+    for (const phase of expandedPhases) {
         const roleStatuses = {};
-        for (const role of phase.roles) {
-            roleStatuses[role] = "pending"; // pending|running|done|failed
+        for (const role of phase.expandedRoles) {
+            roleStatuses[role] = "pending";
         }
         phases[phase.id] = {
-            status: "pending", // pending|ready|running|done|failed
+            status: "pending",
             roles: roleStatuses,
         };
     }
-    return { phases, reviewLoopCount: 0 };
+
+    return {
+        def: { ...preset, phases: expandedPhases },
+        state: {
+            preset: presetName,
+            phases,
+            createdAt: new Date().toISOString(),
+        },
+    };
 }
 
-// ─── Load / Save ───
-
-export async function loadWorkflow(cwd, runId) {
-    const p = workflowPath(cwd, runId);
-    if (!existsSync(p)) return null;
-    return JSON.parse(await readFile(p, "utf-8"));
-}
-
-export async function saveWorkflow(cwd, runId, workflow) {
-    await writeJsonAtomic(workflowPath(cwd, runId), workflow);
-}
-
-export function getPreset(name) {
-    return PRESETS[name] || null;
-}
-
-export function listPresets() {
-    return Object.keys(PRESETS);
+/**
+ * Load an existing workflow (def + state).
+ */
+export function loadWorkflow(savedDef, savedState) {
+    return { def: savedDef, state: savedState };
 }
 
 // ─── Phase Resolution ───
 
 /**
  * Determine which phases are ready to run based on dependencies.
- * @param {object} workflowDef - The workflow definition (phases array)
- * @param {object} workflowState - Current workflow state
  * @returns {string[]} - IDs of phases that are ready
  */
 export function resolveReadyPhases(workflowDef, workflowState) {
@@ -153,13 +119,11 @@ export function resolveReadyPhases(workflowDef, workflowState) {
         const ps = workflowState.phases[phase.id];
         if (!ps || ps.status !== "pending") continue;
 
-        // Check all dependencies are done
         const deps = phase.dependsOn || [];
         const allDepsDone = deps.every(
             (depId) => workflowState.phases[depId]?.status === "done",
         );
 
-        // Check auto-trigger on start
         const isAutoStart = phase.autoTrigger === "on_start" && deps.length === 0;
 
         if (allDepsDone || isAutoStart) {
@@ -167,31 +131,6 @@ export function resolveReadyPhases(workflowDef, workflowState) {
         }
     }
     return ready;
-}
-
-/**
- * Mark a role within a phase as done.
- * If all roles in the phase are done, mark the phase as done.
- * @returns {{ phaseCompleted: boolean, phaseId: string }}
- */
-export function markRoleDone(workflowDef, workflowState, role) {
-    for (const phase of workflowDef.phases) {
-        const ps = workflowState.phases[phase.id];
-        if (!ps || ps.status !== "running") continue;
-        if (!ps.roles[role] || ps.roles[role] !== "running") continue;
-
-        ps.roles[role] = "done";
-
-        // Check if all roles in this phase are done
-        const allDone = phase.roles.every((r) => ps.roles[r] === "done");
-        if (allDone) {
-            ps.status = "done";
-            log("INFO", `Phase '${phase.id}' completed (all roles done)`);
-            return { phaseCompleted: true, phaseId: phase.id };
-        }
-        return { phaseCompleted: false, phaseId: phase.id };
-    }
-    return { phaseCompleted: false, phaseId: null };
 }
 
 /**
@@ -209,31 +148,69 @@ export function activatePhase(workflowState, phaseId, roles) {
 }
 
 /**
- * Check if the entire workflow is complete.
+ * Mark a role within a phase as done.
+ * Uses instance name matching (e.g. "frontend-1") directly.
+ * Falls back to roleType matching for backward compatibility.
+ * @returns {{ phaseCompleted: boolean, phaseId: string }}
  */
-export function isWorkflowComplete(workflowDef, workflowState) {
-    return workflowDef.phases.every(
-        (p) => workflowState.phases[p.id]?.status === "done",
-    );
+export function markRoleDone(workflowDef, workflowState, role) {
+    for (const phase of workflowDef.phases) {
+        const ps = workflowState.phases[phase.id];
+        if (!ps || ps.status !== "running") continue;
+
+        // Direct instance match
+        if (ps.roles[role] === "running") {
+            ps.roles[role] = "done";
+            return checkPhaseCompletion(phase, ps);
+        }
+
+        // Fallback: roleType match (for single-instance roles)
+        const roleType = getRoleType(role);
+        if (ps.roles[roleType] === "running") {
+            ps.roles[roleType] = "done";
+            return checkPhaseCompletion(phase, ps);
+        }
+    }
+    return { phaseCompleted: false, phaseId: null };
+}
+
+function checkPhaseCompletion(phase, ps) {
+    const allRoles = phase.expandedRoles || phase.roles;
+    const allDone = allRoles.every((r) => ps.roles[r] === "done");
+    if (allDone) {
+        ps.status = "done";
+        log("INFO", `Phase '${phase.id}' completed (all roles done)`);
+        return { phaseCompleted: true, phaseId: phase.id };
+    }
+    return { phaseCompleted: false, phaseId: phase.id };
 }
 
 /**
- * Get a phase definition by ID.
+ * Reset a phase back to pending (for review loop re-work).
  */
-export function getPhase(workflowDef, phaseId) {
-    return workflowDef.phases.find((p) => p.id === phaseId) || null;
-}
-
-/**
- * Reset a phase back to pending (for review loop).
- */
-export function resetPhase(workflowState, phaseId, roles) {
+export function resetPhase(workflowState, phaseId) {
     const ps = workflowState.phases[phaseId];
     if (!ps) return;
     ps.status = "pending";
-    for (const r of roles) {
-        if (ps.roles[r] !== undefined) {
-            ps.roles[r] = "pending";
-        }
+    for (const r of Object.keys(ps.roles)) {
+        ps.roles[r] = "pending";
     }
+}
+
+// ─── Workflow Status ───
+
+/**
+ * Get a summary of the workflow status.
+ */
+export function getWorkflowSummary(workflowDef, workflowState) {
+    const phases = (workflowDef.phases || []).map((phase) => {
+        const ps = workflowState.phases[phase.id] || {};
+        const roles = Object.entries(ps.roles || {}).map(([r, s]) => `${r}:${s}`);
+        return {
+            id: phase.id,
+            status: ps.status || "unknown",
+            roles: roles.join(", "),
+        };
+    });
+    return phases;
 }
