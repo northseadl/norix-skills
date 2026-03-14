@@ -14,15 +14,17 @@ Nano Banana CLI — AI Image Generation & Editing
 Usage: ./nanobanana <module> [options]
 
 Modules:
-  generate    Generate e-commerce product images (text-to-image / image-to-image)
-  refine      Refine and edit existing images (background, style, quality)
-  auth        Manage API credentials (init / status / clean)
-  models      List available models and pricing
+  generate      Generate e-commerce product images (text-to-image / image-to-image)
+  refine        Refine and edit existing images (background, style, quality)
+  icon-extract  Extract individual icons from composite image (bg-removal + detect + crop)
+  auth          Manage API credentials (init / status / clean)
+  models        List available models and pricing
 
 Examples:
   ./nanobanana auth init --api-key <YOUR_KEY>
   ./nanobanana generate "luxury leather handbag" --template hero
   ./nanobanana refine product.jpg --template bg-white
+  ./nanobanana icon-extract icon_sheet.png -o ./icons/
   ./nanobanana models
 
 Environment:
@@ -42,6 +44,9 @@ case "$MODULE" in
         ;;
     refine)
         exec python3 "$SCRIPTS_DIR/refine.py" "$@"
+        ;;
+    icon-extract|extract)
+        exec python3 "$SCRIPTS_DIR/icon_extract.py" "$@"
         ;;
     auth)
         exec python3 "$SCRIPTS_DIR/auth.py" "$@"

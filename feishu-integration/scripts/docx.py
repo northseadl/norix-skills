@@ -32,7 +32,9 @@ BT_CODE = 14
 BT_QUOTE = 15
 BT_TODO = 17
 BT_DIVIDER = 22
+BT_IMAGE = 27
 BT_TABLE = 31
+BT_CALLOUT = 34
 
 HEADING_FIELD = {
     1: "heading1", 2: "heading2", 3: "heading3",
@@ -614,10 +616,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--folder-token", required=True, help="Target folder token")
     p.add_argument("--name", default="", help="New name (default: original name)")
 
-    p = sub.add_parser("export", help="Export document to local Markdown file")
+    p = sub.add_parser("export", help="Export document to local Markdown file (with images)")
     p.add_argument("--document-id", default="", help="Document token")
     p.add_argument("--name", default="", help="Find by name (alternative to --document-id)")
     p.add_argument("--output", default="", help="Output file path (default: <title>.md)")
+    p.add_argument("--images", action="store_true", help="Download embedded images to local directory")
 
     return parser
 
@@ -991,36 +994,7 @@ def main():
             Log.error("Specify --document-id or --name")
             sys.exit(1)
 
-        # Get document title for default filename
-        doc_info = client.get(f"/docx/v1/documents/{doc_id}")
-        title = doc_info.get("data", {}).get("document", {}).get("title", "untitled")
-
-        # Read all blocks
-        items = client.get_all(
-            f"/docx/v1/documents/{doc_id}/blocks",
-            params={"page_size": "500", "document_revision_id": "-1"},
-        )
-
-        # Render to markdown
-        md_lines = []
-        for block in items:
-            bt = block.get("block_type", 0)
-            text = _extract_text(block, bt)
-            if text is not None:
-                md_lines.append(text)
-
-        md_content = "\n\n".join(md_lines)
-
-        # Determine output path
-        out_path = args.output
-        if not out_path:
-            # Sanitize title for filename
-            safe_title = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
-            out_path = f"{safe_title}.md"
-
-        with open(out_path, "w") as f:
-            f.write(md_content)
-        Log.ok(f"Exported: {out_path} ({len(md_lines)} blocks, {len(md_content)} chars)")
+        export_document(client, doc_id, args.output, download_images=args.images)
 
 
 def _render_elements_to_md(elems: List[dict]) -> str:
@@ -1051,8 +1025,15 @@ def _render_elements_to_md(elems: List[dict]) -> str:
     return "".join(parts)
 
 
-def _extract_text(block: dict, bt: int) -> Optional[str]:
-    """Extract text from a block for read-text command, preserving inline formatting."""
+def _extract_text(block: dict, bt: int,
+                  image_collector: Optional[List[dict]] = None) -> Optional[str]:
+    """Extract text from a block, preserving inline formatting.
+
+    Args:
+        block: Feishu block dict
+        bt: block_type integer
+        image_collector: if provided, image block metadata is appended for later download
+    """
     def field_md(field: str) -> str:
         return _render_elements_to_md(block.get(field, {}).get("elements", []))
 
@@ -1077,6 +1058,25 @@ def _extract_text(block: dict, bt: int) -> Optional[str]:
         done = block.get("todo", {}).get("style", {}).get("done", False)
         marker = "[x]" if done else "[ ]"
         return f"- {marker} " + field_md("todo")
+    if bt == BT_IMAGE:
+        image_data = block.get("image", {})
+        file_token = image_data.get("token", "")
+        if not file_token:
+            return "[image: token missing]"
+        # Determine extension from MIME or default to png
+        mime = image_data.get("mime_type", "")
+        ext = {"image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",
+               "image/svg+xml": "svg"}.get(mime, "png")
+        filename = f"{file_token}.{ext}"
+        if image_collector is not None:
+            image_collector.append({"file_token": file_token, "filename": filename})
+        return f"![image](images/{filename})"
+    if bt == BT_CALLOUT:
+        # Callout blocks: extract body elements
+        body = block.get("callout", {}).get("elements", [])
+        if body:
+            return "> " + _render_elements_to_md(body)
+        return None
 
     # Headings: block_type 3~11 → heading level 1~9
     level = bt - 2
@@ -1090,6 +1090,76 @@ def _extract_text(block: dict, bt: int) -> Optional[str]:
             return _render_elements_to_md(elems)
 
     return f"[block_type={bt}]"
+
+
+# ─── Document Export Engine ──────────────────────────────────────────────────
+
+def export_document(client: FeishuClient, doc_id: str,
+                    output_path: str = "", download_images: bool = True) -> str:
+    """Export a Feishu document to local Markdown file, optionally downloading images.
+
+    Returns the output file path. Shared by doc export and wiki export.
+    """
+    # Get title
+    doc_info = client.get(f"/docx/v1/documents/{doc_id}")
+    title = doc_info.get("data", {}).get("document", {}).get("title", "untitled")
+
+    # Read all blocks
+    items = client.get_all(
+        f"/docx/v1/documents/{doc_id}/blocks",
+        params={"page_size": "500", "document_revision_id": "-1"},
+    )
+
+    # Collect images and render markdown
+    image_collector: List[dict] = []
+    md_lines = []
+    for block in items:
+        bt = block.get("block_type", 0)
+        text = _extract_text(block, bt, image_collector=image_collector)
+        if text is not None:
+            md_lines.append(text)
+
+    md_content = "\n\n".join(md_lines)
+
+    # Determine output path
+    out_path = output_path
+    if not out_path:
+        safe_title = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
+        out_path = f"{safe_title}.md"
+
+    # Ensure parent directory exists
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    with open(out_path, "w") as f:
+        f.write(md_content)
+    Log.ok(f"Exported: {out_path} ({len(md_lines)} blocks, {len(md_content)} chars)")
+
+    # Download images
+    if download_images and image_collector:
+        img_dir = os.path.join(os.path.dirname(out_path) or ".", "images")
+        os.makedirs(img_dir, exist_ok=True)
+        Log.info(f"Downloading {len(image_collector)} images to {img_dir}/")
+        downloaded = 0
+        for img in image_collector:
+            save_path = os.path.join(img_dir, img["filename"])
+            if os.path.exists(save_path):
+                Log.info(f"  Skip (exists): {img['filename']}")
+                downloaded += 1
+                continue
+            ok = client.download_media(img["file_token"], save_path)
+            if ok:
+                downloaded += 1
+                Log.ok(f"  ✅ {img['filename']}")
+            else:
+                Log.error(f"  ❌ {img['filename']} (token={img['file_token']})")
+            time.sleep(0.3)  # rate limit: 5 QPS
+        Log.ok(f"Images: {downloaded}/{len(image_collector)} downloaded")
+    elif image_collector:
+        Log.info(f"Found {len(image_collector)} images (use --images to download)")
+
+    return out_path
 
 
 if __name__ == "__main__":

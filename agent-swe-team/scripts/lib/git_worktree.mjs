@@ -1,10 +1,40 @@
-import { mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Resolve the .git path for a worktree (may be a gitdir file pointing elsewhere).
+ */
+function gitPath(worktreeAbs) {
+    const dotGit = join(worktreeAbs, ".git");
+    if (!existsSync(dotGit)) return null;
+    try {
+        const content = readFileSync(dotGit, "utf-8").trim();
+        if (content.startsWith("gitdir: ")) {
+            return content.slice("gitdir: ".length);
+        }
+    } catch { /* ignore */ }
+    return dotGit;
+}
+
+/**
+ * Append a pattern to the worktree's info/exclude to keep it git-neutral.
+ */
+export async function appendWorktreeExcludePattern(worktreeAbs, pattern) {
+    const gp = gitPath(worktreeAbs);
+    if (!gp) return;
+    const excludePath = join(gp, "info", "exclude");
+    await mkdir(join(gp, "info"), { recursive: true });
+    if (existsSync(excludePath)) {
+        const content = await readFile(excludePath, "utf-8");
+        if (content.includes(pattern)) return;
+    }
+    await appendFile(excludePath, `\n${pattern}\n`, "utf-8");
+}
 
 async function git(cwd, args, { allowFailure } = {}) {
     try {
@@ -95,6 +125,26 @@ export async function getWorktreeStatus({ worktreePathAbs, baseSha }) {
 export async function isWorktreeClean(worktreePathAbs) {
     const porcelain = await git(worktreePathAbs, ["status", "--porcelain"], { allowFailure: true });
     return !porcelain || porcelain.trim().length === 0;
+}
+
+/**
+ * Auto-recover a dirty worktree: stash uncommitted changes, then clean untracked files.
+ * @returns {{ recovered: boolean, method: string, error?: string }}
+ */
+export async function autoCleanWorktree(worktreePathAbs, stashMessage = "auto-stash") {
+    try {
+        await git(worktreePathAbs, ["stash", "--include-untracked", "--message", stashMessage]);
+        return { recovered: true, method: "stash" };
+    } catch {
+        // stash may fail with "nothing to stash" if only untracked files exist
+        try {
+            await git(worktreePathAbs, ["checkout", "--", "."]);
+            await git(worktreePathAbs, ["clean", "-fd"]);
+            return { recovered: true, method: "checkout+clean" };
+        } catch (cleanErr) {
+            return { recovered: false, method: "none", error: cleanErr.message };
+        }
+    }
 }
 
 export function resolvePathUnderCwd(cwd, maybeRel) {

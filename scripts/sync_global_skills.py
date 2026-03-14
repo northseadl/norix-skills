@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Sync norix-skills repository into global skill directories.
 
-Supports two targets with different sync strategies:
+Supports three targets with different sync strategies:
   - Antigravity: full rsync (physical copy) — symlinks not followed by scanner
   - Codex: SKILL.md materialized + other entries symlinked — for fast dev iteration
+  - Claude: SKILL.md materialized + other entries symlinked — Claude Code global skills
 
 Design goals:
   1. SAFETY — Only manage skills that originate from norix-skills.
@@ -20,6 +21,7 @@ Usage:
   python3 scripts/sync_global_skills.py [--dry-run] [--verbose]
   python3 scripts/sync_global_skills.py --target antigravity
   python3 scripts/sync_global_skills.py --target codex
+  python3 scripts/sync_global_skills.py --target claude
   python3 scripts/sync_global_skills.py --target all --force
 """
 
@@ -392,6 +394,10 @@ def default_codex_dir() -> Path:
     return Path(codex_home) / "skills"
 
 
+def default_claude_dir() -> Path:
+    return Path.home() / ".claude" / "skills"
+
+
 # ─── Target Configuration ───────────────────────────────────────────
 
 @dataclass
@@ -401,12 +407,16 @@ class TargetConfig:
     strategy: str  # "rsync" or "symlink"
 
 
-def resolve_targets(target_choice: str, ag_dir: Path, codex_dir: Path) -> list[TargetConfig]:
+def resolve_targets(
+    target_choice: str, ag_dir: Path, codex_dir: Path, claude_dir: Path,
+) -> list[TargetConfig]:
     targets = []
     if target_choice in ("antigravity", "all"):
         targets.append(TargetConfig("antigravity", ag_dir, "rsync"))
     if target_choice in ("codex", "all"):
         targets.append(TargetConfig("codex", codex_dir, "symlink"))
+    if target_choice in ("claude", "all"):
+        targets.append(TargetConfig("claude", claude_dir, "symlink"))
     return targets
 
 
@@ -416,7 +426,7 @@ def build_parser(default_repo: Path) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Sync norix-skills repository into global skill directories.\n\n"
-            "Supports Antigravity (full rsync) and Codex (SKILL.md copy + symlink).\n"
+            "Supports Antigravity (full rsync), Codex and Claude Code (symlink).\n"
             "Only manages skills originating from the source repo.\n"
             "Skills installed from other sources are NEVER touched."
         ),
@@ -424,7 +434,7 @@ def build_parser(default_repo: Path) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--target",
-        choices=["antigravity", "codex", "all"],
+        choices=["antigravity", "codex", "claude", "all"],
         default="all",
         help="Sync destination (default: all)",
     )
@@ -445,6 +455,12 @@ def build_parser(default_repo: Path) -> argparse.ArgumentParser:
         type=Path,
         default=default_codex_dir(),
         help="Codex global skills directory",
+    )
+    parser.add_argument(
+        "--claude-dir",
+        type=Path,
+        default=default_claude_dir(),
+        help="Claude Code global skills directory",
     )
     parser.add_argument(
         "--force",
@@ -537,7 +553,8 @@ def main() -> int:
     repo_root = resolve_path(args.repo_root)
     ag_dir = resolve_path(args.antigravity_dir)
     codex_dir = resolve_path(args.codex_dir)
-    targets = resolve_targets(args.target, ag_dir, codex_dir)
+    claude_dir = resolve_path(args.claude_dir)
+    targets = resolve_targets(args.target, ag_dir, codex_dir, claude_dir)
 
     if args.status:
         return show_status(targets)
