@@ -103,7 +103,9 @@ main → develop    ❌ 绝对禁止
 <skill-name>/
 ├── SKILL.md           # 必需：Agent 读取的技能说明
 ├── scripts/           # 必需：可执行脚本
-├── references/        # 可选：API 参考文档
+├── references/        # 可选：深层参考文档（Agent 按需加载）
+├── agents/            # 可选：子 Agent 指令
+├── assets/            # 可选：模板、HTML 等运行时资源
 └── evals/             # 可选：评估用例
 ```
 
@@ -112,11 +114,56 @@ main → develop    ❌ 绝对禁止
 ```yaml
 ---
 name: <skill-name>
-version: <semver>
+metadata:
+  version: <semver>
 description: >
   <触发条件描述，Agent 据此决定是否激活技能>
 ---
 ```
+
+---
+
+## SKILL.md 设计原则
+
+SKILL.md 是 **Agent 的入口文档**，不是人类文档。核心设计目标：
+Agent 通过加载它来知道技能有什么、怎么工作、大概原理。
+
+### 渐进式加载（三层架构）
+
+| 层级 | 内容 | 上下文消耗 | 加载时机 |
+|:---|:---|:---|:---|
+| **L0: Metadata** | name + description | ~100 词 | 始终在 Agent 上下文中 |
+| **L1: SKILL.md body** | 工作流 + 命令概览 + 原理 | <500 行 | 技能触发时加载 |
+| **L2: references/** | 工具详情、API schema、协议规则 | 不限 | Agent 按需读取 |
+| **L3: CLI --help** | 命令参数兜底 | 0（运行时） | Agent 遇到参数不确定时执行 |
+
+**关键约束**:
+- SKILL.md body **<500 行**。超过就必须拆分到 `references/`
+- 拆分时在 SKILL.md 中用表格指明每个 reference 文件的用途 + **何时读取**
+- Agent 已知的通用知识（编程语法、标准库用法）**不要重复写**
+- scripts/ 中的 CLI 自身即兜底文档，Agent 可通过 `--help` 获取精确参数
+
+### Agent-First 视角
+
+- SKILL.md 面向 **读取它的 Agent**，不是面向人类用户
+- 不使用第三方视角描述（如 "humans only"、"用户需要…"）
+- 角色代入：用"你"指代 Agent 自身，用"用户"指代 Agent 的操作者
+- 命令/示例驱动：Agent 看完就能直接执行，不需要额外推理
+
+### Description 触发策略
+
+Description 是技能的**唯一触发机制**——Agent 据此决定是否激活技能。
+
+- 描述技能做什么 **AND** 什么时候用
+- 适度 "pushy"——列出常见触发场景，包括用户未显式提及的场景
+- 用反向排除引导正确路由（如 `NOT for X, use Y`）
+- 不要使用通用/模糊关键词（如 "data processing"），使用具体特征
+
+### 指令风格
+
+- **解释 Why，而非命令 MUST** — Agent 有 theory of mind，解释清楚比全大写命令更有效
+- 如果发现自己在写 `ALWAYS` 或 `NEVER`，退一步重构为解释性语句
+- **重复工作 → 打包脚本** — 如果 Agent 每次调用都独立写同样的辅助代码，说明该打包到 `scripts/`
 
 ---
 

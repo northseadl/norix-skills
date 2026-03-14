@@ -4,13 +4,13 @@
 Zero external dependencies. Uses only Python 3 stdlib.
 
 Protocol NX1 (Norix Vault v1):
-  - Key: PBKDF2-SHA256(SHA256(machine_fingerprint), salt, 200k iterations)
+  - Key: PBKDF2-SHA256(SHA256(machine_seed + username), salt, 200k iterations)
   - Cipher: PBKDF2-SHA256 keystream XOR (stream cipher)
   - Auth: HMAC-SHA256 over salt + ciphertext
   - Format: NX1$<base64(salt[16] || tag[32] || ciphertext[N])>
 
-Cross-language: any language with SHA256 + PBKDF2 + HMAC + Base64 can
-implement a compatible reader. See docstring of NX1Vault for protocol spec.
+Machine identity: ~/.agents/.machine-seed (persistent, initialized from
+platform hardware UUID on first run, immutable thereafter).
 
 Usage:
     from credential_store import CredentialStore
@@ -26,9 +26,9 @@ import hashlib
 import hmac
 import json
 import os
-import socket
-import sys
-import uuid
+import platform
+import re
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -43,23 +43,70 @@ _NX1_KEY_LEN = 32
 _NX1_SALT_LEN = 16
 _NX1_TAG_LEN = 32
 
+_SEED_FILE = Path.home() / ".agents" / ".machine-seed"
+
+
+def _platform_hwid() -> str:
+    """Read hardware-bound unique ID from the OS. Raises RuntimeError on failure.
+
+    - macOS:   IOPlatformUUID (burned into Apple Silicon / T2 chip)
+    - Linux:   /etc/machine-id (generated at OS install)
+    - Windows: HKLM\\SOFTWARE\\Microsoft\\Cryptography\\MachineGuid
+    """
+    system = platform.system()
+
+    if system == "Darwin":
+        r = subprocess.run(
+            ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
+            capture_output=True, text=True, timeout=5,
+        )
+        m = re.search(r'"IOPlatformUUID"\s*=\s*"([^"]+)"', r.stdout)
+        if m:
+            return m.group(1)
+
+    elif system == "Linux":
+        for p in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+            path = Path(p)
+            if path.exists():
+                mid = path.read_text().strip()
+                if mid:
+                    return mid
+
+    elif system == "Windows":
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+        ) as key:
+            val, _ = winreg.QueryValueEx(key, "MachineGuid")
+            return str(val)
+
+    raise RuntimeError(
+        f"Cannot obtain hardware ID on {system}. "
+        f"Create {_SEED_FILE} manually with a stable unique string."
+    )
+
 
 def _machine_fingerprint() -> bytes:
-    """Derive a stable machine fingerprint from hardware identifiers.
+    """Derive a stable machine fingerprint.
 
-    Inputs (deterministic, stable across reboots):
-      - hostname
-      - MAC address (primary NIC)
-      - OS username
-      - Fixed domain string
+    Source of truth: ~/.agents/.machine-seed (immutable once written).
+    On first run, initialized from platform hardware UUID and persisted.
 
     Cross-language spec:
-      fingerprint = SHA256("{hostname}:{mac_hex}:{username}:norix-skills")
+      fingerprint = SHA256("{seed}:{username}:norix-skills")
     """
-    hostname = socket.gethostname()
-    mac = format(uuid.getnode(), "012x")  # 48-bit MAC as lowercase hex
-    username = getpass.getuser()
-    identity = f"{hostname}:{mac}:{username}:{_NX1_DOMAIN}"
+    if _SEED_FILE.exists():
+        seed = _SEED_FILE.read_text().strip()
+    else:
+        seed = _platform_hwid()
+        _SEED_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _SEED_FILE.with_suffix(".tmp")
+        tmp.write_text(seed)
+        tmp.replace(_SEED_FILE)
+        os.chmod(_SEED_FILE, 0o600)
+
+    identity = f"{seed}:{getpass.getuser()}:{_NX1_DOMAIN}"
     return hashlib.sha256(identity.encode("utf-8")).digest()
 
 

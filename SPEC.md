@@ -101,7 +101,8 @@ cd skill-name/scripts && python3 -c "from credential_store import CredentialStor
 加密格式: NX1$<base64(salt[16] + hmac_tag[32] + ciphertext[N])>
 
 密钥派生:
-  fingerprint = SHA256(hostname + ":" + MAC + ":" + username + ":norix-skills")
+  seed        = read(~/.agents/.machine-seed)  # 首次由平台 HWID 初始化，此后不变
+  fingerprint = SHA256(seed + ":" + username + ":norix-skills")
   master_key  = PBKDF2-SHA256(fingerprint, "norix-skills-vault-v1", 200000, 32)
 
 加密:

@@ -8,7 +8,7 @@
 # Gate 5: credential_store 副本一致 — 若存在必须与 source of truth 相同
 # Gate 6: 隔离性 — 禁止跨目录导入 (../../scripts)
 #
-# 跳过: SKIP_VERSION_CHECK=1 环境变量
+# 非交互式环境（Agent）触发 major/minor 版本提升时自动阻断，要求人类确认
 
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 
@@ -210,7 +210,8 @@ if [ -n "$ERRORS" ]; then
   echo "  ╚══════════════════════════════════════════╝"
   printf "$ERRORS\n"
   echo ""
-  echo "  规范: SPEC.md | 跳过: SKIP_VERSION_CHECK=1 git commit ..."
+  echo "  规范: SPEC.md"
+  echo "  ⛔ Agent 请停止操作并将上述错误报告给用户，等待用户指令。"
   echo ""
   exit 1
 fi
@@ -239,8 +240,8 @@ if [ -n "$CONFIRM_NEEDED" ]; then
     esac
   else
     echo "  ❌ 非交互式环境无法确认大版本提升"
-    echo "     Agent 只允许 patch 递增，大版本提升需人类手动提交"
-    echo "     或使用: SKIP_VERSION_CHECK=1 git commit ..."
+    echo "     Agent 不得自行绕过此检查。请停止操作，将此信息报告给用户。"
+    echo "     由用户决定是否进行大版本提升以及后续操作。"
     echo ""
     exit 1
   fi
