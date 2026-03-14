@@ -1,82 +1,83 @@
 # Norix Skills
 
-即插即用的 AI Agent 技能集合。遵循 [SKILL.md 规范](https://skills.norix-dev.com/skills/)，兼容 Gemini Antigravity、OpenAI Codex、Claude 等主流 Agent 框架。
-
-📖 **文档**: [skills.norix-dev.com](https://skills.norix-dev.com)
+即插即用的 AI Agent 技能集合，兼容 Gemini Antigravity、OpenAI Codex、Claude Code 等主流 Agent 框架。
 
 ---
 
 ## 技能一览
 
-| 技能 | 版本 | 状态 | 说明 |
-|------|------|------|------|
-| **[飞书集成](https://skills.norix-dev.com/skills/feishu-integration)** | 0.4.1 | ✅ Stable | 统一 CLI 操作飞书文档、任务、Wiki、多维表格、成员目录。OAuth2 全自动。 |
-| **[ADB MySQL](https://skills.norix-dev.com/skills/adb-mysql)** | 0.1.2 | ✅ Stable | 阿里云 AnalyticDB for MySQL 只读数据分析。多 Profile、交叉验证、Schema 文档。 |
-| **[ES Analytics](https://skills.norix-dev.com/skills/es-analytics)** | 0.1.2 | ✅ Stable | Elasticsearch / 阿里云 SLS ES 兼容层只读数据分析。多 Profile、聚合统计。 |
-| **[PM Toolkit](https://skills.norix-dev.com/skills/pm-toolkit)** | 0.0.5 | ✅ Stable | 自然语言 → Mermaid 图表（16 种类型），本地 Web 面板实时预览与导出。 |
-| **[Image Studio](https://skills.norix-dev.com/skills/image-studio)** | 0.1.3 | ✅ Stable | AI 图片生成与精修（电商模板 + 背景替换/增强/风格迁移 + 图标提取），Nano Banana API。 |
-| **[Coding.net 集成](https://skills.norix-dev.com/skills/coding-net)** | 0.2.2 | 🚧 DEV | Coding.net DevOps 平台 — MR/CI/制品库自动化。 |
-| **[CNB Build 集成](https://skills.norix-dev.com/skills/cnb-cool-integration)** | 0.1.1 | 🚧 DEV | cnb.cool 云原生构建流水线配置生成与优化。 |
-| **[Agent 任务编排](https://skills.norix-dev.com/skills/task-orchestration)** | 0.1.8 | 🚧 DEV | 监督式多任务分解与调度，支持 Codex / Claude Code 混合引擎，实时 Dashboard。 |
-| **[Agent SWE Team](https://skills.norix-dev.com/skills/agent-swe-team)** | 0.5.4 | 🚧 DEV | Workshop 多 Agent 工程团队（Leader + 全栈 Worker + Inspector，圆桌/面板/管道三层通信）。 |
-| **[Agent 头脑风暴](https://skills.norix-dev.com/skills/agent-brainstorm)** | 0.1.1 | 🚧 DEV | 多 Agent 异步观点碰撞空间，支持 Codex / Claude Code 混合引擎。 |
-| **[前端设计规格](https://skills.norix-dev.com/skills/agent-front-design)** | 0.2.0 | 🚧 DEV | 审美判断力引擎 + 精工度评分 + 自我批评循环，输出可实施工程文档。 |
-| **[Doc Sentinel](https://skills.norix-dev.com/skills/doc-sentinel)** | 0.2.0 | 🚧 DEV | 文档-代码变更通知系统（溯源绑定 / Git diff 变更计划 / 幂等执行）。 |
-| **[LLM Agent 开发](https://skills.norix-dev.com/skills/llm-agent-dev)** | 0.1.2 | 🚧 DEV | Agent 架构设计协议：模式选型、运行时契约、安全护栏、评估闭环。 |
-| **[Mobile Testing](https://skills.norix-dev.com/skills/mobile-testing)** | 0.0.3 | 🚧 DEV | Android/iOS 自动化测试与评估，性能 Profiling，Maestro E2E 编排。 |
-| **[Web Scraper](https://skills.norix-dev.com/skills/web-scraper)** | 0.2.0 | 🚧 DEV | 双引擎网页抓取（HTTP/Playwright），SPA 渲染，批量文档站采集。 |
+> 所有技能均处于活跃开发中，API 和行为可能随版本变更。
 
+| 技能 | 版本 | 说明 |
+|------|------|------|
+| **飞书集成** | 0.4.1 | 飞书统一 CLI — 任务/文档/Wiki/多维表格/消息/审批/Drive，OAuth2 增量授权。 |
+| **ADB MySQL** | 0.1.2 | 阿里云 ADB MySQL 只读分析 — SQL 查询 + 聚合 + 交叉验证 + Schema 文档，多 Profile。 |
+| **ES Analytics** | 0.1.2 | ES / SLS 只读分析 — 索引/mapping/聚合/日志搜索/去重提取/采样，多 Profile。 |
+| **PM Toolkit** | 0.0.5 | Mermaid 图表（16 种）+ HTML 原型（多设备预览），本地 Web 面板。 |
+| **Image Studio** | 0.1.3 | Gemini Image API — 6 种电商模板 + 9 种精修模板 + 图标提取管道。 |
+| **Coding.net 集成** | 0.2.2 | Coding.net DevOps — MR/CI/制品库/跨项目查询/远程文件审计。 |
+| **CNB Build 集成** | 0.1.1 | cnb.cool 构建 — .cnb.yml 流水线生成，触发/缓存/env/web_trigger。 |
+| **Agent 任务编排** | 0.1.8 | Trinity 三层委托（Strategist→Lieutenant→Builder），信号驱动自主循环，Codex/Claude 混合。 |
+| **Agent SWE Team** | 0.5.4 | Workshop 工程团队 — Hub 驱动 Leader/Worker×N/Inspector，worktree 隔离 + @mention 唤醒。 |
+| **Agent 头脑风暴** | 0.1.3 | 多 Agent 异步讨论空间 — opinion/challenge/build + 收敛检测 + synthesis.md。 |
+| **前端设计规格** | 0.2.0 | 审美判断力引擎 — Explore/Production/Critique 三模式，Anti-AI Homogeneity。 |
+| **Doc Sentinel** | 0.2.0 | 文档-代码变更通知 — Git tree hash 溯源绑定 + 变更计划 + 幂等执行。 |
+| **LLM Agent 开发** | 0.1.2 | Tri-Pillar 协议 — 12 模式矩阵 + 5 份运行时合同 + 数据模拟 + 收敛迭代。 |
+| **Mobile Testing** | 0.0.3 | Android/iOS 测试 — 设备管理/应用评估/Maestro E2E/性能/日志/视觉回归。 |
+| **Web Scraper** | 0.2.0 | 双引擎抓取（httpx → crawl4ai）— 三级精度 + SPA 渲染 + JS 交互 + OpenAPI。 |
 
-## 快速开始
+## 安装
 
 ```bash
-# 一键安装所有技能
+# 通过 skill.sh 生态安装（推荐）
 npx skills add northseadl/norix-skills
 
-# 或安装单个技能
-npx skills add northseadl/norix-skills/feishu-integration
+# 安装单个技能
+npx skills add northseadl/norix-skills --skill feishu-integration
 ```
 
-安装后，在 Agent 对话的**第一条消息**中提及技能名称即可激活：
+在 Agent 对话中提及技能关键词即可触发：
 
 ```
-> 使用飞书集成技能，帮我查看本周未完成的任务
+> 帮我查看飞书上本周未完成的任务
 ```
 
 ## 目录结构
 
 ```
 norix-skills/
-├── adb-mysql/                # ADB for MySQL 数据分析（query/analyze/schema）
-├── agent-brainstorm/         # Agent 头脑风暴 — 多 Agent 异步讨论
-├── agent-front-design/       # 前端审美判断力 + 精工度 + 自我批评循环
-├── agent-swe-team/           # Agent SWE Team — Workshop 多角色团队协作
-├── agent-task-orchestration/  # Agent 任务编排 — Codex / Claude Code 混合调度
-├── cnb-cool-integration/     # CNB Build 云原生构建流水线
-├── coding-net-integration/   # Coding.net DevOps 集成
-├── doc-sentinel/             # 文档-代码变更通知系统（溯源绑定/幂等执行）
-├── es-analytics/             # Elasticsearch / SLS 数据分析
-├── feishu-integration/       # 飞书 API CLI（auth/docx/task/wiki/bitable/drive）
-├── image-studio/             # AI 图片生成、精修与图标提取（Nano Banana API）
-├── llm-agent-dev/            # LLM Agent 设计与开发（模式选型/评估闭环）
-├── mobile-testing/           # Android/iOS 自动化测试与评估
-├── pm-toolkit/               # Mermaid 图表引擎 + 原型工具
-├── skill-creator/            # 技能创建/迭代/评估/描述优化
-├── web-scraper/              # 双引擎网页抓取与文档站采集
+├── adb-mysql/                # ADB MySQL 只读分析
+├── agent-brainstorm/         # 多 Agent 异步讨论
+├── agent-front-design/       # 前端审美判断力引擎
+├── agent-swe-team/           # Workshop 多角色工程团队
+├── agent-task-orchestration/  # Trinity 三层任务编排
+├── cnb-cool-integration/     # cnb.cool 构建流水线
+├── coding-net-integration/   # Coding.net DevOps
+├── doc-sentinel/             # 文档-代码变更通知
+├── es-analytics/             # ES / SLS 数据分析
+├── feishu-integration/       # 飞书 CLI
+├── image-studio/             # AI 图片生成与精修
+├── llm-agent-dev/            # LLM Agent 工程协议
+├── mobile-testing/           # 移动端自动化测试
+├── pm-toolkit/               # Mermaid 图表 + 原型
+├── web-scraper/              # 双引擎网页抓取
+├── scripts/                  # 仓库级工具
 ```
 
 每个技能目录包含：
-- `SKILL.md` — Agent 读取的技能说明（触发条件、命令列表、使用约束）
-- `scripts/` — 实际执行的 CLI 脚本
-- `references/` — API 文档与语法参考（部分技能）
+- `SKILL.md` — Agent 入口（触发条件、命令、约束）
+- `scripts/` — CLI 脚本
+- `references/` — API 文档（部分技能）
 
 ## 设计原则
 
-- **最小依赖** — 大部分技能仅依赖运行时标准库（个别需 `pip install pymysql` 或 `npm install`）
-- **SKILL.md 驱动** — Agent 通过 SKILL.md 理解能力边界，无需额外配置
-- **凭据安全** — 敏感信息存储在用户目录，不进入代码库
+- **最小依赖** — 优先标准库，按需 `pip install` / `npm install`
+- **SKILL.md 驱动** — Agent 通过 SKILL.md 理解能力边界
+- **NX1 凭据加密** — 磁盘从不出现明文密码
 - **幂等操作** — 所有命令可安全重复执行
+- **技能隔离** — 每个目录完全自洽，零跨目录依赖
 
 ## 许可
 
 MIT
+
