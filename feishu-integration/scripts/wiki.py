@@ -92,6 +92,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--space-id", default="", help="Limit to specific space (default: all spaces)")
     p.add_argument("--read", action="store_true", help="Auto-read the first matched node")
 
+    p = sub.add_parser("export", help="Export wiki page to local Markdown (with images)")
+    p.add_argument("--token", default="", help="Wiki node_token")
+    p.add_argument("--url", default="", help="Wiki page URL (auto-extract token)")
+    p.add_argument("--output", default="", help="Output file path (default: <title>.md)")
+    p.add_argument("--no-images", action="store_true", help="Skip image downloading")
+
     return parser
 
 
@@ -389,6 +395,43 @@ def main():
             else:
                 Log.warn(f"Auto-read only supports docx, got '{obj_type}'")
 
+    elif args.command == "export":
+        import re as _re
+        from docx import export_document
+
+        # Resolve token from URL or direct arg
+        token = args.token
+        if not token and args.url:
+            # Extract token from URL like https://xxx.feishu.cn/wiki/TOKEN or /wiki/TOKEN?...
+            m = _re.search(r'/wiki/([A-Za-z0-9]+)', args.url)
+            if m:
+                token = m.group(1)
+            else:
+                Log.error("Cannot extract wiki token from URL")
+                sys.exit(1)
+        if not token:
+            Log.error("Provide --token or --url")
+            sys.exit(1)
+
+        # Resolve wiki node to get obj_token (document_id)
+        info = client.get("/wiki/v2/spaces/get_node", params={"token": token})
+        node = info.get("data", {}).get("node", {})
+        obj_token = node.get("obj_token", "")
+        obj_type = node.get("obj_type", "")
+        title = node.get("title", "(untitled)")
+
+        if not obj_token:
+            Log.error(f"Cannot resolve wiki node: {token}")
+            output(info)
+            sys.exit(1)
+
+        if obj_type != "docx":
+            Log.error(f"Wiki export only supports docx nodes, got '{obj_type}'")
+            sys.exit(1)
+
+        Log.info(f"Exporting wiki: {title} (obj_token={obj_token})")
+        export_document(client, obj_token, args.output,
+                        download_images=not args.no_images)
 
 # ─── Drive → Wiki Import Engine ─────────────────────────────────────────────
 

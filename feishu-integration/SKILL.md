@@ -1,7 +1,7 @@
 ---
 name: feishu-integration
 metadata:
-  version: 0.4.0
+  version: 0.4.1
 description: >
   Feishu (Lark) unified CLI for tasks, documents, wiki, bitable, messaging,
   approval, and Drive. Supports search/create/edit/publish/export across all
@@ -53,6 +53,7 @@ If no credentials exist, guide user through first-use setup:
 | 清理 | `doc list` → `doc trash --token TOKEN` |
 | 共享 | `doc shared-add --url "..."` (user provides URL) |
 | **导出为 Markdown** | `doc export --document-id TOKEN --output path.md` |
+| **导出含图片** | `doc export --document-id TOKEN --images` |
 | **按名称导出** | `doc export --name "方案"` |
 
 #### Batch Upload with Cross-Document Linking
@@ -80,6 +81,8 @@ Auto-handled by `create-from-markdown`:
 | **搜索知识库** | `wiki search --query "关键词"` |
 | **搜索+读取** | `wiki search --query "退款" --read` |
 | **搜索指定空间** | `wiki search --query "退款" --space-id ID` |
+| **导出 Wiki(含图片)** | `wiki export --url "https://xxx.feishu.cn/wiki/TOKEN"` |
+| **导出(仅文本)** | `wiki export --token TOKEN --no-images` |
 
 ### Message
 
@@ -161,11 +164,11 @@ feishu-integration/
 ├── feishu                ← CLI entry (bash)
 ├── SKILL.md              ← This file
 ├── scripts/
-│   ├── feishu_api.py     ← Core (auth + HTTP + retry + pagination)
+│   ├── feishu_api.py     ← Core (auth + HTTP + retry + pagination + media download)
 │   ├── auth.py           ← OAuth2 (login/refresh/relogin/incremental)
 │   ├── task.py           ← Task v2 (table + JSON output)
-│   ├── docx.py           ← Document & Drive (+ full-text search)
-│   ├── wiki.py           ← Knowledge base
+│   ├── docx.py           ← Document & Drive (+ full-text search + export with images)
+│   ├── wiki.py           ← Knowledge base (+ wiki export)
 │   ├── bitable.py        ← Bitable (多维表格)
 │   ├── msg.py            ← Messaging (send/chats/history + rich-text post)
 │   ├── approval.py       ← Approval (审批: create/get/list/approve/reject)

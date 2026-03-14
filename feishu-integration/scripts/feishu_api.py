@@ -298,6 +298,48 @@ class FeishuClient:
     def delete(self, path: str, params: Optional[dict] = None) -> dict:
         return self.request("DELETE", path, params=params)
 
+    def download_media(self, file_token: str, save_path: str) -> bool:
+        """Download a media file (image/attachment) from Feishu Drive to local path.
+
+        Uses GET /drive/v1/medias/{file_token}/download — returns binary stream.
+        """
+        url = f"{API_BASE}/drive/v1/medias/{file_token}/download"
+        os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+
+        for attempt in range(1, MAX_RETRIES + 1):
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("Authorization", f"Bearer {self.token}")
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    with open(save_path, "wb") as f:
+                        while True:
+                            chunk = resp.read(8192)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                return True
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    delay = RETRY_DELAY * attempt
+                    Log.warn(f"Rate limited downloading {file_token}. Retry in {delay}s")
+                    time.sleep(delay)
+                    continue
+                if 500 <= e.code < 600:
+                    delay = RETRY_DELAY * attempt
+                    Log.warn(f"Server error ({e.code}) downloading {file_token}. Retry in {delay}s")
+                    time.sleep(delay)
+                    continue
+                if e.code == 401:
+                    if self._auto_refresh():
+                        continue
+                Log.error(f"Download failed for {file_token}: HTTP {e.code}")
+                return False
+            except Exception as e:
+                Log.error(f"Download error for {file_token}: {e}")
+                return False
+        Log.error(f"Max retries exceeded downloading {file_token}")
+        return False
+
     # ── Pagination Helper ─────────────────────────────────────────────────
 
     def get_all(self, path: str, params: Optional[dict] = None,
