@@ -1,7 +1,7 @@
 ---
 name: agent-brainstorm
 metadata:
-  version: 0.1.1
+  version: 0.1.2
 description: 'Multi-agent brainstorming: async opinion collision with expert personas.
   Mixed Codex/Claude Code engine. Use when multiple AI agents need to collaboratively
   discuss, debate, and converge on solutions through structured dialog. Triggers:
@@ -165,7 +165,6 @@ node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs \
 | `--timeout` | 30 | 最大讨论时间（分钟） |
 | `--engine` | codex | 默认 Agent 引擎，每个 agent 可在 JSON 中通过 `engine` 字段覆盖 |
 | `--approval-mode` | full-auto | Agent 执行策略 |
-| `--no-open` | false | 不自动打开浏览器面板 |
 | `--dry-run` | false | 预览不执行 |
 
 **⚠️ 关键：此命令是阻塞式的** — 进程在所有 Agent 完成讨论并生成 `synthesis.md` 后才退出。
