@@ -9,9 +9,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ─── SDK Mode Mappings ───
 
 export const CODEX_MODE_MAP = {
-    suggest: { approvalPolicy: "on-request", sandboxMode: "workspace-write" },
-    "auto-edit": { approvalPolicy: "on-failure", sandboxMode: "workspace-write" },
-    "full-auto": { approvalPolicy: "never", sandboxMode: "workspace-write" },
+    suggest: { approvalPolicy: "on-request" },
+    "auto-edit": { approvalPolicy: "on-failure" },
+    "full-auto": { approvalPolicy: "never" },
 };
 
 export const CLAUDE_MODE_MAP = {
@@ -58,7 +58,7 @@ export async function runCodexSession(codex, prompt, { approvalMode, sandboxMode
     const sdkMode = CODEX_MODE_MAP[approvalMode] || CODEX_MODE_MAP["suggest"];
     const thread = codex.startThread({
         approvalPolicy: sdkMode.approvalPolicy,
-        sandboxMode: sdkMode.sandboxMode || sandboxMode,
+        sandboxMode: sandboxMode || "danger-full-access",
         workingDirectory,
     });
 
@@ -88,7 +88,7 @@ export async function resumeCodexSession(codex, threadId, prompt, { approvalMode
     const sdkMode = CODEX_MODE_MAP[approvalMode] || CODEX_MODE_MAP["suggest"];
     const thread = codex.resumeThread(threadId, {
         approvalPolicy: sdkMode.approvalPolicy,
-        sandboxMode: sdkMode.sandboxMode || sandboxMode,
+        sandboxMode: sandboxMode || "danger-full-access",
         workingDirectory,
     });
 
@@ -120,30 +120,48 @@ export async function runClaudeSession(sdk, prompt, { approvalMode, workingDirec
     const permissionMode = CLAUDE_MODE_MAP[approvalMode] || CLAUDE_MODE_MAP["full-auto"];
 
     let finalResponse = "";
+    let accumulatedText = ""; // Safety net: accumulate text from streaming assistant messages
     let usage = null;
 
-    const q = sdk.query({
-        prompt,
-        options: {
-            cwd: workingDirectory,
-            permissionMode,
-            systemPrompt: { type: "preset", preset: "claude_code" },
-            disallowedTools: ["ToolSearch"],
-            settingSources: ["project"],
-            maxTurns: 50,
-        },
-    });
+    const opts = {
+        cwd: workingDirectory,
+        permissionMode,
+        systemPrompt: { type: "preset", preset: "claude_code" },
+        disallowedTools: ["ToolSearch"],
+        settingSources: ["project"],
+        maxTurns: 50,
+    };
+
+    // bypassPermissions requires this safety flag
+    if (permissionMode === "bypassPermissions") {
+        opts.allowDangerouslySkipPermissions = true;
+    }
+
+    const q = sdk.query({ prompt, options: opts });
+    let sessionId = null;
 
     for await (const msg of q) {
+        // Capture session_id for potential resume
+        if (msg.session_id && !sessionId) sessionId = msg.session_id;
+
         if (msg.type === "system" && msg.subtype === "init") {
             if (onEvent) onEvent({ kind: "init", text: `init model=${msg.model}` });
         }
         if (msg.type === "assistant") {
-            const textBlocks = msg.message.content?.filter((b) => b.type === "text") || [];
-            const toolBlocks = msg.message.content?.filter((b) => b.type === "tool_use") || [];
+            // Check for API-level errors (auth, billing, rate limit)
+            if (msg.error) {
+                if (onEvent) onEvent({ kind: "error", text: `API error: ${msg.error}` });
+                if (msg.error === "authentication_failed" || msg.error === "billing_error") {
+                    throw new Error(`Claude API error: ${msg.error}`);
+                }
+                // rate_limit, server_error — log but don't throw (SDK may retry)
+            }
+            const textBlocks = msg.message?.content?.filter((b) => b.type === "text") || [];
+            const toolBlocks = msg.message?.content?.filter((b) => b.type === "tool_use") || [];
             if (textBlocks.length > 0) {
-                const preview = textBlocks.map((b) => b.text).join(" ").slice(0, 200).replace(/\n/g, " ");
-                if (onEvent) onEvent({ kind: "msg", text: preview });
+                const text = textBlocks.map((b) => b.text).join(" ");
+                accumulatedText += text + "\n";
+                if (onEvent) onEvent({ kind: "msg", text: text.slice(0, 200).replace(/\n/g, " ") });
             }
             for (const tb of toolBlocks) {
                 const toolName = tb.name || "tool";
@@ -152,23 +170,42 @@ export async function runClaudeSession(sdk, prompt, { approvalMode, workingDirec
             }
         }
         if (msg.type === "result") {
+            // Check for error results (max_turns, execution errors)
+            if (msg.is_error) {
+                const errors = msg.errors?.join("; ") || msg.subtype || "unknown error";
+                if (onEvent) onEvent({ kind: "error", text: `Session error: ${errors}` });
+                // Still try to extract any partial response from accumulated text
+                if (accumulatedText.trim()) {
+                    finalResponse = accumulatedText.trim();
+                }
+                break;
+            }
             const u = msg.usage || {};
-            usage = { input_tokens: u.input_tokens || 0, cached_input_tokens: 0, output_tokens: u.output_tokens || 0 };
-            // Extract final response from result
+            usage = { input_tokens: u.input_tokens || 0, cached_input_tokens: u.cache_read_input_tokens || 0, output_tokens: u.output_tokens || 0 };
+            // Extract final response: SDK returns string (not Array)
             if (msg.result) {
-                const textParts = Array.isArray(msg.result) ? msg.result.filter((b) => b.type === "text") : [];
-                finalResponse = textParts.map((b) => b.text).join("\n") || "";
+                if (typeof msg.result === "string") {
+                    finalResponse = msg.result;
+                } else if (Array.isArray(msg.result)) {
+                    // Legacy/future-proof: handle array format
+                    const textParts = msg.result.filter((b) => b.type === "text");
+                    finalResponse = textParts.map((b) => b.text).join("\n") || "";
+                }
+            }
+            // Fallback: if result extraction failed, use accumulated text
+            if (!finalResponse && accumulatedText.trim()) {
+                finalResponse = accumulatedText.trim();
             }
             if (onEvent) {
                 onEvent({
                     kind: "usage",
-                    text: `tokens in=${u.input_tokens || 0} out=${u.output_tokens || 0}`,
+                    text: `tokens in=${u.input_tokens || 0} cached=${u.cache_read_input_tokens || 0} out=${u.output_tokens || 0}`,
                 });
             }
         }
     }
 
-    return { finalResponse, usage, threadId: null };
+    return { finalResponse, usage, threadId: sessionId };
 }
 
 // Note: Claude does not support thread resume in the same way as Codex.
@@ -218,13 +255,3 @@ function formatCodexEvent(event) {
     }
 }
 
-// ─── Status Parsing ───
-
-export function parseTeamStatus(text) {
-    if (!text) return null;
-    const matches = text.match(/TEAM_STATUS\s*=\s*(DONE|BLOCKED|NEEDS_REVIEW|FAILED)/gi);
-    if (!matches || matches.length === 0) return null;
-    const last = matches[matches.length - 1];
-    const v = last.split("=").pop().trim().toUpperCase();
-    return v;
-}
