@@ -59,7 +59,6 @@ function parseArgs(argv) {
   const config = {
     sessionFile: "",
     port: 0,
-    noOpen: false,
     cwd: process.cwd(),
     timeout: 30,
     approvalMode: "full-auto",
@@ -77,10 +76,6 @@ function parseArgs(argv) {
     switch (argv[i]) {
       case "--port":
         config.port = parseInt(argv[++i], 10);
-        i++;
-        break;
-      case "--no-open":
-        config.noOpen = true;
         i++;
         break;
       case "--cwd":
@@ -142,7 +137,6 @@ Arguments:
 
 Options:
   --port <N>              Server port (default: random)
-  --no-open               Don't auto-open browser panel
   --cwd <dir>             Project directory for agents (default: cwd)
   --timeout <min>         Max discussion time in minutes (default: 30)
   --engine <codex|claude> Default agent engine (default: codex)
@@ -1302,7 +1296,7 @@ async function main() {
   log("INFO", `Logs:     ${sessionDir}`);
   console.log("");
 
-  if (!config.noOpen) openBrowser(url);
+  openBrowser(url);
 
   // ─── SIGINT Protection (only during active discussion) ───
   let discussionActive = true;
