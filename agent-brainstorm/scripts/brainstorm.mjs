@@ -978,7 +978,6 @@ async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
       systemPrompt: { type: "preset", preset: "claude_code" },
       disallowedTools: ["ToolSearch"],
       settingSources: ["project"],
-      maxTurns: agent.maxTurns || config.maxTurns || 80,
     },
   });
 
