@@ -282,15 +282,6 @@ export async function serve(cwd, opts) {
                         board, meetingHistory: mtHistory, goal, cwd, runId, baseSha,
                     });
                 } else {
-                    // Auto-start first pending task if no current task
-                    // (Not a decision — just mechanical activation so the Worker prompt can show the active task)
-                    if (!agentInfo.currentTaskId) {
-                        const nextTask = board.getNextPendingTask(agentName);
-                        if (nextTask) {
-                            await board.startTask(agentName, nextTask.id);
-                            log("INFO", `Auto-started task #${nextTask.id} for ${agentName}`);
-                        }
-                    }
                     const worktreePath = agentInfo.worktreeRel ? resolve(cwd, agentInfo.worktreeRel) : cwd;
                     const dmHistory = await meeting.readDMs("leader", agentName);
                     prompt = buildWorkerPrompt({

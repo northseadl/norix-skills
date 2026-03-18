@@ -78,11 +78,6 @@ export async function wakeAgent(ctx, agentName, prompt) {
         lastOutput: output.slice(0, 2000),
     });
 
-    // Post output summary to meeting room
-    if (output.trim()) {
-        const summary = extractSummary(output);
-        await meeting.post(agentName, summary);
-    }
 
     // Post factual idle event — Hub does NOT decide what to do about it.
     // Leader will see this and decide.
@@ -155,10 +150,6 @@ export async function resumeAgent(ctx, agentName, prompt) {
         lastOutput: output.slice(0, 2000),
     });
 
-    if (output.trim()) {
-        const summary = extractSummary(output);
-        await meeting.post(agentName, summary);
-    }
 
     await meeting.postEvent(`${agentName} 的会话结束，进入空闲状态`);
 
@@ -170,17 +161,3 @@ export async function resumeAgent(ctx, agentName, prompt) {
     return { ok: true, output, threadId, usage: result.usage };
 }
 
-// ─── Helpers ───
-
-/**
- * Extract a summary from agent output for meeting room posting.
- * Takes the last meaningful paragraph — agents naturally summarize at the end.
- */
-function extractSummary(output, maxLen = 800) {
-    if (!output) return "";
-    // Take the last non-empty section (agents typically summarize at the end)
-    const paragraphs = output.split(/\n{2,}/).filter((p) => p.trim().length > 20);
-    if (paragraphs.length === 0) return output.slice(0, maxLen);
-    const last = paragraphs[paragraphs.length - 1].trim();
-    return last.length > maxLen ? last.slice(0, maxLen) + "..." : last;
-}

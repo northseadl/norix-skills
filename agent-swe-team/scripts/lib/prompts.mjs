@@ -111,7 +111,15 @@ export function buildWorkerPrompt({ agentName, board, meetingHistory, dmHistory,
         ? completedTasks.map((t) => `✅ #${t.id} ${t.title}: ${t.summary}`).join("\n")
         : "";
 
-    return `你是全栈开发工匠 ${agentName}。你一次只处理一个任务。当前任务完成后，用 summary 标记完成，等待下一个。
+    return `你是全栈开发工匠 ${agentName}。你一次只处理一个任务。
+
+## ⚠️ 交付纪律（不可违反）
+
+1. **必须 git commit** — 任务完成前，必须在你的分支上执行 \`git add -A && git commit -m "描述"\`
+2. **先 commit，后 complete** — 只有 commit 成功后，才能调用 /complete 端点
+3. **不要 merge** — 你只在自己的分支上 commit。合并由 Leader 通过 Hub 工具完成
+4. **不要切换分支** — 始终保持在你被分配的分支 \`${branch}\` 上工作
+5. **commit message 使用英文** — 格式: \`feat/fix/refactor(scope): description\`
 
 ## 当前任务
 ${currentTaskView}
@@ -136,8 +144,12 @@ curl -sX POST http://127.0.0.1:$PORT/dm -H 'Content-Type: application/json' -d '
 curl -sX PATCH http://127.0.0.1:$PORT/board/task/${currentTask?.id || "TASK_ID"} -H 'Content-Type: application/json' -d '{"progress":50,"notes":"模型层完成"}'
 \`\`\`
 
-### 完成当前任务（重要：必须附上 summary 用于上下文压缩）
+### 完成当前任务（必须先 git commit！）
 \`\`\`bash
+# Step 1: 先 commit 你的代码
+cd ${worktreePath} && git add -A && git commit -m "feat(scope): 完成 XXX"
+
+# Step 2: 然后标记任务完成
 curl -sX POST http://127.0.0.1:$PORT/board/task/${currentTask?.id || "TASK_ID"}/complete -H 'Content-Type: application/json' -d '{"summary":"简述你完成了什么、修改了哪些文件、关键决策"}'
 \`\`\`
 
@@ -150,6 +162,7 @@ curl -s http://127.0.0.1:$PORT/board
 - 工作目录: ${worktreePath}
 - 分支: ${branch}
 - 所有代码修改在你的 worktree 中完成，不会影响其他人
+- **重要**: 任务代码完成后必须 git commit 到此分支
 
 ## 工作面板
 ${boardView}
@@ -162,8 +175,8 @@ ${recentDMs ? `## Leader 私信\n${recentDMs}` : ""}
 ## 目标
 ${goal}
 
-开始处理当前任务。完成后用 /complete 端点标记，填写 summary（简述做了什么、改了哪些文件）。
-summary 会被用于上下文压缩 —— 你的下一个任务将在全新会话中开始，只携带这个压缩摘要。`;
+开始处理当前任务。工作流程: 编码 → git commit → /complete。
+⚠️ 没有 commit 就 complete = 工作丢失。summary 会被用于上下文压缩。`;
 }
 
 // ─── Inspector Prompt ───

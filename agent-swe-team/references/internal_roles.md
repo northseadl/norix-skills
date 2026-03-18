@@ -34,12 +34,16 @@ Leader 的 prompt 包含:
 
 ### 上下文压缩
 
-任务完成时 Worker 调用 `/board/task/:id/complete {"summary":"..."}`:
-1. task.status → done, progress → 100
-2. summary 存入 agent.completedTasks[] (截断 500 字)
-3. agent.currentTaskId → null
-4. **agent.threadId → null** (强制下次 wake 开新 session)
-5. 会议室发布完成事件
+任务完成时 Worker 必须**先 git commit，再调用** `/board/task/:id/complete {"summary":"..."}`:  
+1. Worker 执行 `git add -A && git commit -m "描述"` 到自己的分支
+2. Worker 调用 `/complete` 端点
+3. task.status → done, progress → 100
+4. summary 存入 agent.completedTasks[] (截断 500 字)
+5. agent.currentTaskId → null
+6. **agent.threadId → null** (强制下次 wake 开新 session)
+7. 会议室发布完成事件
+
+**没有 commit 就 complete = 工作丢失。**
 
 下次 Worker 被唤醒时：
 - 全新 session（无历史上下文）
