@@ -1,7 +1,7 @@
 ---
 name: coding-net-integration
 metadata:
-  version: 0.2.2
+  version: 0.2.3
 description: 'Coding.net DevOps automation: MR lifecycle, CI operations (trigger/logs/stop),
 
   artifact registry, cross-project queries, remote file audit.

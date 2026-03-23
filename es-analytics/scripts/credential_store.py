@@ -21,7 +21,6 @@ Usage:
 """
 
 import base64
-import getpass
 import hashlib
 import hmac
 import json
@@ -106,7 +105,7 @@ def _machine_fingerprint() -> bytes:
         tmp.replace(_SEED_FILE)
         os.chmod(_SEED_FILE, 0o600)
 
-    identity = f"{seed}:{getpass.getuser()}:{_NX1_DOMAIN}"
+    identity = f"{seed}:{_NX1_DOMAIN}"
     return hashlib.sha256(identity.encode("utf-8")).digest()
 
 

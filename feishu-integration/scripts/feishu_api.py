@@ -59,10 +59,8 @@ class Log:
 class FeishuClient:
     """Authenticated HTTP client for Feishu Open API (user identity only).
 
-    Token resolution:
-    1. Stored credentials in ~/.agents/data/feishu/credentials.json (managed by auth.py)
-       — auto-refreshes if expired
-    2. FEISHU_USER_ACCESS_TOKEN env var (manual override)
+    Token resolution: Encrypted vault via auth.get_user_access_token()
+    — auto-refreshes if expired, no environment variables.
     """
 
     def __init__(self):
@@ -71,45 +69,44 @@ class FeishuClient:
     # ── Token Resolution ──────────────────────────────────────────────────
 
     def _resolve_token(self) -> str:
-        """Resolve user_access_token. This skill only operates with user identity.
+        """Resolve user_access_token from vault. No env var."""
+        # Vault-based resolution (auto-migrates legacy plaintext)
+        try:
+            from auth import get_user_access_token
+            token = get_user_access_token()
+        except ImportError:
+            token = ""
 
-        Priority:
-        1. Stored credentials file (~/.agents/data/feishu/credentials.json), auto-refresh if expired
-        2. FEISHU_USER_ACCESS_TOKEN env var (manual override)
-        """
-        # Priority 1: stored credentials file (managed by auth.py)
-        if os.path.isfile(CREDENTIALS_FILE):
-            try:
-                with open(CREDENTIALS_FILE) as f:
-                    creds = json.load(f)
-                stored = creds.get("user_access_token", "")
-                expire_at = creds.get("expire_at", 0)
-                now = int(time.time())
-                if stored and expire_at > now:
-                    remaining = (expire_at - now) // 60
-                    Log.info(f"Using stored user_access_token (~{remaining}min remaining)")
-                    return stored
-                elif stored and expire_at > 0:
-                    # Token expired — auto-refresh before failing
-                    Log.warn("Stored user_access_token expired. Attempting auto-refresh...")
-                    if self._auto_refresh():
-                        with open(CREDENTIALS_FILE) as f:
-                            creds = json.load(f)
-                        refreshed = creds.get("user_access_token", "")
-                        if refreshed:
-                            remaining = (creds.get("expire_at", 0) - int(time.time())) // 60
-                            Log.ok(f"Token refreshed (~{remaining}min remaining)")
-                            return refreshed
-                    Log.error("Auto-refresh failed. Run: ./feishu auth refresh")
-                    Log.error("  Or re-login: ./feishu auth login")
-                    sys.exit(1)
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        # Priority 2: env var (manual override for ad-hoc use)
-        token = os.environ.get("FEISHU_USER_ACCESS_TOKEN", "")
         if token:
-            Log.info("Using FEISHU_USER_ACCESS_TOKEN env var")
+            # Check expiry from credentials file
+            if os.path.isfile(CREDENTIALS_FILE):
+                try:
+                    with open(CREDENTIALS_FILE) as f:
+                        creds = json.load(f)
+                    expire_at = creds.get("expire_at", 0)
+                    now = int(time.time())
+                    if expire_at > 0 and expire_at <= now:
+                        Log.warn("Stored user_access_token expired. Attempting auto-refresh...")
+                        if self._auto_refresh():
+                            try:
+                                from auth import get_user_access_token as get_uat
+                                refreshed = get_uat()
+                            except ImportError:
+                                refreshed = ""
+                            if refreshed:
+                                with open(CREDENTIALS_FILE) as f:
+                                    creds = json.load(f)
+                                remaining = (creds.get("expire_at", 0) - int(time.time())) // 60
+                                Log.ok(f"Token refreshed (~{remaining}min remaining)")
+                                return refreshed
+                        Log.error("Auto-refresh failed. Run: ./feishu auth refresh")
+                        Log.error("  Or re-login: ./feishu auth login")
+                        sys.exit(1)
+                    elif expire_at > now:
+                        remaining = (expire_at - now) // 60
+                        Log.info(f"Using stored user_access_token (~{remaining}min remaining)")
+                except (json.JSONDecodeError, OSError):
+                    pass
             return token
 
         Log.error("No user_access_token found.")
@@ -118,10 +115,8 @@ class FeishuClient:
         Log.error("  ─────────────────────────────────────")
         Log.error("  1. 打开 https://open.feishu.cn/app → 创建自建应用")
         Log.error("  2. 复制 App ID 和 App Secret")
-        Log.error("  3. 设置环境变量:")
-        Log.error('     export FEISHU_APP_ID="cli_xxxxxxxx"')
-        Log.error('     export FEISHU_APP_SECRET="xxxxxxxx"')
-        Log.error("  4. 执行登录:")
+        Log.error("  3. 运行:")
+        Log.error("     ./feishu auth init --app-id cli_xxx --app-secret xxx")
         Log.error("     ./feishu auth login")
         Log.error("")
         Log.error("  已配置过? 检查状态: ./feishu auth status")

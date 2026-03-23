@@ -20,12 +20,19 @@ import urllib.parse
 import urllib.request
 from typing import Any, Optional
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+from credential_store import CredentialStore
+
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 MAX_RETRIES = int(os.environ.get("CODING_MAX_RETRIES", "3"))
 RETRY_DELAY = int(os.environ.get("CODING_RETRY_DELAY", "2"))
 CREDENTIALS_FILE = os.path.expanduser("~/.agents/data/coding/credentials.json")
 DATA_DIR = os.path.dirname(CREDENTIALS_FILE)
+
+_VAULT_SENTINEL = "***vault***"
+_cred_store = CredentialStore("coding", DATA_DIR)
 
 # ─── Colored Logging ─────────────────────────────────────────────────────────
 
@@ -62,19 +69,10 @@ class Log:
 # ─── Credentials ─────────────────────────────────────────────────────────────
 
 def _resolve_api_base() -> str:
-    """Resolve API base URL from config or env.
+    """Resolve API base URL from credentials file.
 
-    Priority: CODING_API_BASE env > credentials file > error.
     Format: https://{team}.coding.net/open-api
     """
-    env_base = os.environ.get("CODING_API_BASE", "")
-    if env_base:
-        return env_base.rstrip("/")
-
-    team = os.environ.get("CODING_TEAM", "")
-    if team:
-        return f"https://{team}.coding.net/open-api"
-
     if os.path.isfile(CREDENTIALS_FILE):
         try:
             with open(CREDENTIALS_FILE) as f:
@@ -89,19 +87,24 @@ def _resolve_api_base() -> str:
 
 
 def _resolve_token() -> str:
-    """Resolve personal access token.
+    """Resolve personal access token from vault. No env var."""
+    vault_token = _cred_store.get("token")
+    if vault_token:
+        return vault_token
 
-    Priority: CODING_TOKEN env > credentials file.
-    """
-    token = os.environ.get("CODING_TOKEN", "")
-    if token:
-        return token
-
+    # Legacy: read from plaintext credentials file
     if os.path.isfile(CREDENTIALS_FILE):
         try:
             with open(CREDENTIALS_FILE) as f:
                 creds = json.load(f)
-            return creds.get("token", "")
+            stored = creds.get("token", "")
+            if stored and stored != _VAULT_SENTINEL:
+                # Auto-migrate to vault
+                _cred_store.set("token", stored)
+                creds["token"] = _VAULT_SENTINEL
+                with open(CREDENTIALS_FILE, "w") as f:
+                    json.dump(creds, f, indent=2, ensure_ascii=False)
+                return stored
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -132,10 +135,9 @@ class CodingClient:
                 Log.error("  ─────────────────────────────────────")
                 Log.error("  1. 打开 Coding.net → 个人账户设置 → 访问令牌 → 新建令牌")
                 Log.error("  2. 勾选所需权限 (project / depot / ci / artifact)")
-                Log.error("  3. 设置环境变量:")
-                Log.error('     export CODING_TEAM="your-team"')
-                Log.error('     export CODING_TOKEN="your-token"')
-                Log.error("  4. 或执行配置向导:")
+                Log.error("  3. 运行:")
+                Log.error("     ./coding auth init --team your-team --token your-token")
+                Log.error("  或执行配置向导:")
                 Log.error("     ./coding auth setup")
                 Log.error("")
                 sys.exit(1)
@@ -149,7 +151,7 @@ class CodingClient:
                 Log.error("No access token found.")
                 Log.error("")
                 Log.error("  设置方式:")
-                Log.error('     export CODING_TOKEN="your-personal-access-token"')
+                Log.error("     ./coding auth init --team xxx --token yyy")
                 Log.error("  或执行: ./coding auth setup")
                 Log.error("")
                 sys.exit(1)

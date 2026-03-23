@@ -72,11 +72,22 @@ ALL_SCOPES = CORE_SCOPES + [
 # ─── Credentials Storage ────────────────────────────────────────────────────
 
 def save_credentials(creds: dict):
-    # Extract app_secret to encrypted vault
+    # Extract secrets to encrypted vault
     secret = creds.get("app_secret", "")
     if secret and secret != _VAULT_SENTINEL:
         _cred_store.set("app-secret", secret)
         creds["app_secret"] = _VAULT_SENTINEL
+
+    uat = creds.get("user_access_token", "")
+    if uat and uat != _VAULT_SENTINEL:
+        _cred_store.set("user-access-token", uat)
+        creds["user_access_token"] = _VAULT_SENTINEL
+
+    rt = creds.get("refresh_token", "")
+    if rt and rt != _VAULT_SENTINEL:
+        _cred_store.set("refresh-token", rt)
+        creds["refresh_token"] = _VAULT_SENTINEL
+
     os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
     with open(CREDENTIALS_FILE, "w") as f:
         json.dump(creds, f, indent=2, ensure_ascii=False)
@@ -92,16 +103,48 @@ def load_credentials() -> dict:
 
 
 def get_app_credentials() -> tuple[str, str]:
-    app_id = os.environ.get("FEISHU_APP_ID", "")
-    app_secret = os.environ.get("FEISHU_APP_SECRET", "")
-    if not app_id or not app_secret:
-        creds = load_credentials()
-        app_id = app_id or creds.get("app_id", "")
-        stored_secret = creds.get("app_secret", "")
-        if stored_secret == _VAULT_SENTINEL:
-            stored_secret = _cred_store.get("app-secret") or ""
-        app_secret = app_secret or stored_secret
-    return app_id, app_secret
+    """Resolve app_id + app_secret from credentials file + vault. No env var."""
+    creds = load_credentials()
+    app_id = creds.get("app_id", "")
+    stored_secret = creds.get("app_secret", "")
+    if stored_secret == _VAULT_SENTINEL:
+        stored_secret = _cred_store.get("app-secret") or ""
+    return app_id, stored_secret
+
+
+def get_user_access_token() -> str:
+    """Resolve user_access_token from vault. No env var."""
+    vault_token = _cred_store.get("user-access-token")
+    if vault_token:
+        return vault_token
+    # Legacy: read from credentials file
+    creds = load_credentials()
+    stored = creds.get("user_access_token", "")
+    if stored and stored != _VAULT_SENTINEL:
+        # Auto-migrate to vault
+        _cred_store.set("user-access-token", stored)
+        creds["user_access_token"] = _VAULT_SENTINEL
+        with open(CREDENTIALS_FILE, "w") as f:
+            json.dump(creds, f, indent=2, ensure_ascii=False)
+        return stored
+    return ""
+
+
+def get_refresh_token() -> str:
+    """Resolve refresh_token from vault. No env var."""
+    vault_token = _cred_store.get("refresh-token")
+    if vault_token:
+        return vault_token
+    # Legacy: read from credentials file
+    creds = load_credentials()
+    stored = creds.get("refresh_token", "")
+    if stored and stored != _VAULT_SENTINEL:
+        _cred_store.set("refresh-token", stored)
+        creds["refresh_token"] = _VAULT_SENTINEL
+        with open(CREDENTIALS_FILE, "w") as f:
+            json.dump(creds, f, indent=2, ensure_ascii=False)
+        return stored
+    return ""
 
 
 # ─── OAuth2 Authorization Flow ─────────────────────────────────────────────
@@ -151,15 +194,15 @@ def cmd_login():
     app_id, app_secret = get_app_credentials()
 
     if not app_id or not app_secret:
-        Log.error("FEISHU_APP_ID and FEISHU_APP_SECRET must be set.")
+        Log.error("No app credentials found.")
         print()
-        print("  如何获取：")
+        print("  如何配置（首次使用）：")
         print("  1. 打开 https://open.feishu.cn/app")
         print("  2. 创建自建应用 → 复制 App ID 和 App Secret")
         print(f"  3. 安全设置 → 重定向 URL → 添加 {OAUTH_REDIRECT_URI}")
         print()
-        print('  export FEISHU_APP_ID="cli_xxxxxxxx"')
-        print('  export FEISHU_APP_SECRET="xxxxxxxx"')
+        print("  然后运行：")
+        print("  ./feishu auth init --app-id cli_xxx --app-secret xxx")
         sys.exit(1)
 
     _open_browser_and_exchange(app_id, app_secret, CORE_SCOPES)
@@ -177,7 +220,7 @@ def incremental_authorize(feature_scopes: list) -> bool:
     app_id, app_secret = get_app_credentials()
     if not app_id or not app_secret:
         Log.error("Cannot do incremental auth: missing app credentials.")
-        Log.error("Set FEISHU_APP_ID and FEISHU_APP_SECRET, or run auth.py login first.")
+        Log.error("Run: ./feishu auth init --app-id cli_xxx --app-secret xxx")
         return False
 
     # Include core + new scopes so the resulting token has everything
@@ -304,9 +347,9 @@ def cmd_login_explorer():
     print("  2. 左侧选择一个需要 user_access_token 的 API")
     print("  3. 右侧「认证信息」→ 选择应用 → 点击「获取 user_access_token」")
     print("  4. 在弹出窗口中授权")
-    print("  5. 复制 token，设置环境变量：")
+    print("  5. 复制 token，运行:")
     print()
-    print('     export FEISHU_USER_ACCESS_TOKEN="u-xxxxxxxx"')
+    print("     ./feishu auth set-token <TOKEN>")
     print()
     print("  注意: Token 有效期约 2 小时")
     print()
@@ -317,11 +360,11 @@ def cmd_login_explorer():
 def cmd_refresh():
     app_id, app_secret = get_app_credentials()
     if not app_id or not app_secret:
-        Log.error("FEISHU_APP_ID and FEISHU_APP_SECRET required for refresh.")
+        Log.error("No app credentials found. Run: ./feishu auth init --app-id cli_xxx --app-secret xxx")
         sys.exit(1)
 
     creds = load_credentials()
-    refresh_token = creds.get("refresh_token", "")
+    refresh_token = get_refresh_token()
     if not refresh_token:
         Log.error("No refresh_token found.")
         Log.error("Ensure 'offline_access' permission is enabled, then: ./feishu auth relogin")
@@ -387,14 +430,15 @@ def cmd_refresh():
 
 def cmd_status():
     print()
-    print("  飞书认证状态 (user identity only)")
+    print("  飞书认证状态 (vault-based)")
     print()
 
-    uat = os.environ.get("FEISHU_USER_ACCESS_TOKEN", "")
-    aid = os.environ.get("FEISHU_APP_ID", "")
+    uat = get_user_access_token()
+    app_id, app_secret = get_app_credentials()
 
-    print(f"  FEISHU_USER_ACCESS_TOKEN:   {'[Y] ' + uat[:15] + '...' if uat else '[N] not set'}")
-    print(f"  FEISHU_APP_ID:              {'[Y] ' + aid if aid else '[N] not set'}")
+    print(f"  App ID:              {'[Y] ' + app_id if app_id else '[N] not configured'}")
+    print(f"  App Secret (vault):  {'[Y] encrypted' if app_secret else '[N] not configured'}")
+    print(f"  Access Token (vault):{'[Y] ' + uat[:15] + '...' if uat else '[N] not set'}")
     print()
 
     if os.path.isfile(CREDENTIALS_FILE):
@@ -411,18 +455,12 @@ def cmd_status():
                 print(f"  Scopes:      {scope[:80]}{'...' if len(scope) > 80 else ''}")
         elif expire_at > 0:
             print("  Token:       [N] expired (auto-refreshes on next command)")
-
-        if uat:
-            stored = creds.get("user_access_token", "")
-            if stored and stored != uat:
-                print()
-                print("  [!] FEISHU_USER_ACCESS_TOKEN env var differs from credentials file.")
-                print("      Credentials file takes priority. To use env var: rm ~/.feishu/credentials.json")
     else:
         print("  Credentials: [N] not found")
     print()
 
     print("  快速开始:")
+    print("    ./feishu auth init --app-id cli_xxx --app-secret xxx")
     print("    ./feishu auth login")
     print("    ./feishu auth relogin  (权限变更后使用)")
     print()
@@ -433,7 +471,7 @@ def cmd_status():
 def cmd_tenant():
     app_id, app_secret = get_app_credentials()
     if not app_id or not app_secret:
-        Log.error("FEISHU_APP_ID and FEISHU_APP_SECRET must be set.")
+        Log.error("No app credentials found. Run: ./feishu auth init --app-id cli_xxx --app-secret xxx")
         sys.exit(1)
 
     payload = json.dumps({"app_id": app_id, "app_secret": app_secret}).encode()
@@ -467,7 +505,7 @@ def cmd_relogin():
     app_id, app_secret = get_app_credentials()
 
     if not app_id or not app_secret:
-        Log.error("FEISHU_APP_ID and FEISHU_APP_SECRET must be set.")
+        Log.error("No app credentials found. Run: ./feishu auth init --app-id cli_xxx --app-secret xxx")
         sys.exit(1)
 
     Log.info("Step 1/3: Revoking old authorization...")
@@ -523,15 +561,50 @@ def cmd_relogin():
         os.remove(CREDENTIALS_FILE)
         Log.ok(f"Removed {CREDENTIALS_FILE}")
 
-    # Clear env vars for this process
-    os.environ.pop("FEISHU_USER_ACCESS_TOKEN", None)
-    os.environ.pop("FEISHU_TENANT_ACCESS_TOKEN", None)
+    # No env vars to clear — vault-based only
 
     # Step 3: Re-login with ALL scopes (core + features)
     Log.info("Step 3/3: Starting fresh OAuth2 authorization...")
     Log.info("Please RE-AUTHORIZE in the browser — you should see the full permission list.")
     print()
     _open_browser_and_exchange(app_id, app_secret, ALL_SCOPES)
+
+
+# ─── Init (Non-Interactive, Agent-Friendly) ────────────────────────────────────
+
+import argparse as _argparse
+
+def cmd_init():
+    """Non-interactive init: store app_id + app_secret in vault."""
+    parser = _argparse.ArgumentParser(prog="feishu auth init")
+    parser.add_argument("--app-id", required=True, help="Feishu App ID (cli_xxx)")
+    parser.add_argument("--app-secret", required=True, help="Feishu App Secret")
+    args = parser.parse_args(sys.argv[2:])
+
+    save_credentials({
+        "app_id": args.app_id,
+        "app_secret": args.app_secret,
+    })
+    Log.ok(f"App credentials stored: {args.app_id}")
+    Log.info("Next: ./feishu auth login")
+
+
+def cmd_set_token():
+    """Manually store a user_access_token (e.g. from API Explorer)."""
+    if len(sys.argv) < 3:
+        print("Usage: ./feishu auth set-token <TOKEN>", file=sys.stderr)
+        sys.exit(1)
+    token = sys.argv[2]
+    _cred_store.set("user-access-token", token)
+    # Update credentials file with expiry
+    creds = load_credentials()
+    creds["user_access_token"] = _VAULT_SENTINEL
+    creds["expire_at"] = int(time.time()) + 7200  # ~2h default
+    creds["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
+    with open(CREDENTIALS_FILE, "w") as f:
+        json.dump(creds, f, indent=2, ensure_ascii=False)
+    Log.ok(f"user_access_token stored in vault (expires ~2h)")
 
 
 # ─── Safe Data Cleanup ───────────────────────────────────────────────────────
@@ -545,9 +618,11 @@ def cmd_clean():
 
 def main():
     commands = {
+        "init": cmd_init,
         "login": cmd_login,
         "relogin": cmd_relogin,
         "login-explorer": cmd_login_explorer,
+        "set-token": cmd_set_token,
         "refresh": cmd_refresh,
         "status": cmd_status,
         "tenant": cmd_tenant,
@@ -558,13 +633,15 @@ def main():
         print("Usage: ./feishu auth <command>")
         print()
         print("Commands:")
+        print("  init             配置 App ID + App Secret（首次使用）")
         print("  login            OAuth2 授权（开浏览器）")
         print("  relogin          撤销旧授权 + 重新登录（scope 变更后使用）")
         print("  login-explorer   API Explorer 手动获取")
+        print("  set-token        手动存储 user_access_token")
         print("  refresh          刷新过期 token")
         print("  status           查看认证状态")
         print("  tenant           获取应用 token")
-        print("  clean            清理所有凭据数据 (~/.feishu/)")
+        print("  clean            清理所有凭据数据")
         sys.exit(0)
 
     commands[sys.argv[1]]()

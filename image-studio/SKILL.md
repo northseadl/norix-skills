@@ -1,7 +1,7 @@
 ---
 name: image-studio
 metadata:
-  version: 0.1.3
+  version: 0.1.4
 description: 'AI image generation and editing: e-commerce templates (hero/banner/detail/lifestyle),
 
   image refinement (background replace/remove, enhance, retouch, style transfer),
@@ -51,6 +51,10 @@ After init succeeds, credentials auto-persist. No further user action needed.
 Shortcut aliases: `nano-banana-2` (default), `nano-banana-pro`, `nano-banana`, `flash`, `pro`, `fast`.
 
 Users can override the model with `--model <name>`. Default is `nano-banana-2` (Gemini 3.1 Flash Image).
+
+> **Agent rule**: Always use the default model unless the user **explicitly** requests
+> a different one (e.g., "use pro", "4K quality", "最高画质"). Never auto-upgrade to
+> `nano-banana-pro` or `4K` based on your own judgment about what the task "deserves."
 
 ## Workflow 1: E-commerce Image Generation
 

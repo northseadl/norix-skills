@@ -14,7 +14,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 from nanobanana_api import (
-    save_credentials, clear_credentials, validate_connection, CREDENTIALS_FILE, ENV_KEY_NAMES,
+    save_credentials, clear_credentials, validate_connection, CREDENTIALS_FILE,
+    _cred_store, _VAULT_ACCOUNT,
 )
 
 
@@ -27,9 +28,6 @@ def cmd_init(args):
 
     save_credentials(api_key)
 
-    # Set env for immediate use in this session
-    os.environ["NANOBANANA_API_KEY"] = api_key
-
     if args.verify:
         print("Verifying API key...")
         if not validate_connection():
@@ -39,46 +37,21 @@ def cmd_init(args):
 
 def cmd_status(_args):
     """Display current auth status."""
-    env_key = None
-    env_name_found = None
-    for env_name in ENV_KEY_NAMES:
-        val = os.environ.get(env_name)
-        if val:
-            env_key = val
-            env_name_found = env_name
-            break
-
-    file_key = None
-
-    if CREDENTIALS_FILE.exists():
-        import json
-        try:
-            data = json.loads(CREDENTIALS_FILE.read_text())
-            file_key = data.get("api_key")
-        except Exception:
-            pass
+    vault_key = _cred_store.get(_VAULT_ACCOUNT)
 
     print("Nano Banana Auth Status (Google Gemini API)")
     print("-" * 45)
 
-    if env_key:
-        masked = f"{env_key[:6]}...{env_key[-4:]}" if len(env_key) > 12 else "***"
-        print(f"Environment: ✓ {env_name_found} = {masked}")
+    if vault_key:
+        masked = f"{vault_key[:6]}...{vault_key[-4:]}" if len(vault_key) > 12 else "***"
+        print(f"Vault:       ✓ {masked}")
     else:
-        print(f"Environment: ✗ None of {', '.join(ENV_KEY_NAMES)} set")
+        print(f"Vault:       ✗ No API key stored")
 
-    if file_key:
-        masked = f"{file_key[:6]}...{file_key[-4:]}" if len(file_key) > 12 else "***"
-        print(f"Credentials: ✓ {CREDENTIALS_FILE} = {masked}")
-    else:
-        print(f"Credentials: ✗ {CREDENTIALS_FILE} not found")
-
-    if not env_key and not file_key:
+    if not vault_key:
         print("\nNo credentials configured. Run:")
         print("  ./nanobanana auth init --api-key <YOUR_GEMINI_KEY>")
         sys.exit(1)
-
-    print(f"\nActive key source: {'environment' if env_key else 'file'}")
 
 
 def cmd_clean(_args):

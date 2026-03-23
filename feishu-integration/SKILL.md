@@ -1,7 +1,7 @@
 ---
 name: feishu-integration
 metadata:
-  version: 0.4.1
+  version: 0.4.2
 description: >
   Feishu (Lark) unified CLI for tasks, documents, wiki, bitable, messaging,
   approval, and Drive. Supports search/create/edit/publish/export across all

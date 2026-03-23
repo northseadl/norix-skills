@@ -1,7 +1,7 @@
 ---
 name: es-analytics
 metadata:
-  version: 0.1.2
+  version: 0.1.3
 description: 'Elasticsearch / SLS 只读数据分析：索引探索、mapping、聚合统计、日志搜索、时间序列、多 Profile。
 
   '

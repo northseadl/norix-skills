@@ -76,21 +76,13 @@ VALID_OUTPUT_FORMATS = ["png", "jpeg", "webp"]
 
 CREDENTIALS_FILE = Path.home() / ".agents" / "data" / "image-studio" / "credentials.json"
 
-# Support both naming conventions
-ENV_KEY_NAMES = ["NANOBANANA_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"]
-
 _VAULT_ACCOUNT = "api-key"
 _cred_store = CredentialStore("image-studio", str(CREDENTIALS_FILE.parent))
 
 
 def _resolve_api_key() -> str:
-    """Resolve API key from environment, vault, or credentials file. Never hardcode."""
-    for env_name in ENV_KEY_NAMES:
-        key = os.environ.get(env_name)
-        if key:
-            return key
-
-    # Try encrypted vault first
+    """Resolve API key from encrypted vault. No environment variables."""
+    # NX1 encrypted vault — primary source
     vault_key = _cred_store.get(_VAULT_ACCOUNT)
     if vault_key:
         return vault_key
@@ -107,8 +99,8 @@ def _resolve_api_key() -> str:
             pass
 
     print("Error: No API key found.", file=sys.stderr)
-    print("Set GEMINI_API_KEY environment variable or run:", file=sys.stderr)
-    print("  ./nanobanana auth init --api-key <YOUR_KEY>", file=sys.stderr)
+    print("Run:  ./nanobanana auth init --api-key <YOUR_KEY>", file=sys.stderr)
+    print("Get key at: https://aistudio.google.com/apikey", file=sys.stderr)
     sys.exit(1)
 
 

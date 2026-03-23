@@ -1,7 +1,7 @@
 ---
 name: adb-mysql
 metadata:
-  version: 0.1.2
+  version: 0.1.3
 description: '阿里云 AnalyticDB (ADB) for MySQL 只读数据分析。
 
   多维分析（计数/聚合/时间序列）、交叉验证、Schema 文档生成、多 Profile。

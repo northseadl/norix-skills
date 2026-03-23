@@ -17,7 +17,7 @@ import time
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
-from coding_api import CREDENTIALS_FILE, DATA_DIR, CodingClient, Log, safe_clean
+from coding_api import CREDENTIALS_FILE, DATA_DIR, CodingClient, Log, safe_clean, _cred_store, _VAULT_SENTINEL
 
 
 # ─── Shared Logic ────────────────────────────────────────────────────────────
@@ -32,20 +32,27 @@ def _normalize_team(raw: str) -> str:
 
 
 def _verify_and_save(team: str, token: str) -> bool:
-    """Verify connectivity and persist credentials.
+    """Verify connectivity and persist credentials to vault.
 
-    Verification strategy:
-    1. Try DescribeCodingProjects (only needs project:profile:ro, most tokens have this)
-    2. If scope error (UnauthorizedOperation) but API responded → connectivity proven
-    3. Only fail on network errors or auth failures (401)
-
+    Token is stored in NX1 encrypted vault. Team in JSON (non-sensitive).
     Returns True on success, calls sys.exit(1) on failure.
     """
     Log.info(f"验证连接: https://{team}.coding.net ...")
 
-    # Inject into env so CodingClient can resolve
-    os.environ["CODING_TEAM"] = team
-    os.environ["CODING_TOKEN"] = token
+    # Store in vault first so CodingClient can resolve
+    _cred_store.set("token", token)
+
+    # Save team to credentials file
+    os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
+    creds = {
+        "team": team,
+        "token": _VAULT_SENTINEL,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    with open(CREDENTIALS_FILE, "w") as f:
+        json.dump(creds, f, indent=2, ensure_ascii=False)
+    os.chmod(CREDENTIALS_FILE, 0o600)
+
     client = CodingClient()
 
     result = client.call("DescribeCodingProjects", {
@@ -58,13 +65,13 @@ def _verify_and_save(team: str, token: str) -> bool:
         err_code = error.get("Code", "")
         err_msg = error.get("Message", "?")
 
-        # Network or auth failure → truly broken
         if err_code in ("NetworkError", "AuthFailure") or "401" in str(err_code):
             Log.error(f"连接验证失败: {err_msg}")
             Log.error("请检查团队域名和 Token 是否正确")
+            # Clean up on auth failure
+            _cred_store.delete("token")
             sys.exit(1)
 
-        # Scope error → API responded, connectivity is fine, just limited permissions
         if err_code == "UnauthorizedOperation":
             Log.warn(f"Token scope 受限，但连接正常: {err_msg}")
             Log.warn("部分 API 可能因 scope 不足而无法访问")
@@ -74,19 +81,9 @@ def _verify_and_save(team: str, token: str) -> bool:
         project_count = result.get("Data", {}).get("TotalCount", "?")
         Log.ok(f"连接验证成功，可访问 {project_count} 个项目")
 
-    # Persist credentials
-    os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
-    creds = {
-        "team": team,
-        "token": token,
-        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
-    with open(CREDENTIALS_FILE, "w") as f:
-        json.dump(creds, f, indent=2, ensure_ascii=False)
-    os.chmod(CREDENTIALS_FILE, 0o600)
-
     Log.ok(f"配置成功! 已连接到 {team}.coding.net")
-    Log.info(f"凭证已保存: {CREDENTIALS_FILE}")
+    Log.info(f"Token 已加密存储在 vault 中")
+    Log.info(f"配置信息: {CREDENTIALS_FILE}")
     return True
 
 
@@ -178,15 +175,11 @@ def cmd_setup():
 def cmd_status():
     """Show current auth status, including live connectivity check."""
     print()
-    print("  Coding.net 认证状态")
+    print("  Coding.net 认证状态 (vault-based)")
     print()
 
-    team_env = os.environ.get("CODING_TEAM", "")
-    token_env = os.environ.get("CODING_TOKEN", "")
-
-    print(f"  CODING_TEAM:   {'[Y] ' + team_env if team_env else '[N] not set'}")
-    print(f"  CODING_TOKEN:  {'[Y] ' + token_env[:15] + '...' if token_env else '[N] not set'}")
-    print()
+    vault_token = _cred_store.get("token")
+    print(f"  Token (vault):  {'[Y] encrypted' if vault_token else '[N] not configured'}")
 
     if os.path.isfile(CREDENTIALS_FILE):
         try:
@@ -195,22 +188,22 @@ def cmd_status():
             team = creds.get("team", "?")
             user = creds.get("user_name", "?")
             updated = creds.get("updated_at", "?")
-            print(f"  Credentials: [Y] exists (updated {updated})")
-            print(f"  Team:        {team}.coding.net")
-            print(f"  User:        {user}")
+            print(f"  Team:           {team}.coding.net")
+            print(f"  Updated:        {updated}")
 
-            # Live connectivity check — PAT can be revoked at any time
-            client = CodingClient()
-            result = client.call("DescribeCodingProjects", {"PageNumber": 1, "PageSize": 1})
-            if result.get("Error"):
-                print(f"  Token:       [!] INVALID — token may have been revoked")
-            else:
-                print(f"  Token:       [Y] valid (live check passed)")
+            if vault_token:
+                # Live connectivity check
+                client = CodingClient()
+                result = client.call("DescribeCodingProjects", {"PageNumber": 1, "PageSize": 1})
+                if result.get("Error"):
+                    print(f"  Token:          [!] INVALID — token may have been revoked")
+                else:
+                    print(f"  Token:          [Y] valid (live check passed)")
 
         except (json.JSONDecodeError, OSError):
-            print("  Credentials: [!] file exists but cannot be read")
+            print("  Credentials:    [!] file exists but cannot be read")
     else:
-        print("  Credentials: [N] not found")
+        print("  Credentials:    [N] not found")
     print()
 
     print("  快速开始:")
