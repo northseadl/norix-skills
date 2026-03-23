@@ -84,7 +84,7 @@ export class Board {
         return this.#lock.run(async () => {
             this.#data.agents[name] = {
                 role: info.role,           // "leader" | "worker" | "inspector"
-                status: "idle",            // idle | running | done
+                status: "idle",            // idle | running | done | blocked
                 worktreeRel: info.worktreeRel || null,
                 branch: info.branch || null,
                 threadId: null,
@@ -167,14 +167,42 @@ export class Board {
         return this.getTask(agent.currentTaskId);
     }
 
+    // Ensure a worker has exactly one active task before entering a fresh session.
+    async ensureCurrentTask(agentName) {
+        return this.#lock.run(async () => {
+            const agent = this.#data.agents[agentName];
+            if (!agent) return null;
+
+            if (agent.currentTaskId) {
+                const current = this.getTask(agent.currentTaskId);
+                if (current) return current;
+                agent.currentTaskId = null;
+            }
+
+            const nextTask = this.#data.tasks.find(
+                (t) => t.assignee === agentName && t.status === "pending",
+            );
+            if (!nextTask) return null;
+
+            agent.currentTaskId = nextTask.id;
+            nextTask.status = "active";
+            nextTask.updatedAt = new Date().toISOString();
+
+            await this.#persist();
+            return nextTask;
+        });
+    }
+
     // Complete current task and record compressed summary for context handoff
-    async completeCurrentTask(agentName, summary = "") {
+    async completeCurrentTask(agentName, expectedTaskId, summary = "") {
         return this.#lock.run(async () => {
             const agent = this.#data.agents[agentName];
             if (!agent?.currentTaskId) return null;
+            if (agent.currentTaskId !== expectedTaskId) return null;
 
-            const task = this.getTask(agent.currentTaskId);
+            const task = this.getTask(expectedTaskId);
             if (!task) return null;
+            if (task.assignee !== agentName) return null;
 
             task.status = "done";
             task.progress = 100;
@@ -201,6 +229,9 @@ export class Board {
             const agent = this.#data.agents[agentName];
             const task = this.getTask(taskId);
             if (!agent || !task) return null;
+            if (task.assignee !== agentName) return null;
+            if (agent.currentTaskId && agent.currentTaskId !== taskId) return null;
+            if (task.status === "done" || task.status === "merged") return null;
 
             agent.currentTaskId = taskId;
             task.status = "active";

@@ -118,7 +118,7 @@ export async function canMergeCleanly(cwd, runId, roleBranch) {
  * Rebase a role's worktree onto the latest integration branch.
  * @param {string} worktreePath - Absolute path to the role's worktree
  * @param {string} runId
- * @returns {{ success: boolean, message: string }}
+ * @returns {{ success: boolean, conflicted?: boolean, message: string }}
  */
 export async function rebaseWorktreeOnIntegration(worktreePath, runId) {
     const intBranch = integrationBranchName(runId);
@@ -132,19 +132,12 @@ export async function rebaseWorktreeOnIntegration(worktreePath, runId) {
         log("INFO", `Rebased worktree ${worktreePath} onto ${intBranch}`);
         return { success: true, message: "Rebased successfully" };
     } catch (err) {
-        // If rebase fails, abort and reset to integration HEAD
+        // Abort the rebase and surface the conflict. Never rewrite a worker branch here.
         try {
             await git(worktreePath, ["rebase", "--abort"]);
         } catch { /* ignore */ }
-
-        try {
-            await git(worktreePath, ["reset", "--hard", intBranch]);
-            log("WARN", `Rebase failed for ${worktreePath}, reset to ${intBranch}`);
-            return { success: true, message: "Reset to integration HEAD (rebase conflict)" };
-        } catch (resetErr) {
-            log("ERROR", `Failed to reset worktree ${worktreePath}: ${resetErr.message}`);
-            return { success: false, message: resetErr.message };
-        }
+        log("WARN", `Rebase failed for ${worktreePath}: ${err.message}`);
+        return { success: false, conflicted: true, message: err.message };
     }
 }
 
@@ -162,8 +155,8 @@ export async function propagateToAllWorktrees(cwd, runId, state, excludeRole) {
     for (const [role, roleState] of Object.entries(roles)) {
         if (role === excludeRole) continue;
         if (!roleState.worktreeRel) continue;
-        // Only rebase active roles (running/idle/blocked)
-        if (roleState.status === "done") continue;
+        // Only touch idle worktrees. Running/blocked roles must be handled explicitly by the leader.
+        if (roleState.status !== "idle") continue;
 
         const worktreePath = pathResolve(cwd, roleState.worktreeRel);
         const result = await rebaseWorktreeOnIntegration(worktreePath, runId);

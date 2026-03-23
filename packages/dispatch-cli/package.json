@@ -1,18 +1,18 @@
 {
-    "name": "agent-task-orchestration",
+    "name": "dispatch-cli",
     "version": "1.0.0",
     "private": true,
     "type": "module",
     "description": "Supervised task orchestration with Codex / Claude Code — local service with real-time dashboard",
-    "bin": {
-        "dispatch": "./scripts/dispatch.mjs"
-    },
     "scripts": {
-        "dispatch": "node scripts/dispatch.mjs"
+        "build": "node build.mjs"
     },
     "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.62",
         "@openai/codex-sdk": "^0.106.0"
+    },
+    "devDependencies": {
+        "esbuild": "^0.25.0"
     },
     "engines": {
         "node": ">=18.0.0"

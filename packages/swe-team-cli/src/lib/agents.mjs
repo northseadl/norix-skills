@@ -33,9 +33,7 @@ export async function wakeAgent(ctx, agentName, prompt) {
     const agent = board.getAgent(agentName);
     if (!agent) throw new Error(`Agent not found: ${agentName}`);
 
-    const workingDirectory = agent.worktreeRel
-        ? resolve(ctx.cwd, agent.worktreeRel)
-        : ctx.cwd;
+    const workingDirectory = getAgentWorkingDirectory(ctx, agent);
 
     await board.updateAgent(agentName, { status: "running" });
 
@@ -102,9 +100,7 @@ export async function resumeAgent(ctx, agentName, prompt) {
     const agent = board.getAgent(agentName);
     if (!agent) throw new Error(`Agent not found: ${agentName}`);
 
-    const workingDirectory = agent.worktreeRel
-        ? resolve(ctx.cwd, agent.worktreeRel)
-        : ctx.cwd;
+    const workingDirectory = getAgentWorkingDirectory(ctx, agent);
 
     await board.updateAgent(agentName, { status: "running" });
 
@@ -161,3 +157,11 @@ export async function resumeAgent(ctx, agentName, prompt) {
     return { ok: true, output, threadId, usage: result.usage };
 }
 
+function getAgentWorkingDirectory(ctx, agent) {
+    if (agent.role === "inspector" && ctx.integrationWorktreePath) {
+        return ctx.integrationWorktreePath;
+    }
+    return agent.worktreeRel
+        ? resolve(ctx.cwd, agent.worktreeRel)
+        : ctx.cwd;
+}

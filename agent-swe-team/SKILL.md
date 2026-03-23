@@ -1,7 +1,7 @@
 ---
 name: agent-swe-team
 metadata:
-  version: 0.5.6
+  version: 0.5.7
 description: >-
   Multi-agent SWE team built on the Workshop model. Full-stack vertical workers,
   meeting room with @mention notification, private pipes, shared task board.
@@ -58,7 +58,7 @@ PORT=$(cat <项目目录>/.workshop/port)
 export WORKSHOP_CWD=<项目目录>
 ```
 
-Hub 启动后自动：创建 `.workshop/`、integration 分支、Worker worktrees、打开 Dashboard、唤醒 Leader。
+Hub 启动后自动：创建 `.workshop/`、integration 分支、Worker worktrees、打开 Dashboard、唤醒 Leader。Inspector 在 integration worktree 中运行，不占用独立 Worker worktree。
 
 ### Phase 2: 监控循环
 
@@ -87,7 +87,7 @@ $WS signal
 
 **人类消息**: `$WS say "用户说的内容"`
 
-**@mention 自动唤醒**: 内部 Agent 在会议室 @另一个 Agent 时，Hub 自动唤醒被提及者并注入新消息。Supervisor 无需干预。
+**@mention 自动唤醒**: 内部 Agent 在会议室 @另一个 Agent 时，Hub 自动唤醒被提及者并注入新消息。若该 Agent 需要新建 session，Hub 会先重建完整角色 prompt，再附带新消息。Supervisor 无需干预。
 
 ### Phase 3: 收尾
 
@@ -104,7 +104,7 @@ git checkout main && git merge integration/$RUN_ID --no-ff
 | 场景 | 信号 | 处理 |
 |:---|:---|:---|
 | Worker 异常 | 会议室 `"异常终止"` | `$WS wake leader` |
-| merge 冲突 | 会议室 `"合并失败"` | `$WS wake leader` |
+| worktree 同步冲突 | 会议室 `"已标记 blocked"` | `$WS wake leader` |
 | Hub 进程挂 | PORT 无响应 | 重新 `serve`（board.json 恢复） |
 | Leader 卡 idle | Workers 完成但无动作 | `$WS wake leader` |
 

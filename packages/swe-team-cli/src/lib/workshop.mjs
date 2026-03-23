@@ -70,8 +70,8 @@ export async function serve(cwd, opts) {
         integrationWorktreePath = await createIntegrationWorktree(cwd, runId, worktreeRoot);
     }
 
-    // Create worktrees for non-leader agents (leader doesn't code, no worktree needed)
-    const workerRoles = expanded.filter((r) => r.role !== "leader");
+    // Create worktrees only for workers. Leader coordinates; inspector reviews integration output.
+    const workerRoles = expanded.filter((r) => r.role === "worker");
     if (!dryRun && workerRoles.length > 0) {
         const wtResults = await createRoleWorktrees({
             cwd,
@@ -109,14 +109,17 @@ export async function serve(cwd, opts) {
     // Register leader (no worktree — leader coordinates, doesn't code)
     await board.registerAgent("leader", { role: "leader" });
 
-    // Register inspector if present
-    const hasInspector = expanded.some((r) => r.role === "inspector");
+    // Register inspectors without dedicated worktrees. They inspect the integration checkout.
+    const inspectorRoles = expanded.filter((r) => r.role === "inspector");
+    for (const inspector of inspectorRoles) {
+        await board.registerAgent(inspector.name, { role: inspector.role });
+    }
 
     await board.setPhase("running");
 
     // Build shared context
     const ctx = {
-        cwd, runId, baseSha, engine, approvalMode, sandboxMode, dryRun, maxPulses, sdks,
+        cwd, runId, goal, baseSha, engine, approvalMode, sandboxMode, dryRun, maxPulses, sdks,
         meeting, board, integrationWorktreePath,
     };
 
@@ -130,7 +133,7 @@ export async function serve(cwd, opts) {
             // @all → wake all idle agents with new context
             for (const [name, a] of Object.entries(board.data.agents)) {
                 if (a.status === "idle" && name !== triggerMsg.from) {
-                    wakeAgentWithMeetingContext(ctx, name, newMsgs, meeting, board, goal, cwd, runId, baseSha);
+                    wakeAgentWithMeetingContext(ctx, name, newMsgs);
                 }
             }
             return;
@@ -138,7 +141,7 @@ export async function serve(cwd, opts) {
         const agent = board.getAgent(agentName);
         if (!agent || agent.status === "running") return;
         log("INFO", `@${agentName} mentioned by ${triggerMsg.from} → auto-waking`);
-        wakeAgentWithMeetingContext(ctx, agentName, newMsgs, meeting, board, goal, cwd, runId, baseSha);
+        wakeAgentWithMeetingContext(ctx, agentName, newMsgs);
     };
 
     // ─── HTTP Server ───
@@ -232,12 +235,20 @@ export async function serve(cwd, opts) {
                 const agentName = task.assignee;
                 if (!agentName) return respond(resp, 400, { error: "task has no assignee" });
 
-                const completed = await board.completeCurrentTask(agentName, summary);
-                if (!completed) return respond(resp, 400, { error: "task not current for agent" });
+                const currentTask = board.getCurrentTask(agentName);
+                if (!currentTask || currentTask.id !== taskId) {
+                    return respond(resp, 409, {
+                        error: "task not current for agent",
+                        currentTaskId: currentTask?.id || null,
+                    });
+                }
+
+                const completed = await board.completeCurrentTask(agentName, taskId, summary);
+                if (!completed) return respond(resp, 409, { error: "task not current for agent" });
 
                 // Post completion event to meeting room
-                await meeting.post(agentName, `任务 #${taskId} "${task.title}" 完成。摘要: ${summary}`);
-                await meeting.postEvent(`${agentName} 完成任务 #${taskId}，进入空闲，等待下一个任务`);
+                await meeting.post(agentName, `任务 #${completed.id} "${completed.title}" 完成。摘要: ${summary}`);
+                await meeting.postEvent(`${agentName} 完成任务 #${completed.id}，进入空闲，等待下一个任务`);
 
                 return respond(resp, 200, { ok: true, task: completed });
             }
@@ -267,31 +278,9 @@ export async function serve(cwd, opts) {
                 if (!agentInfo) return respond(resp, 404, { error: `agent ${agentName} not found` });
                 if (agentInfo.status === "running") return respond(resp, 409, { error: `${agentName} already running` });
 
-                // Build prompt based on role
-                const mtHistory = await meeting.readAll();
-                let prompt;
-                if (customPrompt) {
-                    prompt = customPrompt;
-                } else if (agentInfo.role === "leader") {
-                    prompt = buildLeaderPrompt({
-                        goal, board, meetingHistory: mtHistory, cwd, runId,
-                        agents: Object.entries(board.data.agents).map(([n, a]) => ({ name: n, ...a })),
-                    });
-                } else if (agentInfo.role === "inspector") {
-                    prompt = await buildInspectorPrompt({
-                        board, meetingHistory: mtHistory, goal, cwd, runId, baseSha,
-                    });
-                } else {
-                    const worktreePath = agentInfo.worktreeRel ? resolve(cwd, agentInfo.worktreeRel) : cwd;
-                    const dmHistory = await meeting.readDMs("leader", agentName);
-                    prompt = buildWorkerPrompt({
-                        agentName, board, meetingHistory: mtHistory, dmHistory,
-                        worktreePath, branch: agentInfo.branch, goal,
-                    });
-                }
-
-                // Replace $PORT placeholder with actual port
-                prompt = prompt.replace(/\$PORT/g, ctx.portStr || "");
+                const prompt = customPrompt
+                    ? customPrompt.replace(/\$PORT/g, ctx.portStr || "")
+                    : await buildFreshPromptForAgent(ctx, agentName);
 
                 // Respond immediately, execute async
                 respond(resp, 202, { ok: true, agent: agentName, action: "waking" });
@@ -322,16 +311,25 @@ export async function serve(cwd, opts) {
 
                 respond(resp, 202, { ok: true, agent: agentName, action: "sending" });
 
-                const mtNew = await meeting.peekNew(agentName);
-                const dmNew = await meeting.readNewDMs(agentName, "leader");
-                const prompt = buildResumePrompt({
-                    agentName, meetingMessages: mtNew, dmMessages: [...dmNew, { from: "direct", ts: new Date().toISOString(), content }],
-                    board,
-                });
+                if (agentInfo.threadId) {
+                    const mtNew = await meeting.peekNew(agentName);
+                    const dmNew = await meeting.readNewDMs(agentName, "leader");
+                    const prompt = buildResumePrompt({
+                        agentName,
+                        meetingMessages: mtNew,
+                        dmMessages: [...dmNew, { from: "direct", ts: new Date().toISOString(), content }],
+                        board,
+                    });
 
-                resumeAgent({ ...ctx }, agentName, prompt).catch((err) => {
-                    log("ERROR", `send to ${agentName} failed: ${err.message}`);
-                });
+                    resumeAgent({ ...ctx }, agentName, prompt).catch((err) => {
+                        log("ERROR", `send to ${agentName} failed: ${err.message}`);
+                    });
+                } else {
+                    const prompt = await buildFreshPromptForAgent(ctx, agentName, { directMessage: content });
+                    wakeAgent({ ...ctx }, agentName, prompt).catch((err) => {
+                        log("ERROR", `send to ${agentName} failed: ${err.message}`);
+                    });
+                }
                 return;
             }
 
@@ -350,12 +348,7 @@ export async function serve(cwd, opts) {
 
                 if (result.success) {
                     await meeting.postEvent(`${agentName} 的工作已合并到 integration/${runId}`);
-                    // Propagate to other worktrees
-                    const state = { roles: {} };
-                    for (const [name, a] of Object.entries(board.data.agents)) {
-                        if (a.worktreeRel) state.roles[name] = { worktreeRel: a.worktreeRel, status: a.status };
-                    }
-                    await propagateToAllWorktrees(cwd, runId, state, agentName);
+                    result.propagation = await propagateMergeToIdleAgents(ctx, agentName);
                 } else {
                     await meeting.postEvent(`${agentName} 的合并失败: ${result.conflicted ? "冲突" : result.message}`);
                 }
@@ -445,12 +438,7 @@ export async function serve(cwd, opts) {
         const leaderAgent = board.getAgent("leader");
         if (leaderAgent) {
             log("INFO", `Waking Leader with goal: "${goal.slice(0, 80)}"`);
-            const mtHistory = await meeting.readAll();
-            let prompt = buildLeaderPrompt({
-                goal, board, meetingHistory: mtHistory, cwd, runId,
-                agents: Object.entries(board.data.agents).map(([n, a]) => ({ name: n, ...a })),
-            });
-            prompt = prompt.replace(/\$PORT/g, portStr);
+            const prompt = await buildFreshPromptForAgent(ctx, "leader");
             wakeAgent(ctx, "leader", prompt).catch((err) => {
                 log("ERROR", `Leader wake failed: ${err.message}`);
             });
@@ -486,30 +474,120 @@ export async function serve(cwd, opts) {
 
 // ─── @mention auto-wake helper ───
 
-async function wakeAgentWithMeetingContext(ctx, agentName, meetingMsgs, meeting, board, goal, cwd, runId, baseSha) {
+async function wakeAgentWithMeetingContext(ctx, agentName, meetingMsgs) {
+    const { board, meeting } = ctx;
     const agentInfo = board.getAgent(agentName);
     if (!agentInfo || agentInfo.status === "running") return;
 
-    // Use messages passed directly from the onMention callback.
-    // Do NOT call meeting.readNew() here — the cursor was already advanced
-    // inside meeting.post() before the callback fired, so readNew() would
-    // return an empty array and the agent would silently not wake.
-    const wrapped = meeting.wrapMessages(meetingMsgs, { label: "会议室 @提及" });
-    if (!wrapped) return;
-
-    const portStr = ctx.portStr || "";
-    const prompt = `---\n${wrapped}\n\n继续你的工作。根据新消息决定下一步行动。\n---`;
-
-    const promptWithPort = prompt.replace(/\$PORT/g, portStr);
     if (agentInfo.threadId) {
+        // Use messages passed directly from the onMention callback.
+        // Do NOT call meeting.readNew() here — the cursor was already advanced
+        // inside meeting.post() before the callback fired, so readNew() would
+        // return an empty array and the agent would silently not wake.
+        const wrapped = meeting.wrapMessages(meetingMsgs, { label: "会议室 @提及" });
+        if (!wrapped) return;
+        const prompt = `---\n${wrapped}\n\n继续你的工作。根据新消息决定下一步行动。\n---`;
+        const promptWithPort = prompt.replace(/\$PORT/g, ctx.portStr || "");
         resumeAgent(ctx, agentName, promptWithPort).catch((err) => {
             log("ERROR", `@mention resume ${agentName} failed: ${err.message}`);
         });
     } else {
-        wakeAgent(ctx, agentName, promptWithPort).catch((err) => {
+        const prompt = await buildFreshPromptForAgent(ctx, agentName);
+        wakeAgent(ctx, agentName, prompt).catch((err) => {
             log("ERROR", `@mention wake ${agentName} failed: ${err.message}`);
         });
     }
+}
+
+async function buildFreshPromptForAgent(ctx, agentName, { directMessage = "" } = {}) {
+    const { board, meeting, goal, cwd, runId, baseSha, integrationWorktreePath } = ctx;
+    let agentInfo = board.getAgent(agentName);
+    if (!agentInfo) throw new Error(`agent ${agentName} not found`);
+
+    if (agentInfo.role === "worker") {
+        await board.ensureCurrentTask(agentName);
+        agentInfo = board.getAgent(agentName);
+    }
+
+    const meetingHistory = await meeting.readAll();
+    let prompt;
+
+    if (agentInfo.role === "leader") {
+        prompt = buildLeaderPrompt({
+            goal,
+            board,
+            meetingHistory,
+            cwd,
+            runId,
+            agents: Object.entries(board.data.agents).map(([name, info]) => ({ name, ...info })),
+        });
+    } else if (agentInfo.role === "inspector") {
+        prompt = await buildInspectorPrompt({
+            board,
+            meetingHistory,
+            goal,
+            cwd,
+            runId,
+            baseSha,
+            integrationWorktreePath: integrationWorktreePath || cwd,
+        });
+    } else {
+        const worktreePath = agentInfo.worktreeRel ? resolve(cwd, agentInfo.worktreeRel) : cwd;
+        const dmHistory = await meeting.readDMs("leader", agentName);
+        prompt = buildWorkerPrompt({
+            agentName,
+            board,
+            meetingHistory,
+            dmHistory,
+            worktreePath,
+            branch: agentInfo.branch,
+            goal,
+        });
+    }
+
+    prompt = prompt.replace(/\$PORT/g, ctx.portStr || "");
+    if (directMessage) {
+        prompt += `\n\n## 直接消息\n${directMessage}`;
+    }
+    return prompt;
+}
+
+async function propagateMergeToIdleAgents(ctx, mergedAgentName) {
+    const { board, meeting, cwd, runId } = ctx;
+    const state = collectRoleSyncState(board);
+    const propagation = await propagateToAllWorktrees(cwd, runId, state, mergedAgentName);
+
+    for (const sync of propagation) {
+        const currentAgent = board.getAgent(sync.role);
+        if (!currentAgent) continue;
+
+        if (!sync.success) {
+            await board.updateAgent(sync.role, {
+                status: "blocked",
+                lastError: sync.message,
+            });
+            await meeting.postEvent(
+                `${sync.role} 与 integration/${runId} 同步失败，已标记 blocked: ${String(sync.message || "").slice(0, 200)}`,
+            );
+            continue;
+        }
+
+        if (currentAgent.status === "blocked") {
+            await board.updateAgent(sync.role, { status: "idle", lastError: "" });
+            await meeting.postEvent(`${sync.role} 已重新同步到 integration/${runId}，可继续工作`);
+        }
+    }
+
+    return propagation;
+}
+
+function collectRoleSyncState(board) {
+    const roles = {};
+    for (const [name, agent] of Object.entries(board.data.agents)) {
+        if (!agent.worktreeRel) continue;
+        roles[name] = { worktreeRel: agent.worktreeRel, status: agent.status };
+    }
+    return { roles };
 }
 
 // ─── Helpers ───
@@ -545,5 +623,3 @@ function expandRoles(specs) {
     }
     return result;
 }
-
-

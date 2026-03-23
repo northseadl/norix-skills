@@ -181,7 +181,15 @@ ${goal}
 
 // ─── Inspector Prompt ───
 
-export async function buildInspectorPrompt({ board, meetingHistory, goal, cwd, runId, baseSha }) {
+export async function buildInspectorPrompt({
+    board,
+    meetingHistory,
+    goal,
+    cwd,
+    runId,
+    baseSha,
+    integrationWorktreePath,
+}) {
     const boardView = board.toBoardView();
     const recentChat = formatRecentMessages(meetingHistory, 20);
 
@@ -226,8 +234,10 @@ ${diffStat}
 ${recentChat || "（尚无消息）"}
 
 ## 工作目录
-${cwd}
+${integrationWorktreePath || cwd}
 integration 分支: integration/${runId}
+
+你当前应在 integration worktree 中做只读验证，不要切换到 worker 分支，也不要在质检过程中提交代码。
 
 请评估：
 1. 目标的每个子项是否都有对应实现？

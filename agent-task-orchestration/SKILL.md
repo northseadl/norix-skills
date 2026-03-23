@@ -1,7 +1,7 @@
 ---
 name: agent-task-orchestration
 metadata:
-  version: 0.1.8
+  version: 0.1.9
 description: 'Task decomposition and multi-agent orchestration with retry, checkpoint
   recovery, and real-time monitoring.
 
