@@ -1,180 +1,103 @@
 ---
 name: feishu-integration
 metadata:
-  version: 0.4.2
+  version: 0.4.3
 description: >
-  Feishu (Lark) unified CLI for tasks, documents, wiki, bitable, messaging,
-  approval, and Drive. Supports search/create/edit/publish/export across all
-  modules. Use when reading/writing Feishu docs, searching docs or wiki,
-  managing tasks, sending messages, creating approvals, exporting to Markdown,
+  Feishu (Lark) unified CLI for tasks, documents, wiki, bitable, messaging, approval, and Drive.
+  Supports search/create/edit/publish/export across all modules. Use when reading/writing Feishu docs,
+  searching docs or wiki, managing tasks, sending messages, creating approvals, exporting to Markdown,
   or any 飞书/Lark interaction.
 ---
 
-# Feishu Integration
+# Feishu CLI — Agent Tool Guide
 
-> CLI: `./feishu <module> <command> [options]`
-> Parameter details: `references/cli_reference.md`
+> Single CLI binary. All commands emit JSON to stdout. Log/progress goes to stderr.
 
-## Auth
+## Output Contract
 
-Check: `./feishu auth status`. Token **auto-refreshes** on any API call — no manual refresh needed.
+Every command returns exactly **one JSON line** on stdout:
 
-If no credentials exist, guide user through first-use setup:
-1. Create app at [飞书开放平台](https://open.feishu.cn/app) → 自建应用
-2. 全选开通用户权限; add redirect `http://localhost:9876/callback`; publish
-3. `export FEISHU_APP_ID="<id>" FEISHU_APP_SECRET="<secret>"` → `./feishu auth login`
-
-## Intent → Command
-
-### Task
-
-| Intent | Command |
-|---|---|
-| 查任务 / 未完成 | `task list [--completed false]` |
-| 建任务 | `task create --summary "..." [--due ISO8601] [--members "Name1,Name2"]` |
-| 完成任务 | `task list --keyword "..." → task complete --task-id ID` |
-| 改截止 / 去掉截止 | `task update --task-id ID --due ISO8601` / `--clear-due` |
-| 建清单/Sprint | `task tasklist-create --name "..."`, then `task batch-create` |
-| 评论 | `task comment --task-id ID --content "..."` |
-
-`task list` defaults to **Markdown table** (状态/标题/截止/负责人). Use `--format json` for raw data.
-
-### Document
-
-| Intent | Command |
-|---|---|
-| 浏览文件 | `doc list` or `doc tree` |
-| 搜索+读取 | `doc read-raw --name "keyword"` |
-| **全文搜索** | `doc search-content --query "退款"` |
-| **搜索+自动读取** | `doc search-content --query "库存" --read` |
-| **按类型过滤搜索** | `doc search-content --query "数据" --type docx,wiki` |
-| 从 MD 创建 | `doc create-from-markdown --file path.md` |
-| 追加内容 | `doc append-markdown --document-id ID --file content.md` |
-| 清理 | `doc list` → `doc trash --token TOKEN` |
-| 共享 | `doc shared-add --url "..."` (user provides URL) |
-| **导出为 Markdown** | `doc export --document-id TOKEN --output path.md` |
-| **导出含图片** | `doc export --document-id TOKEN --images` |
-| **按名称导出** | `doc export --name "方案"` |
-
-#### Batch Upload with Cross-Document Linking
-
-When uploading a directory where an index (e.g., README.md) has relative `.md` links:
-1. Create target folder in Drive
-2. Upload child docs first via `doc create-from-markdown` → capture `{filename: feishu_url}` map
-3. Replace relative links in index with Feishu URLs
-4. Upload processed index
-
-#### Markdown → Feishu Notes
-
-Auto-handled by `create-from-markdown`:
-- CJK table columns: 2x width for proportional sizing
-- Relative links `[text](file.md)` → plain text (Feishu only supports HTTP links)
-- Code blocks, headings, lists, quotes, dividers, todos: fully supported
-
-### Wiki
-
-| Intent | Command |
-|---|---|
-| 看知识库 | `wiki space-list` → `wiki tree --space-id ID` |
-| 读页面 | `wiki node-read --token TOKEN` |
-| 发方案到 wiki | `wiki create-from-markdown --space-id ID --file path.md` |
-| **搜索知识库** | `wiki search --query "关键词"` |
-| **搜索+读取** | `wiki search --query "退款" --read` |
-| **搜索指定空间** | `wiki search --query "退款" --space-id ID` |
-| **导出 Wiki(含图片)** | `wiki export --url "https://xxx.feishu.cn/wiki/TOKEN"` |
-| **导出(仅文本)** | `wiki export --token TOKEN --no-images` |
-
-### Message
-
-| Intent | Command |
-|---|---|
-| 发消息到群 | `msg send --chat-id oc_xxx --text "消息内容"` |
-| 发消息给个人 | `msg send --user "张三" --text "消息内容"` |
-| 发卡片消息 | `msg send --chat-id oc_xxx --card card.json` |
-| 查看群列表 | `msg chats` |
-| 按名称找群 | `msg chats --name "产品"` |
-| 查看群详情 | `msg chat-info --chat-id oc_xxx` |
-| 查看消息记录 | `msg history --chat-id oc_xxx [--count 20]` |
-| **发富文本消息** | `msg send --chat-id oc_xxx --post "内容" --title "标题"` |
-
-### Approval (审批)
-
-| Intent | Command |
-|---|---|
-| 查看审批模板 | `approval list-definitions` |
-| 查看模板详情 | `approval get-definition --code CODE` |
-| 创建审批 | `approval create --code CODE --form '{...}'` |
-| 查看审批详情 | `approval get --instance-id ID` |
-| 列出审批实例 | `approval list --code CODE [--status PENDING]` |
-| 同意审批 | `approval approve --instance-id ID --task-id TID` |
-| 拒绝审批 | `approval reject --instance-id ID --task-id TID --comment "理由"` |
-| 撤销审批 | `approval cancel --instance-id ID` |
-
-### Bitable
-
-| Intent | Command |
-|---|---|
-| 看表格数据 | `bitable list-tables` → `bitable list-records --json` |
-| **按条件筛选** | `bitable list-records --filter 'CurrentValue.[status]="active"'` |
-| 导出 | `bitable export --format csv --output path.csv` |
-| 写入/更新 | `bitable create-record` / `bitable update-record` |
-| 批量 | `bitable batch-create --file records.json` (auto-chunks at 500) |
-
-### Member
-
-| Intent | Command |
-|---|---|
-| 找人 | `member find --name "keyword"` (substring match) |
-| 我是谁 | `member whoami` |
-
-## Output Formatting
-
-`task list` defaults to table output. All other commands output JSON.
-
-Agent should transform JSON for user when applicable:
-- **Doc list** → numbered list with name, type, date
-- **Bitable records** → Markdown table matching field names
-- **Member lookup** → inline: "张三 → ou_xxxxx"
-
-Include `url` field as clickable link when present.
-
-## Error Recovery
-
-| Code | Meaning | Action |
-|---|---|---|
-| 99991663 | Token expired | Auto-handled by engine. If persists: `auth refresh` |
-| 99991679 | Scope missing | Auto-handled by incremental auth. If persists: `auth relogin` |
-| 100003 | Permission denied | User enables scope in console → `auth relogin` |
-| 1470400 | Invalid param | Check format (URLs need `http://`/`https://`) |
-| Member not found | — | `member scan` to refresh cache, retry shorter keyword |
-
-## Key Behaviors
-
-- **Member resolution**: Names auto-resolve to `open_id` via local cache (`~/.agents/data/feishu/members.json`, 7d TTL). Substring match on name/en_name.
-- **Auto-assign**: `task create` assigns current user unless `--no-assign`
-- **Agent badge**: Created tasks show "🤖 Agent" origin in Feishu UI
-- **Date clearing**: Use `--clear-due`/`--clear-start` (not timestamp=0)
-- **Shared folders**: API can't discover — user must provide URL via `doc shared-add`
-- **Retry**: Built-in 429/5xx auto-retry (max 3, exponential backoff)
-
-## Structure
-
+```json
+{"ok": true, "data": {...}, "message": "human summary"}
+{"ok": false, "message": "what went wrong", "hint": "./feishu auth login"}
 ```
-feishu-integration/
-├── feishu                ← CLI entry (bash)
-├── SKILL.md              ← This file
-├── scripts/
-│   ├── feishu_api.py     ← Core (auth + HTTP + retry + pagination + media download)
-│   ├── auth.py           ← OAuth2 (login/refresh/relogin/incremental)
-│   ├── task.py           ← Task v2 (table + JSON output)
-│   ├── docx.py           ← Document & Drive (+ full-text search + export with images)
-│   ├── wiki.py           ← Knowledge base (+ wiki export)
-│   ├── bitable.py        ← Bitable (多维表格)
-│   ├── msg.py            ← Messaging (send/chats/history + rich-text post)
-│   ├── approval.py       ← Approval (审批: create/get/list/approve/reject)
-│   └── members.py        ← Member directory (scan/cache/resolve/reverse-resolve)
-├── evals/
-│   └── evals.json        ← Test cases
-└── references/
-    └── cli_reference.md  ← Full parameter reference
+
+Parse stdout, ignore stderr. Check `ok` before reading `data`.
+
+## Quick Reference
+
+| Intent | Command |
+|--------|---------|
+| Setup credentials | `./feishu auth setup --app-id ID --app-secret SECRET` |
+| Login (OAuth2 browser) | `./feishu auth login` |
+| Login (all scopes) | `./feishu auth login --all` |
+| Check auth state | `./feishu auth status` |
+| List my tasks | `./feishu task list` |
+| Create task | `./feishu task create --summary "title" [--members "Name1,Name2"]` |
+| Complete task by keyword | `./feishu task complete --keyword "关键词"` |
+| Search docs (full-text) | `./feishu doc search-content --query "退款"` |
+| Search + auto-read first | `./feishu doc search-content --query "退款" --read` |
+| Read doc content | `./feishu doc read --document-id TOKEN` |
+| Read doc by name | `./feishu doc read --name "keyword"` |
+| Read doc block index | `./feishu doc read --name "keyword" --blocks` |
+| Read raw content | `./feishu doc read --document-id TOKEN --raw` |
+| Create doc from markdown | `./feishu doc create --title "T" --file path.md` |
+| Insert text at position | `./feishu doc insert --document-id X --text "hello" --index 0` |
+| Insert image | `./feishu doc insert --document-id X --image ./logo.png` |
+| Insert markdown file | `./feishu doc insert --document-id X --file content.md` |
+| Insert inline markdown | `./feishu doc insert --document-id X --markdown "## Title\n\n| A | B |\n|---|---|"` |
+| Replace blocks | `./feishu doc insert --document-id X --replace --start 2 --end 4 --text "new"` |
+| Read doc by URL | `./feishu doc read --document-id "https://xxx.feishu.cn/docx/TOKEN"` |
+| Delete blocks by range | `./feishu doc delete --document-id X --start 2 --end 5` |
+| Export doc to local .md | `./feishu doc export --name "keyword" --output out.md` |
+| List Drive files | `./feishu doc list [--type docx\|sheet]` |
+| Drive file tree | `./feishu doc tree [--depth 3] [--shared]` |
+| Send text message | `./feishu msg send --chat-name "群名" --text "内容"` |
+| Send to user | `./feishu msg send --user "张三" --text "hi"` |
+| List chats | `./feishu msg chats [--name "keyword"]` |
+| Wiki spaces | `./feishu wiki space-list` |
+| Wiki tree | `./feishu wiki tree --space-id ID` |
+| Search wiki + read | `./feishu wiki search --query "title" --read` |
+| Bitable records | `./feishu bitable list-records --app-token X --table-id Y` |
+| Submit approval | `./feishu approval create --code CODE --form '{...}'` |
+| List/find members | `./feishu member find [--name "keyword"]` |
+
+## Compound Commands
+
+These eliminate multi-step workflows — CLI handles the search+action internally:
+
+| Command | What it does |
+|---------|-------------|
+| `task complete --keyword "X"` | Searches incomplete tasks matching X, completes the single match |
+| `msg send --chat-name "X" --text "..."` | Finds chat by name substring, sends message |
+| `doc search-content --query "X" --read` | Full-text search, auto-reads first docx match |
+| `doc read --name "X"` | Search Drive by filename, reads first match |
+| `doc read --name "X" --blocks` | Returns block list with index/block_id for positioning |
+| `doc export --name "X"` | Search Drive by filename, exports first match to .md |
+| `wiki search --query "X" --read` | Recursive wiki search, auto-reads first docx match |
+
+## Module Discovery
+
+Run any module without a command to get its command list as JSON:
+
+```bash
+./feishu task    # returns {"ok":true, "data":{"commands":["create","get",...], "usage":"..."}}
+./feishu doc     # same pattern
 ```
+
+## References
+
+For detailed parameter docs, see:
+
+| File | When to read |
+|------|-------------|
+| [cli_reference.md](references/cli_reference.md) | Full parameter listing for all commands |
+
+Or run `./feishu <module> <command> --help` for inline help.
+
+## Prerequisites
+
+1. Feishu Developer Console: create a self-built app
+2. `./feishu auth setup --app-id "..." --app-secret "..."`
+3. `./feishu auth login` (opens browser for OAuth2)
+4. Configure permissions in Developer Console as needed

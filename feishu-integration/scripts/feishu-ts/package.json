@@ -1,0 +1,19 @@
+{
+  "name": "feishu-cli",
+  "version": "0.4.3",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node18 --format=cjs --outfile=../feishu-cli.cjs --banner:js=\"#!/usr/bin/env node\"",
+    "dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.59.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
