@@ -1,7 +1,7 @@
 ---
 name: agent-brainstorm
 metadata:
-  version: 0.1.4
+  version: 0.1.5
 description: 'Multi-agent brainstorming: async opinion collision with expert personas.
   Mixed Codex/Claude Code engine. Use when multiple AI agents need to collaboratively
   discuss, debate, and converge on solutions through structured dialog. Triggers:

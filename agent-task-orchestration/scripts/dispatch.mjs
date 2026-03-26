@@ -13794,7 +13794,7 @@ async function runClaudeSession(sdk, task, config, store, estimate) {
       permissionMode,
       systemPrompt: { type: "preset", preset: "claude_code" },
       disallowedTools: ["ToolSearch"],
-      settingSources: ["project"],
+      settingSources: ["user", "project"],
       maxTurns: 50
     }
   });

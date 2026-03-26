@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outdir = join(__dirname, "../../agent-task-orchestration/scripts");
 
+import { copyFileSync } from "node:fs";
+
 await build({
     entryPoints: [join(__dirname, "src/dispatch.mjs")],
     bundle: true,
@@ -22,4 +24,6 @@ await build({
     sourcemap: false,
 });
 
-console.log("✓ dispatch.mjs built");
+copyFileSync(join(__dirname, "node_modules/@anthropic-ai/claude-agent-sdk/cli.js"), join(outdir, "cli.js"));
+
+console.log("✓ dispatch.mjs + cli.js built");

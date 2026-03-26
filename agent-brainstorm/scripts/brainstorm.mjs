@@ -14062,7 +14062,7 @@ async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
       permissionMode,
       systemPrompt: { type: "preset", preset: "claude_code" },
       disallowedTools: ["ToolSearch"],
-      settingSources: ["project"]
+      settingSources: ["user", "project"]
     }
   });
   for await (const msg of q) {

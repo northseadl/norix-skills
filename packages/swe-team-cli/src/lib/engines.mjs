@@ -128,7 +128,7 @@ export async function runClaudeSession(sdk, prompt, { approvalMode, workingDirec
         permissionMode,
         systemPrompt: { type: "preset", preset: "claude_code" },
         disallowedTools: ["ToolSearch"],
-        settingSources: ["project"],
+        settingSources: ["user", "project"],
         maxTurns: 50,
     };
 

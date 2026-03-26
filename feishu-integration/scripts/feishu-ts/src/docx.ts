@@ -286,8 +286,8 @@ export async function flushBlocks(
       totalFailed += batch.length;
     } else {
       totalWritten += batch.length;
+      if (currentIndex !== -1) currentIndex += batch.length;
     }
-    if (currentIndex !== -1) currentIndex += batch.length;
     batch = [];
     await sleep(200);
   };
@@ -309,8 +309,9 @@ export async function flushBlocks(
       const tableBlock: BlockData = { block_type: BT_TABLE, table: tableDef };
 
       const createResult = await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children`, { children: [tableBlock], index: currentIndex });
-      if ((createResult.code as number) !== 0) { Log.error(`Table create failed: ${createResult.msg ?? "?"}`); continue; }
+      if ((createResult.code as number) !== 0) { Log.error(`Table create failed: ${createResult.msg ?? "?"}`); totalFailed++; continue; }
 
+      totalWritten++;
       if (currentIndex !== -1) currentIndex += 1;
 
       const createdBlocks = ((createResult.data as Record<string, unknown>)?.children ?? []) as Record<string, unknown>[];
@@ -319,7 +320,8 @@ export async function flushBlocks(
 
       if (rowCount > 9) {
         for (let r = 9; r < rowCount; r++) {
-          await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${tableBlockId}/children`, { children: [{ block_type: BT_TABLE_CELL }], index: -1 });
+          const rowRes = await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${tableBlockId}/children`, { children: [{ block_type: BT_TABLE_CELL }], index: -1 });
+          if ((rowRes.code as number) !== 0) Log.error(`Failed to push table row: ${rowRes.msg ?? "?"}`);
           await sleep(100);
         }
       }
@@ -341,15 +343,22 @@ export async function flushBlocks(
 
           // Get the cell's existing child text block
           const cellBlockRes = await userRequest(client, "GET", `/docx/v1/documents/${documentId}/blocks/${cellId}`);
+          if ((cellBlockRes.code as number) !== 0) {
+            Log.error(`Failed to read cell ${cellId}: ${cellBlockRes.msg ?? "?"}`);
+            continue;
+          }
           const cellChildren = ((cellBlockRes.data as Record<string, unknown>)?.block as Record<string, unknown>)?.children as string[] | undefined;
           if (!cellChildren || !cellChildren.length) continue;
           
           const textBlockId = cellChildren[0]!;
           
           // Update the existing text block with content using PATCH
-          await userRequest(client, "PATCH", `/docx/v1/documents/${documentId}/blocks/${textBlockId}`, {
+          const patchResult = await userRequest(client, "PATCH", `/docx/v1/documents/${documentId}/blocks/${textBlockId}`, {
             update_text_elements: { elements: parseInlineMd(cellContent) }
           });
+          if ((patchResult.code as number) !== 0) {
+            Log.error(`Failed to patch cell ${textBlockId}: ${patchResult.msg ?? "?"}`);
+          }
           await sleep(200);
         }
       }

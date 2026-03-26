@@ -20,6 +20,8 @@ const common = {
     sourcemap: false,
 };
 
+import { copyFileSync } from "node:fs";
+
 // team.mjs — main entry
 await build({
     ...common,
@@ -34,4 +36,6 @@ await build({
     outfile: join(outdir, "ws.mjs"),
 });
 
-console.log("✓ team.mjs + ws.mjs built");
+copyFileSync(join(__dirname, "node_modules/@anthropic-ai/claude-agent-sdk/cli.js"), join(outdir, "cli.js"));
+
+console.log("✓ team.mjs + ws.mjs + cli.js built");

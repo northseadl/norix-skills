@@ -13918,7 +13918,7 @@ async function runClaudeSession(sdk, prompt, { approvalMode, workingDirectory, o
     permissionMode,
     systemPrompt: { type: "preset", preset: "claude_code" },
     disallowedTools: ["ToolSearch"],
-    settingSources: ["project"],
+    settingSources: ["user", "project"],
     maxTurns: 50
   };
   if (permissionMode === "bypassPermissions") {

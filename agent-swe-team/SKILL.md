@@ -1,7 +1,7 @@
 ---
 name: agent-swe-team
 metadata:
-  version: 0.5.8
+  version: 0.5.9
 description: >-
   Multi-agent SWE team built on the Workshop model. Full-stack vertical workers,
   meeting room with @mention notification, private pipes, shared task board.
