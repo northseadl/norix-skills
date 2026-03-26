@@ -18,7 +18,7 @@
 | **Coding.net 集成** | 0.2.2 | Coding.net DevOps — MR/CI/制品库/跨项目查询/远程文件审计。 |
 | **CNB Build 集成** | 0.1.1 | cnb.cool 构建 — .cnb.yml 流水线生成，触发/缓存/env/web_trigger。 |
 | **Agent 任务编排** | 0.1.8 | Trinity 三层委托（Strategist→Lieutenant→Builder），信号驱动自主循环，Codex/Claude 混合。 |
-| **Agent SWE Team** | 0.5.4 | Workshop 工程团队 — Hub 驱动 Leader/Worker×N/Inspector，worktree 隔离 + @mention 唤醒。 |
+| **Agent SWE Team** | 0.5.7 | Workshop 工程团队 — Hub 驱动 Leader/Worker×N/Inspector，worktree 隔离 + @mention 唤醒。 |
 | **Agent 头脑风暴** | 0.1.3 | 多 Agent 异步讨论空间 — opinion/challenge/build + 收敛检测 + synthesis.md。 |
 | **前端设计规格** | 0.2.0 | 审美判断力引擎 — Explore/Production/Critique 三模式，Anti-AI Homogeneity。 |
 | **Doc Sentinel** | 0.2.0 | 文档-代码变更通知 — Git tree hash 溯源绑定 + 变更计划 + 幂等执行。 |
@@ -80,4 +80,3 @@ norix-skills/
 ## 许可
 
 MIT
-

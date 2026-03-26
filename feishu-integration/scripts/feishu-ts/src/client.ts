@@ -96,6 +96,9 @@ export function createLarkClient(): lark.Client {
   });
 }
 
+// Print token status only once per process to avoid noise.
+let tokenStatusPrinted = false;
+
 /**
  * Resolve user_access_token from credential store ONLY. No env vars.
  */
@@ -108,8 +111,11 @@ export async function resolveUserToken(): Promise<string> {
       const now = Math.floor(Date.now() / 1000);
 
       if (stored && expireAt > now) {
-        const remaining = Math.floor((expireAt - now) / 60);
-        Log.info(`Token valid (~${remaining}min remaining)`);
+        if (!tokenStatusPrinted) {
+          const remaining = Math.floor((expireAt - now) / 60);
+          Log.info(`Token valid (~${remaining}min remaining)`);
+          tokenStatusPrinted = true;
+        }
         return stored;
       }
       if (stored && expireAt > 0) {

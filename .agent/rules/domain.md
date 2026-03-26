@@ -21,7 +21,7 @@ norix-skills/
 ├── cnb-cool-integration/       # cnb.cool 云原生构建集成
 ├── coding-net-integration/     # Coding.net DevOps API 集成
 ├── es-analytics/               # Elasticsearch / SLS ES 只读分析
-├── feishu-integration/         # 飞书 API 集成 TypeScript 重构（@larksuiteoapi/node-sdk · esbuild CJS 打包 · task/docx/wiki/bitable/msg/approval/member）
+├── feishu-integration/         # 飞书 API 集成 v1.0.0（agent-centric JSON 输出协议 · @larksuiteoapi/node-sdk · esbuild CJS 打包 · 8模块92命令）
 ├── image-studio/               # Nano Banana AI 图像生成·精修·图标提取（rembg+BiRefNet 去背→检测→裁切）
 ├── llm-agent-dev/              # LLM Agent 工程全栈（设计/仿真/收敛）
 ├── mobile-testing/             # 移动应用自动化测试与评估
@@ -52,19 +52,30 @@ sync_global_skills.py --target all --force
 安全边界：仅操作 manifest 记录的技能，其他来源永不触碰
 ```
 
-### 飞书数据流（TypeScript 版）
+### 飞书数据流 (v1.3.0 vi-Primitives)
 
 ```
-arch:  scripts/feishu-ts/src/*.ts → esbuild → scripts/feishu-cli.cjs (单文件 4.7MB, SDK bundled)
+arch:  scripts/feishu-ts/src/*.ts → esbuild → scripts/feishu-cli.cjs (单文件 4.7MB)
        ./feishu bash wrapper → node scripts/feishu-cli.cjs $@
 
-auth:  ./feishu auth login → OAuth2 callback server (localhost:9876)
-       → exchangeCode → ~/.agents/data/feishu/credentials.json + NX1 vault
-       → 业务命令自动解析/刷新 token (curl sync refresh)
+output: 全命令 JSON Envelope: {ok, data, message, hint} → stdout
+        Log.*/.stderr → 诊断信息（agent 不解析）
+        SDK loggerLevel: error → 抑制 stdout 噪音
 
-task:  API (user_access_token via lark.withUserAccessToken) → items[] → member resolve → table
-doc:   Markdown → markdownToBlocks() → flushBlocks() (batch 50, table 2-step)
-wiki:  space/node CRUD + collectNodes recursive search + Drive→Wiki import engine
+auth (3): setup → login [--all] → status
+          token refresh/revoke 由 client.ts autoRefresh() 内部处理
+
+doc primitives (vi-philosophy):
+  read   → --raw | --blocks (返回 index/block_id) | 默认 Markdown
+  insert → --text | --heading | --code | --file | --markdown | --image | --divider + --index N
+  delete → --start N --end M | --block-id X
+  create → --file 从 Markdown
+
+modules: auth(3) doc(14) wiki(14) bitable(16) task(17) msg(4) approval(8) member(3) = 79 total
+
+compound: task complete --keyword → 搜索+完成原子化
+          msg send --chat-name → 群名解析+发送原子化
+          doc search-content --read → 搜索+读取原子化
 ```
 
 ### PM Toolkit 渲染流

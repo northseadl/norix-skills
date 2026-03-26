@@ -63,8 +63,8 @@ for (const [k, v] of Object.entries(LANG_MAP)) LANG_NAME[v] = k;
 const BLOCK_TYPE_NAME: Record<number, string> = {
   1: "page", 2: "text", 3: "h1", 4: "h2", 5: "h3", 6: "h4", 7: "h5",
   8: "h6", 9: "h7", 10: "h8", 11: "h9", 12: "bullet", 13: "ordered",
-  14: "code", 15: "quote", 17: "todo", 18: "table", 19: "table_cell",
-  22: "divider", 27: "image", 34: "callout",
+  14: "code", 15: "quote", 17: "todo", 22: "divider", 27: "image",
+  31: "table", 32: "table_cell", 34: "callout",
 };
 
 // ── Shared Folders Cache ────────────────────────────────────────────────────
@@ -275,11 +275,18 @@ export async function flushBlocks(
 ): Promise<void> {
   let currentIndex = insertIndex;
   let batch: BlockData[] = [];
+  let totalWritten = 0;
+  let totalFailed = 0;
 
   const flushBatch = async () => {
     if (!batch.length) return;
     const result = await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children`, { children: batch, index: currentIndex });
-    if ((result.code as number) !== 0) Log.error(`Block write failed: ${result.msg ?? "?"}`);
+    if ((result.code as number) !== 0) {
+      Log.error(`Block write failed at index ${currentIndex}: ${result.msg ?? "?"}`);
+      totalFailed += batch.length;
+    } else {
+      totalWritten += batch.length;
+    }
     if (currentIndex !== -1) currentIndex += batch.length;
     batch = [];
     await sleep(200);
@@ -350,6 +357,9 @@ export async function flushBlocks(
     }
   }
   await flushBatch();
+  if (totalFailed > 0) {
+    Log.error(`Block flush summary: ${totalWritten} succeeded, ${totalFailed} failed`);
+  }
 }
 
 // ── Image Upload ────────────────────────────────────────────────────────────
@@ -511,15 +521,31 @@ export async function readDocBlockList(
   client: lark.Client, docId: string
 ): Promise<{ blocks: Record<string, unknown>[]; count: number }> {
   const items = await getAllPages(client, `/docx/v1/documents/${docId}/blocks`, { page_size: "500", document_revision_id: "-1" });
-  const blockList = (items as Record<string, unknown>[])
-    .filter((b) => (b.block_type as number) !== BT_PAGE)
-    .map((b, i) => ({
-      index: i,
+  // Use parent_id to determine top-level vs nested blocks.
+  // Only blocks whose parent_id === docId are direct children of the document root.
+  // The Feishu API's index parameter only counts these top-level children.
+  const pageBlockId = docId; // document root block_id === document_id
+  const nonPage = (items as Record<string, unknown>[]).filter((b) => (b.block_type as number) !== BT_PAGE);
+  const blockList: Record<string, unknown>[] = [];
+  let apiIndex = 0;
+  for (const b of nonPage) {
+    const bt = (b.block_type ?? 0) as number;
+    const parentId = (b.parent_id ?? "") as string;
+    const isTopLevel = parentId === pageBlockId;
+    const entry: Record<string, unknown> = {
+      index: apiIndex,
       block_id: b.block_id,
-      type: b.block_type,
-      type_name: BLOCK_TYPE_NAME[(b.block_type ?? 0) as number] ?? `type=${b.block_type}`,
-      preview: blockPreview(b, (b.block_type ?? 0) as number).slice(0, 80),
-    }));
+      type: bt,
+      type_name: BLOCK_TYPE_NAME[bt] ?? `type=${bt}`,
+      preview: blockPreview(b, bt).slice(0, 80),
+    };
+    if (!isTopLevel) {
+      entry.nested = true;
+    } else {
+      apiIndex++;
+    }
+    blockList.push(entry);
+  }
   return { blocks: blockList, count: blockList.length };
 }
 
@@ -690,17 +716,8 @@ export async function docMain(argv: string[]): Promise<void> {
       respond({ content: ((result.data as Record<string, unknown>)?.content ?? "") as string, document_id: docId });
 
     } else if (args.blocks) {
-      const items = await getAllPages(client, `/docx/v1/documents/${docId}/blocks`, { page_size: "500", document_revision_id: "-1" });
-      const blockList = (items as Record<string, unknown>[])
-        .filter((b) => (b.block_type as number) !== BT_PAGE)
-        .map((b, i) => ({
-          index: i,
-          block_id: b.block_id,
-          type: b.block_type,
-          type_name: BLOCK_TYPE_NAME[(b.block_type ?? 0) as number] ?? `type=${b.block_type}`,
-          preview: blockPreview(b, (b.block_type ?? 0) as number).slice(0, 80),
-        }));
-      respond({ blocks: blockList, count: blockList.length, document_id: docId }, `${blockList.length} blocks`);
+      const { blocks: blockList, count: blockCount } = await readDocBlockList(client, docId);
+      respond({ blocks: blockList, count: blockCount, document_id: docId }, `${blockCount} blocks`);
 
     } else {
       const items = await getAllPages(client, `/docx/v1/documents/${docId}/blocks`, { page_size: "500", document_revision_id: "-1" });
@@ -783,10 +800,12 @@ export async function docMain(argv: string[]): Promise<void> {
     const docId = await resolveDocId(client, args);
 
     if (args["block-id"]) {
+      // Compute API-compatible index: only count top-level blocks (parent_id === docId)
       const items = await getAllPages(client, `/docx/v1/documents/${docId}/blocks`, { page_size: "500", document_revision_id: "-1" });
-      const allBlocks = (items as Record<string, unknown>[]).filter((b) => (b.block_type as number) !== BT_PAGE);
-      const idx = allBlocks.findIndex((b) => b.block_id === args["block-id"]);
-      if (idx === -1) fail(`Block ID not found: ${args["block-id"]}`);
+      const topLevel = (items as Record<string, unknown>[])
+        .filter((b) => (b.block_type as number) !== BT_PAGE && (b.parent_id as string) === docId);
+      const idx = topLevel.findIndex((b) => b.block_id === args["block-id"]);
+      if (idx === -1) fail(`Block ID not found in top-level blocks: ${args["block-id"]}`);
       const result = await userRequest(client, "DELETE",
         `/docx/v1/documents/${docId}/blocks/${docId}/children/batch_delete`,
         { start_index: idx, end_index: idx + 1 });

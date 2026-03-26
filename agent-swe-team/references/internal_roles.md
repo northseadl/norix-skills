@@ -10,7 +10,7 @@ Leader 被 Hub 自动唤醒后：
 2. 在面板上创建任务 (`POST /board/task`) 并指定 assignee
 3. 唤醒 Workers (`POST /wake`) — Worker 被唤醒时自动激活首个 pending 任务
 4. 通过会议室和私信监督进度
-5. 指示合并 (`POST /merge`) — 每个 Worker 完成后逐个合并
+5. 指示合并 (`POST /merge`) — 每个 Worker 完成后逐个合并；Hub 只会尝试同步空闲 worktree，冲突会标记 `blocked`
 6. 唤醒 Inspector (`POST /wake {"agent":"inspector"}`)
 7. 根据 Inspector 报告决定收工 (`POST /done`) 或继续
 
@@ -47,7 +47,7 @@ Leader 的 prompt 包含:
 
 下次 Worker 被唤醒时：
 - 全新 session（无历史上下文）
-- prompt 只注入已完成任务的压缩摘要
+- Hub 会重建完整 Worker prompt，并注入已完成任务的压缩摘要
 - Hub 自动激活下一个 pending 任务
 
 ### Worker Prompt 注入
@@ -69,6 +69,8 @@ Inspector 被 Leader 通过 `/wake` 唤醒后：
 3. 运行构建/类型检查
 4. 对每个任务评估是否有对应实现
 5. 发布评估报告到会议室
+
+Inspector 没有独立 worker worktree。Hub 会把它放在 integration worktree 中运行，确保质检针对的是已合并结果而不是某个 worker 的私有分支。
 
 Inspector 评估维度：
 - 目标覆盖率（每个子项是否有实现）
