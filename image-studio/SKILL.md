@@ -1,7 +1,7 @@
 ---
 name: image-studio
 metadata:
-  version: 0.1.5
+  version: 0.1.6
 description: >
   AI image generation and editing: e-commerce templates (hero/banner/detail/lifestyle),
   image refinement (background replace/remove, enhance, retouch, style transfer),
@@ -131,7 +131,14 @@ Pipeline: **bg-removal → detection → smart crop → individual RGBA PNGs + m
 
 ```bash
 ./nanobanana icon-extract <image> [--layout grid-CxR] [-o ./icons/]
+
+# Pure background removal (no detection/cropping) — outputs transparent RGBA PNG
+./nanobanana icon-extract <image> --bg-only [-o ./output/]
 ```
+
+`--bg-only` uses local BiRefNet model for SOTA edge quality. No API call needed. This is the correct
+tool for "抠图" — produces real transparent PNG, unlike `refine --template bg-remove` which uses
+the Gemini API and outputs a green chromakey background (for compositing workflows).
 
 ### Detection Strategy
 
@@ -175,7 +182,8 @@ Export to all iOS + Android + Web standard sizes (22 total):
 | "生成App图标" | `generate --template app-icon` (optionally `--app-icon-sizes all`) |
 | "图标风格对比" | `generate --template icon-variants` → `icon-extract --layout grid-2x2` |
 | "换白色背景" | `refine <img> --template bg-white` |
-| "去背景/抠图" | `refine <img> --template bg-remove` |
+| "去背景/抠图/透明PNG" | `icon-extract <img> --bg-only` (本地 BiRefNet, 真透明 RGBA) |
+| "绿幕/色键" | `refine <img> --template bg-remove` (Gemini API, 绿幕背景) |
 | "风格迁移" | `refine <img> "<style>" --template style-transfer` |
 | "图片增强/精修" | `refine <img> --template enhance` |
 | "高清4K" | add `--size 4K --model nano-banana-pro` |

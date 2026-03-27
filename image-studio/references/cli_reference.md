@@ -120,6 +120,7 @@
 | `--no-square`       | off                     | Keep original aspect ratio                     |
 | `--keep-intermediate`| off                    | Save bg-removed intermediate                   |
 | `--app-icon-sizes`  | off                     | Export to platform sizes (ios/android/web/all)  |
+| `--bg-only`         | off                     | BG removal only — transparent RGBA PNG, no crop |
 
 ### App Icon Standard Sizes
 

@@ -750,8 +750,29 @@ Examples:
         metavar="PLATFORM",
         help="Export each icon to standard app icon sizes (ios/android/web/all)",
     )
+    parser.add_argument(
+        "--bg-only",
+        action="store_true",
+        help="Background removal only — output transparent RGBA PNG, skip detection/cropping",
+    )
 
     args = parser.parse_args()
+
+    # --- bg-only mode: pure background removal, no detection/cropping ---
+    if args.bg_only:
+        from PIL import Image
+        input_p = Path(args.image)
+        if not input_p.exists():
+            print(f"Error: File not found: {args.image}", file=sys.stderr)
+            sys.exit(1)
+        os.makedirs(args.output, exist_ok=True)
+        print(f"Background Removal (transparent PNG)")
+        print(f"  Input: {args.image}")
+        rgba = remove_background(args.image, model=args.model)
+        out_path = os.path.join(args.output, f"{input_p.stem}_transparent.png")
+        rgba.save(out_path, "PNG")
+        print(f"\n✓ Saved: {out_path}  ({rgba.width}×{rgba.height} RGBA)")
+        sys.exit(0)
 
     results = extract_icons(
         input_path=args.image,
