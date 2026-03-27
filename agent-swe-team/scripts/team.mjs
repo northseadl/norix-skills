@@ -13382,7 +13382,7 @@ function makeMessage(from, content, { channel = "meeting", to = null } = {}) {
 }
 function parseMentions(content) {
   if (!content) return [];
-  const matches = content.match(/@([\w-]+)/g);
+  const matches = content.match(/@([\w\u4e00-\u9fff\u3400-\u4dbf-]+)/g);
   if (!matches) return [];
   return [...new Set(matches.map((m2) => m2.slice(1)))];
 }
@@ -14234,7 +14234,7 @@ function buildWorkerPrompt({ agentName, board, meetingHistory, dmHistory, worktr
   const agent = board.getAgent(agentName);
   const completedTasks = agent?.completedTasks || [];
   const completedView = completedTasks.length > 0 ? completedTasks.map((t) => `\u2705 #${t.id} ${t.title}: ${t.summary}`).join("\n") : "";
-  return `\u4F60\u662F\u5168\u6808\u5F00\u53D1\u5DE5\u5320 ${agentName}\u3002\u4F60\u4E00\u6B21\u53EA\u5904\u7406\u4E00\u4E2A\u4EFB\u52A1\u3002
+  return `\u4F60\u662F\u5168\u6808\u5F00\u53D1\u5DE5\u5320 ${agentName}\uFF08\u4F60\u7684\u540D\u5B57\u5C31\u662F ${agentName}\uFF0C\u961F\u53CB\u548C Leader \u4F1A\u7528\u8FD9\u4E2A\u540D\u5B57 @\u4F60\uFF09\u3002\u4F60\u4E00\u6B21\u53EA\u5904\u7406\u4E00\u4E2A\u4EFB\u52A1\u3002
 
 ## \u26A0\uFE0F \u4EA4\u4ED8\u7EAA\u5F8B\uFF08\u4E0D\u53EF\u8FDD\u53CD\uFF09
 
@@ -14555,13 +14555,18 @@ async function revParse(cwd, ref) {
   const out = await git2(cwd, ["rev-parse", ref]);
   return out.split("\n")[0].trim();
 }
+function safeBranchName(name) {
+  if (/^[\w-]+$/.test(name)) return name;
+  return encodeURIComponent(name);
+}
 async function createRoleWorktrees({ cwd, runId, baseSha, roles, worktreeRootAbs, dryRun }) {
   await ensureGitRepo(cwd);
   await mkdir5(worktreeRootAbs, { recursive: true });
   const results = {};
   for (const role of roles) {
-    const branch = `team/${runId}/${role}`;
-    const wtPath = join4(worktreeRootAbs, role);
+    const safeName = safeBranchName(role);
+    const branch = `team/${runId}/${safeName}`;
+    const wtPath = join4(worktreeRootAbs, safeName);
     results[role] = { branch, worktreePath: wtPath };
     if (dryRun) continue;
     if (existsSync5(wtPath)) {
@@ -14636,10 +14641,17 @@ async function serve(cwd, opts) {
       }
     }
   }
-  await board.registerAgent("leader", { role: "leader" });
+  const leaderRole = expanded.find((r) => r.role === "leader");
+  const leaderName = leaderRole?.name || "leader";
+  if (leaderRole) await board.registerAgent(leaderName, { role: "leader" });
   const inspectorRoles = expanded.filter((r) => r.role === "inspector");
   for (const inspector of inspectorRoles) {
     await board.registerAgent(inspector.name, { role: inspector.role });
+  }
+  if (dryRun) {
+    for (const r of workerRoles) {
+      await board.registerAgent(r.name, { role: r.role });
+    }
   }
   await board.setPhase("running");
   const ctx = {
@@ -14843,23 +14855,1487 @@ async function serve(cwd, opts) {
       }
       if (path3 === "/" || path3 === "/index.html") {
         const customPath = join5(cwd, ".workshop", "dashboard.html");
-        const scriptDir = dirname4(fileURLToPath2(import.meta.url));
-        const candidates = [
-          customPath,
-          join5(scriptDir, "dashboard.html"),
-          // same dir as script (bundle: scripts/)
-          join5(scriptDir, "..", "dashboard.html"),
-          // parent dir (bundle: skill root)
-          join5(scriptDir, "..", "..", "dashboard.html")
-          // dev: src/lib/ → src/ → skill root
-        ];
-        const dashPath = candidates.find((p2) => existsSync6(p2));
-        if (!dashPath) {
-          respond(resp, 404, "text/plain", "dashboard.html not found");
-          return;
+        let dashContent;
+        if (existsSync6(customPath)) {
+          dashContent = await readFile5(customPath, "utf-8");
+        } else if (true) {
+          dashContent = `<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Workshop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #07080a;
+            --text: #f7f8f8;
+            --t2: #a0a2a6;
+            --t3: #787a7e;
+            --t4: #3a3c40;
+            --purple: #a78bfa;
+            --purple-d: rgba(167, 139, 250, 0.14);
+            --purple-g: rgba(167, 139, 250, 0.06);
+            --green: #4ade80;
+            --green-d: rgba(74, 222, 128, 0.14);
+            --green-g: rgba(74, 222, 128, 0.06);
+            --blue: #60a5fa;
+            --blue-d: rgba(96, 165, 250, 0.14);
+            --orange: #f59e0b;
+            --orange-d: rgba(245, 158, 11, 0.14);
+            --red: #ef4444;
+            --red-d: rgba(239, 68, 68, 0.14);
+            --ff: 'Inter', -apple-system, system-ui, sans-serif;
+            --fm: 'JetBrains Mono', monospace;
+            --ease: cubic-bezier(.22, .61, .36, 1);
+            --r: 20px;
+            --r-sm: 12px;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html {
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased
+        }
+
+        body {
+            font-family: var(--ff);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+            background: var(--bg);
+            line-height: 1.5
+        }
+
+        /* \u2550\u2550\u2550 Ambient scene \u2550\u2550\u2550 */
+        .scene {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none
+        }
+
+        .amb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            animation: drift 25s ease-in-out infinite alternate
+        }
+
+        .a1 {
+            width: 650px;
+            height: 450px;
+            background: rgba(167, 139, 250, 0.055);
+            top: -8%;
+            left: 0
+        }
+
+        .a2 {
+            width: 550px;
+            height: 500px;
+            background: rgba(74, 222, 128, 0.035);
+            bottom: -5%;
+            right: 0;
+            animation-delay: -9s
+        }
+
+        .a3 {
+            width: 750px;
+            height: 300px;
+            background: rgba(96, 165, 250, 0.03);
+            top: 35%;
+            left: 25%;
+            animation-delay: -16s
+        }
+
+        @keyframes drift {
+            0% {
+                transform: translate(0, 0) scale(1)
+            }
+
+            100% {
+                transform: translate(40px, 25px) scale(1.1)
+            }
+        }
+
+        /* \u2550\u2550\u2550 Glass mixin \u2550\u2550\u2550 */
+        .glass {
+            position: relative;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.018) 100%);
+            backdrop-filter: blur(60px) saturate(1.3);
+            -webkit-backdrop-filter: blur(60px) saturate(1.3);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .glass::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            opacity: .022;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-size: 128px
+        }
+
+        /* Lighter glass for nested elements */
+        .glass-light {
+            position: relative;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        /* \u2550\u2550\u2550 L1: Nav capsule (top-left, floating) \u2550\u2550\u2550 */
+        .nav {
+            position: fixed;
+            z-index: 10;
+            top: 16px;
+            left: 16px;
+            border-radius: var(--r);
+            padding: 5px;
+            display: flex;
+            gap: 2px
+        }
+
+        .nav-it {
+            padding: 8px 18px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: .8125rem;
+            font-weight: 500;
+            color: var(--t2);
+            transition: all .15s var(--ease);
+            white-space: nowrap;
+            position: relative;
+            z-index: 1
+        }
+
+        .nav-it:hover {
+            color: var(--text)
+        }
+
+        .nav-it.on {
+            color: var(--text);
+            background: rgba(255, 255, 255, .10);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .2)
+        }
+
+        .nav-ct {
+            font-family: var(--fm);
+            font-size: .625rem;
+            color: var(--t3);
+            margin-left: 4px
+        }
+
+        /* \u2550\u2550\u2550 L2: Status strip (top-right, floating) \u2550\u2550\u2550 */
+        .ss {
+            position: fixed;
+            z-index: 10;
+            top: 16px;
+            right: 292px;
+            border-radius: var(--r);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px
+        }
+
+        .ss-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: .8125rem;
+            color: var(--t2)
+        }
+
+        .ss-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%
+        }
+
+        .ss-dot.on {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green-g)
+        }
+
+        .ss-dot.off {
+            background: var(--red);
+            animation: blink 1s infinite
+        }
+
+        .ss-v {
+            font-family: var(--fm);
+            font-weight: 500;
+            color: var(--text)
+        }
+
+        .ss-l {
+            font-size: .6875rem;
+            color: var(--t3)
+        }
+
+        /* \u2550\u2550\u2550 L0: Content layer (full viewport, scrollable) \u2550\u2550\u2550 */
+        .content {
+            position: relative;
+            z-index: 1;
+            height: 100vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.04) transparent;
+            padding: 84px 48px 48px;
+            padding-right: 308px
+        }
+
+        .content-inner {
+            max-width: 700px;
+            margin: 0 auto
+        }
+
+        /* \u2500\u2500\u2500 Views: CRITICAL \u2014 only active view visible \u2500\u2500\u2500 */
+        #v-activity,
+        #v-tasks,
+        #v-meeting {
+            display: none
+        }
+
+        #v-activity.active {
+            display: block
+        }
+
+        #v-tasks.active {
+            display: block
+        }
+
+        #v-meeting.active {
+            display: block
+        }
+
+        /* \u2500\u2500\u2500 Hero Goal Card \u2500\u2500\u2500 */
+        .hero {
+            border-radius: var(--r);
+            padding: 32px;
+            margin-bottom: 32px
+        }
+
+        .hero-label {
+            font-size: .6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: var(--purple);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .hero-label::before {
+            content: '';
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--purple);
+            box-shadow: 0 0 6px var(--purple-g)
+        }
+
+        .hero-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            line-height: 1.4;
+            letter-spacing: -.5px;
+            word-break: break-word
+        }
+
+        .hero-body {
+            font-size: .9375rem;
+            color: var(--t2);
+            line-height: 1.65;
+            margin-top: 8px;
+            word-break: break-word
+        }
+
+        /* \u2500\u2500\u2500 Scoped Markdown rendering \u2500\u2500\u2500 */
+        .md h1,
+        .md h2,
+        .md h3,
+        .md h4,
+        .md h5,
+        .md h6 {
+            font-weight: 600;
+            line-height: 1.4;
+            margin: .4em 0 .2em;
+            color: var(--text)
+        }
+
+        .md h1 {
+            font-size: 1.125em
+        }
+
+        .md h2 {
+            font-size: 1.0625em
+        }
+
+        .md h3,
+        .md h4,
+        .md h5,
+        .md h6 {
+            font-size: 1em
+        }
+
+        .md p {
+            margin: .25em 0
+        }
+
+        .md ul,
+        .md ol {
+            padding-left: 1.4em;
+            margin: .25em 0
+        }
+
+        .md li {
+            margin: .15em 0
+        }
+
+        .md li::marker {
+            color: var(--t3)
+        }
+
+        .md code {
+            font-family: var(--fm);
+            font-size: .875em;
+            background: rgba(255, 255, 255, .06);
+            padding: 1px 5px;
+            border-radius: 3px
+        }
+
+        .md pre {
+            margin: .4em 0;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, .04);
+            border-radius: var(--r-sm);
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, .04)
+        }
+
+        .md pre code {
+            background: none;
+            padding: 0;
+            font-size: .8125em;
+            line-height: 1.5
+        }
+
+        .md blockquote {
+            border-left: 3px solid var(--purple-d);
+            padding-left: 12px;
+            color: var(--t3);
+            margin: .3em 0;
+            font-style: italic
+        }
+
+        .md strong {
+            color: var(--text);
+            font-weight: 600
+        }
+
+        .md em {
+            font-style: italic
+        }
+
+        .md a {
+            color: var(--purple);
+            text-decoration: none
+        }
+
+        .md a:hover {
+            text-decoration: underline
+        }
+
+        /* Hero body inherits normal .md styling at correct size */
+        .hero-body.md h1 { font-size: 1.125em }
+        .hero-body.md h2 { font-size: 1.0625em }
+        .hero-body.md h3,
+        .hero-body.md h4,
+        .hero-body.md h5,
+        .hero-body.md h6 { font-size: 1em }
+
+        .hero-bar {
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .hero-track {
+            flex: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, .04);
+            border-radius: 2px;
+            overflow: hidden
+        }
+
+        .hero-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, var(--purple), var(--green));
+            transition: width .6s var(--ease)
+        }
+
+        .hero-pct {
+            font-family: var(--fm);
+            font-size: .875rem;
+            font-weight: 500;
+            color: var(--t2);
+            min-width: 80px;
+            text-align: right
+        }
+
+        /* \u2500\u2500\u2500 Section heading \u2500\u2500\u2500 */
+        .sh {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: -.01em;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .sh::before {
+            content: '';
+            width: 3px;
+            height: 14px;
+            border-radius: 2px;
+            background: var(--purple)
+        }
+
+        /* \u2500\u2500\u2500 Empty state (glass card with ghost content) \u2500\u2500\u2500 */
+        .empty {
+            border-radius: var(--r-sm);
+            padding: 40px 24px;
+            text-align: center
+        }
+
+        .empty-icon {
+            margin-bottom: 12px;
+            opacity: .35;
+            display: flex;
+            justify-content: center
+        }
+
+        .empty-icon svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--t2);
+            stroke-width: 1.5;
+            fill: none
+        }
+
+        .empty-text {
+            font-size: .9375rem;
+            color: var(--t2)
+        }
+
+        .empty-sub {
+            font-size: .8125rem;
+            color: var(--t3);
+            margin-top: 4px
+        }
+
+        /* \u2500\u2500\u2500 Activity items \u2500\u2500\u2500 */
+        .ai {
+            display: flex;
+            gap: 14px;
+            padding: 14px 0;
+            animation: fadeUp .3s var(--ease)
+        }
+
+        .ai-av {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-top: 1px
+        }
+
+        .ai-av.leader {
+            background: var(--blue-d);
+            color: var(--blue)
+        }
+
+        .ai-av.worker {
+            background: var(--green-d);
+            color: var(--green)
+        }
+
+        .ai-av.inspector {
+            background: var(--purple-d);
+            color: var(--purple)
+        }
+
+        .ai-av.hub {
+            background: rgba(255, 255, 255, .06);
+            color: var(--t3)
+        }
+
+        .ai-av.master {
+            background: var(--orange-d);
+            color: var(--orange)
+        }
+
+        .ai-body {
+            flex: 1;
+            min-width: 0
+        }
+
+        .ai-head {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            flex-wrap: wrap
+        }
+
+        .ai-name {
+            font-size: .875rem;
+            font-weight: 600
+        }
+
+        .ai-time {
+            font-size: .8125rem;
+            color: var(--t3)
+        }
+
+        .ai-text {
+            font-size: 1rem;
+            color: var(--t2);
+            line-height: 1.65;
+            margin-top: 3px;
+            word-break: break-word
+        }
+
+        .ai-text .hl {
+            color: var(--purple);
+            font-weight: 500
+        }
+
+        .se {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            font-size: .8125rem;
+            color: var(--t3)
+        }
+
+        .se-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--t4);
+            flex-shrink: 0
+        }
+
+        .se b {
+            color: var(--t2);
+            font-weight: 500
+        }
+
+        .sp {
+            display: inline-flex;
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-size: .75rem;
+            font-weight: 500
+        }
+
+        /* \u2500\u2500\u2500 Tasks \u2500\u2500\u2500 */
+        .tk {
+            border-radius: var(--r-sm);
+            padding: 14px 16px;
+            margin-bottom: 6px;
+            transition: background .12s
+        }
+
+        .tk:hover {
+            background: rgba(255, 255, 255, .015)
+        }
+
+        .tk-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px
+        }
+
+        .tk-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid;
+            flex-shrink: 0;
+            margin-top: 2px;
+            position: relative
+        }
+
+        .tk-dot.done,
+        .tk-dot.merged {
+            border-color: var(--purple);
+            background: var(--purple)
+        }
+
+        .tk-dot.active {
+            border-color: var(--orange);
+            background: transparent
+        }
+
+        .tk-dot.active::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--orange)
+        }
+
+        .tk-dot.blocked {
+            border-color: var(--red);
+            background: var(--red)
+        }
+
+        .tk-dot.pending {
+            border-color: var(--t4);
+            background: transparent
+        }
+
+        .tk-main {
+            flex: 1;
+            min-width: 0
+        }
+
+        .tk-title {
+            font-size: 1rem;
+            font-weight: 500;
+            line-height: 1.5;
+            word-break: break-word
+        }
+
+        .tk-meta {
+            font-size: .8125rem;
+            color: var(--t3);
+            margin-top: 3px;
+            display: flex;
+            gap: 10px
+        }
+
+        .tk-meta .who {
+            color: var(--t2);
+            font-weight: 500
+        }
+
+        .tk-notes {
+            font-size: .9375rem;
+            color: var(--t2);
+            margin-top: 10px;
+            line-height: 1.6;
+            word-break: break-word;
+            padding: 12px 16px;
+            border-radius: var(--r-sm);
+            background: rgba(255, 255, 255, .025);
+            border: 1px solid rgba(255, 255, 255, .04)
+        }
+
+        .tk-summary {
+            font-size: .875rem;
+            color: var(--t3);
+            margin-top: 8px;
+            line-height: 1.5;
+            font-style: italic
+        }
+
+        .tk-prog {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px
+        }
+
+        .tpb {
+            width: 140px;
+            height: 3px;
+            background: rgba(255, 255, 255, .04);
+            border-radius: 2px;
+            overflow: hidden
+        }
+
+        .tpf {
+            height: 100%;
+            border-radius: 2px;
+            transition: width .5s var(--ease)
+        }
+
+        .tpf.active {
+            background: var(--orange)
+        }
+
+        .tpf.done {
+            background: var(--purple)
+        }
+
+        .tp-pct {
+            font-family: var(--fm);
+            font-size: .75rem;
+            color: var(--t3)
+        }
+
+        /* \u2500\u2500\u2500 Messages \u2500\u2500\u2500 */
+        .mg {
+            display: flex;
+            gap: 14px;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, .03);
+            animation: fadeUp .3s var(--ease)
+        }
+
+        .mg:last-child {
+            border-bottom: none
+        }
+
+        .mg-av {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0
+        }
+
+        .mg-av.leader {
+            background: var(--blue-d);
+            color: var(--blue)
+        }
+
+        .mg-av.hub {
+            background: rgba(255, 255, 255, .06);
+            color: var(--t3)
+        }
+
+        .mg-av.inspector {
+            background: var(--purple-d);
+            color: var(--purple)
+        }
+
+        .mg-av.worker {
+            background: var(--green-d);
+            color: var(--green)
+        }
+
+        .mg-av.master {
+            background: var(--orange-d);
+            color: var(--orange)
+        }
+
+        .mg-body {
+            flex: 1;
+            min-width: 0
+        }
+
+        .mg-hd {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 3px
+        }
+
+        .mg-who {
+            font-size: .875rem;
+            font-weight: 600
+        }
+
+        .mg-who.leader {
+            color: var(--blue)
+        }
+
+        .mg-who.hub {
+            color: var(--t3);
+            font-weight: 400;
+            font-style: italic
+        }
+
+        .mg-who.inspector {
+            color: var(--purple)
+        }
+
+        .mg-who.worker,
+        .mg-who.master {
+            color: var(--text)
+        }
+
+        .mg-ts {
+            font-size: .8125rem;
+            color: var(--t3)
+        }
+
+        .mg-at {
+            font-size: .75rem;
+            font-weight: 500;
+            color: var(--purple);
+            background: var(--purple-d);
+            padding: 1px 7px;
+            border-radius: 4px
+        }
+
+        .mg-text {
+            font-size: 1rem;
+            color: var(--t2);
+            line-height: 1.65;
+            word-break: break-word
+        }
+
+        .mg-text .hl {
+            color: var(--purple);
+            font-weight: 500
+        }
+
+        /* \u2550\u2550\u2550 L3: Team panel (right side, OVERLAPPING content) \u2550\u2550\u2550 */
+        .tp {
+            position: fixed;
+            z-index: 20;
+            top: 16px;
+            right: 16px;
+            bottom: 16px;
+            width: 260px;
+            border-radius: var(--r);
+            padding: 20px 14px;
+            overflow-y: auto;
+            scrollbar-width: none;
+            display: flex;
+            flex-direction: column
+        }
+
+        .tp::-webkit-scrollbar {
+            display: none
+        }
+
+        .tp-label {
+            font-size: .6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--t3);
+            margin-bottom: 8px;
+            padding: 0 6px
+        }
+
+        .tp-sep {
+            height: 1px;
+            background: rgba(255, 255, 255, .035);
+            margin: 12px 0
+        }
+
+        .tp-phase {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 6px;
+            font-size: .875rem
+        }
+
+        .phase-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%
+        }
+
+        .tp-progress {
+            padding: 0 6px;
+            margin-top: 10px
+        }
+
+        .tpp-bar {
+            height: 3px;
+            background: rgba(255, 255, 255, .04);
+            border-radius: 2px;
+            overflow: hidden
+        }
+
+        .tpp-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, var(--purple), var(--green));
+            transition: width .6s var(--ease)
+        }
+
+        .tpp-lbl {
+            font-size: .6875rem;
+            color: var(--t3);
+            margin-top: 3px
+        }
+
+        /* Agent cards in team panel */
+        .ag-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px
+        }
+
+        .ag {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 8px;
+            border-radius: var(--r-sm);
+            transition: background .12s
+        }
+
+        .ag:hover {
+            background: rgba(255, 255, 255, .04)
+        }
+
+        .ag-d {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0
+        }
+
+        .ag-d.idle {
+            background: var(--t4)
+        }
+
+        .ag-d.running {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green-g);
+            animation: pulse 2s ease-in-out infinite
+        }
+
+        .ag-d.done {
+            background: var(--purple);
+            box-shadow: 0 0 6px var(--purple-g)
+        }
+
+        .ag-info {
+            flex: 1;
+            min-width: 0
+        }
+
+        .ag-n {
+            font-size: .8125rem;
+            font-weight: 500
+        }
+
+        .ag-a {
+            font-size: .75rem;
+            color: var(--t3);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px
+        }
+
+        .ag-a.live {
+            color: var(--green)
+        }
+
+        .ag-t {
+            font-family: var(--fm);
+            font-size: .625rem;
+            color: var(--t4);
+            flex-shrink: 0
+        }
+
+        /* Spotlight \u2014 glass-in-glass */
+        .spot {
+            margin-top: 12px;
+            border-radius: var(--r-sm);
+            overflow: hidden;
+            position: relative;
+            background: linear-gradient(160deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .015));
+            border: 1px solid rgba(255, 255, 255, .05);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, .25), inset 0 1px 0 rgba(255, 255, 255, .05)
+        }
+
+        .spot-hd {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, .04);
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .spot-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%
+        }
+
+        .spot-name {
+            font-weight: 600;
+            font-size: .8125rem
+        }
+
+        .spot-body {
+            padding: 12px 14px;
+            font-size: .8125rem;
+            color: var(--t2);
+            line-height: 1.6
+        }
+
+        .spot-line {
+            margin-bottom: 4px
+        }
+
+        .spot-line code {
+            font-family: var(--fm);
+            font-size: .75rem;
+            background: rgba(255, 255, 255, .06);
+            padding: 1px 6px;
+            border-radius: 3px
+        }
+
+        .spot-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            font-size: .8125rem;
+            color: var(--t3)
+        }
+
+        .spot-spin {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--t4);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin .8s linear infinite
+        }
+
+        /* Team empty state */
+        .tp-empty {
+            padding: 20px 0;
+            text-align: center;
+            font-size: .8125rem;
+            color: var(--t3)
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1)
+            }
+
+            50% {
+                opacity: .35;
+                transform: scale(.9)
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .3
+            }
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px)
+            }
+
+            to {
+                opacity: 1;
+                transform: none
+            }
+        }
+
+        @media(prefers-reduced-motion:reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation-duration: .01ms !important;
+                transition-duration: .01ms !important
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="scene">
+        <div class="amb a1"></div>
+        <div class="amb a2"></div>
+        <div class="amb a3"></div>
+    </div>
+
+    <!-- L1: Nav -->
+    <nav class="nav glass" id="nav">
+        <div class="nav-it on" data-v="activity">Activity</div>
+        <div class="nav-it" data-v="tasks">Tasks<span class="nav-ct" id="nTasks"></span></div>
+        <div class="nav-it" data-v="meeting">Meeting<span class="nav-ct" id="nMsgs"></span></div>
+    </nav>
+
+    <!-- L2: Status -->
+    <div class="ss glass">
+        <div class="ss-item">
+            <div class="ss-dot on" id="connDot"></div><span id="connLbl">Live</span>
+        </div>
+        <div class="ss-item"><span class="ss-v" id="sDone">0</span><span class="ss-l">&nbsp;done</span></div>
+        <div class="ss-item"><span class="ss-v" id="sAct">0</span><span class="ss-l">&nbsp;active</span></div>
+        <div class="ss-item" style="font-family:var(--fm);font-size:.75rem;color:var(--t3)" id="clk"></div>
+    </div>
+
+    <!-- L0: Content -->
+    <div class="content" id="scroll">
+        <div class="content-inner">
+
+            <!-- === ACTIVITY VIEW === -->
+            <div id="v-activity" class="active">
+                <div class="hero glass-light" id="heroCard">
+                    <div class="hero-label">Goal</div>
+                    <div class="hero-title" id="goalT">Waiting for goal\u2026</div>
+                    <div class="hero-body md" id="goalBody" style="display:none"></div>
+                    <div class="hero-bar">
+                        <div class="hero-track">
+                            <div class="hero-fill" id="hFill" style="width:0%"></div>
+                        </div>
+                        <div class="hero-pct" id="hPct">0%</div>
+                    </div>
+                </div>
+                <div class="sh">Activity</div>
+                <div id="actList">
+                    <div class="empty glass-light">
+                        <div class="empty-icon"><svg viewBox="0 0 24 24">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                            </svg></div>
+                        <div class="empty-text">Waiting for events</div>
+                        <div class="empty-sub">Agent activity and messages will appear here</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- === TASKS VIEW === -->
+            <div id="v-tasks">
+                <div class="sh">Tasks</div>
+                <div id="taskList">
+                    <div class="empty glass-light">
+                        <div class="empty-icon"><svg viewBox="0 0 24 24">
+                                <path d="M9 11l3 3L22 4" />
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                            </svg></div>
+                        <div class="empty-text">No tasks yet</div>
+                        <div class="empty-sub">Leader will decompose the goal into tasks</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- === MEETING VIEW === -->
+            <div id="v-meeting">
+                <div class="sh">Meeting Room</div>
+                <div id="mvBody">
+                    <div class="empty glass-light">
+                        <div class="empty-icon"><svg viewBox="0 0 24 24">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                            </svg></div>
+                        <div class="empty-text">No messages yet</div>
+                        <div class="empty-sub">Agent communications will appear here</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- L3: Team Panel -->
+    <aside class="tp glass">
+        <div class="tp-label">Status</div>
+        <div class="tp-phase">
+            <div class="phase-dot" id="dtDot" style="background:var(--green);box-shadow:0 0 6px var(--green-g)"></div>
+            <span id="dtPhase">Waiting</span>
+        </div>
+        <div class="tp-progress">
+            <div class="tpp-bar">
+                <div class="tpp-fill" id="dtFill" style="width:0%"></div>
+            </div>
+            <div class="tpp-lbl" id="dtPlbl">0 / 0 completed</div>
+        </div>
+        <div class="tp-sep"></div>
+        <div class="tp-label">Team</div>
+        <div class="ag-list" id="agList">
+            <div class="tp-empty">No agents connected</div>
+        </div>
+        <div id="spotWrap"></div>
+    </aside>
+
+    <script>
+        'use strict';
+        let board = {}, prevBoard = null, tab = 'activity', cursor = 0, hasEvents = false;
+        const MAX_ACT = 150, MAX_MSG = 300;
+        const actEl = document.getElementById('actList'), mvEl = document.getElementById('mvBody');
+        const ROLE_CLR = { leader: 'var(--blue)', worker: 'var(--green)', inspector: 'var(--purple)', hub: 'var(--t3)', master: 'var(--orange)' };
+
+        // Nav \u2014 explicit ID-based toggle
+        document.getElementById('nav').addEventListener('click', e => {
+            const it = e.target.closest('.nav-it'); if (!it) return; const v = it.dataset.v;
+            document.querySelectorAll('.nav-it').forEach(x => x.classList.remove('on'));
+            it.classList.add('on');
+            // Hide all views explicitly
+            document.getElementById('v-activity').classList.remove('active');
+            document.getElementById('v-tasks').classList.remove('active');
+            document.getElementById('v-meeting').classList.remove('active');
+            document.getElementById('v-' + v).classList.add('active');
+            tab = v;
+        });
+
+        // SSE
+        let retry = 1000;
+        function connect() {
+            const es = new EventSource('/events');
+            es.onopen = () => { retry = 1000; const d = document.getElementById('connDot'); d.classList.add('on'); d.classList.remove('off'); document.getElementById('connLbl').textContent = 'Live' };
+            es.onmessage = e => { try { const d = JSON.parse(e.data); if (d.board) { prevBoard = structuredClone(board); board = d.board; render(); appendSys(diffBoard(prevBoard, board)) } } catch { } };
+            es.onerror = () => { const d = document.getElementById('connDot'); d.classList.remove('on'); d.classList.add('off'); document.getElementById('connLbl').textContent = 'Offline'; es.close(); setTimeout(connect, Math.min(retry, 10000)); retry *= 2 }
+        }
+        connect();
+
+        function diffBoard(p, c) {
+            const ev = []; if (!p?.agents || !c?.agents) return ev;
+            if (p.phase !== c.phase) ev.push({ h: \`Phase \u2192 <span class="sp" style="background:var(--green-d);color:var(--green)">\${c.phase}</span>\` });
+            for (const [n, a] of Object.entries(c.agents)) {
+                const pa = p.agents[n];
+                if (!pa) { ev.push({ h: \`<b>\${esc(n)}</b> joined as \${a.role}\` }); continue }
+                if (pa.status !== a.status) ev.push({ h: \`<b>\${esc(n)}</b> \u2192 <span class="sp" style="background:\${a.status === 'running' ? 'var(--green-d)' : 'var(--purple-d)'};color:\${a.status === 'running' ? 'var(--green)' : 'var(--purple)'}">\${a.status}</span>\` });
+                if (pa.currentTaskId !== a.currentTaskId && a.currentTaskId) { const t = c.tasks?.find(x => x.id === a.currentTaskId); ev.push({ h: \`<b>\${esc(n)}</b> started <b>#\${a.currentTaskId}</b>\${t ? ' ' + esc(t.title) : ''}\`, ag: n }) }
+            }
+            const pt = new Map((p.tasks || []).map(t => [t.id, t]));
+            for (const t of (c.tasks || [])) {
+                const o = pt.get(t.id); if (!o) { ev.push({ h: \`New task <b>#\${t.id} \${esc(t.title)}</b>\` + (t.assignee ? \` \u2192 <b>\${esc(t.assignee)}</b>\` : '') }); continue }
+                if (o.status !== t.status) ev.push({ h: \`<b>#\${t.id}</b> \u2192 <span class="sp" style="background:var(--purple-d);color:var(--purple)">\${t.status}</span>\` })
+            }
+            return ev
+        }
+
+        setInterval(() => { document.getElementById('clk').textContent = new Date().toLocaleTimeString('en-GB') }, 1000);
+
+        function render() {
+            const tasks = board.tasks || [], agents = Object.entries(board.agents || {});
+            const done = tasks.filter(t => t.status === 'done' || t.status === 'merged').length;
+            const active = tasks.filter(t => t.status === 'active').length;
+            const total = tasks.length, pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+            // Hero \u2014 split goal into title (first line) + body (rest)
+            const goalRaw = board.goal || 'Waiting for goal\u2026';
+            const goalLines = goalRaw.split('\\n');
+            // First non-empty line is the title; strip leading markdown heading markers
+            let titleLine = '';
+            let bodyStart = 0;
+            for (let i = 0; i < goalLines.length; i++) {
+                const trimmed = goalLines[i].trim();
+                if (trimmed) {
+                    titleLine = trimmed.replace(/^#{1,6}\\s+/, '');
+                    bodyStart = i + 1;
+                    break;
+                }
+            }
+            document.getElementById('goalT').textContent = titleLine || 'Waiting for goal\u2026';
+            const bodyLines = goalLines.slice(bodyStart).join('\\n').trim();
+            const goalBodyEl = document.getElementById('goalBody');
+            if (bodyLines) {
+                goalBodyEl.innerHTML = renderMd(bodyLines);
+                goalBodyEl.style.display = '';
+            } else {
+                goalBodyEl.innerHTML = '';
+                goalBodyEl.style.display = 'none';
+            }
+            document.getElementById('hFill').style.width = pct + '%';
+            document.getElementById('hPct').textContent = done + '/' + total + ' \xB7 ' + pct + '%';
+
+            // Status strip
+            document.getElementById('sDone').textContent = done;
+            document.getElementById('sAct').textContent = active;
+            document.getElementById('nTasks').textContent = total ? ' \xB7 ' + total : '';
+
+            // Team panel
+            const phase = board.phase || 'waiting';
+            document.getElementById('dtPhase').textContent = phase.charAt(0).toUpperCase() + phase.slice(1);
+            const dot = document.getElementById('dtDot');
+            dot.style.background = phase === 'completed' ? 'var(--purple)' : phase === 'error' ? 'var(--red)' : 'var(--green)';
+            dot.style.boxShadow = \`0 0 6px \${phase === 'completed' ? 'var(--purple-g)' : phase === 'error' ? 'var(--red-d)' : 'var(--green-g)'}\`;
+            document.getElementById('dtFill').style.width = pct + '%';
+            document.getElementById('dtPlbl').textContent = \`\${done} / \${total} completed\`;
+
+            // Agent list
+            if (!agents.length) {
+                document.getElementById('agList').innerHTML = '<div class="tp-empty">No agents connected</div>';
+            } else {
+                document.getElementById('agList').innerHTML = agents.map(([n, a]) => {
+                    const task = a.currentTaskId ? tasks.find(t => t.id === a.currentTaskId) : null;
+                    let act = 'Idle', cls = '';
+                    if (a.status === 'running') { act = task ? \`#\${task.id} \${task.title}\` : a.role === 'leader' ? 'Coordinating\u2026' : 'Working\u2026'; cls = ' live' }
+                    else if (a.status === 'done') act = 'Done';
+                    const ago = a.lastSeen ? relTime(a.lastSeen) : '';
+                    return \`<div class="ag"><div class="ag-d \${a.status || 'idle'}"></div><div class="ag-info"><div class="ag-n">\${esc(n)}</div><div class="ag-a\${cls}">\${esc(act)}</div></div><div class="ag-t">\${ago}</div></div>\`
+                }).join('');
+            }
+
+            // Spotlight
+            const running = agents.find(([, a]) => a.status === 'running');
+            if (running) {
+                const [n, a] = running; const task = a.currentTaskId ? tasks.find(t => t.id === a.currentTaskId) : null;
+                document.getElementById('spotWrap').innerHTML = \`<div class="spot"><div class="spot-hd"><div class="spot-dot" style="background:\${ROLE_CLR[a.role]};box-shadow:0 0 4px \${ROLE_CLR[a.role]}"></div><span class="spot-name">\${esc(n)}</span></div><div class="spot-body">\${task ? \`<div class="spot-line">Working on <b>#\${task.id}</b></div><div class="spot-line"><code>\${esc(task.title)}</code></div>\` : \`<div class="spot-line">\${a.role === 'leader' ? 'Coordinating\u2026' : 'Processing\u2026'}</div>\`}<div class="spot-status"><div class="spot-spin"></div>Working</div></div></div>\`
+            } else document.getElementById('spotWrap').innerHTML = '';
+
+            // Tasks view
+            const tEl = document.getElementById('taskList');
+            if (!tasks.length) { tEl.innerHTML = '<div class="empty glass-light"><div class="empty-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div><div class="empty-text">No tasks yet</div><div class="empty-sub">Leader will decompose the goal into tasks</div></div>' }
+            else tEl.innerHTML = tasks.map(t => {
+                const pv = Math.min(100, Math.max(0, t.progress || 0)), cls = t.status === 'done' || t.status === 'merged' ? 'done' : 'active';
+                let ex = ''; if (t.notes) ex += \`<div class="tk-notes">\${esc(t.notes)}</div>\`;
+                if (t.summary && (t.status === 'done' || t.status === 'merged')) ex += \`<div class="tk-summary">\${esc(t.summary)}</div>\`;
+                let prog = ''; if (t.status === 'active' || pv > 0) prog = \`<div class="tk-prog"><div class="tpb"><div class="tpf \${cls}" style="width:\${pv}%"></div></div><span class="tp-pct">\${pv}%</span></div>\`;
+                return \`<div class="tk glass-light"><div class="tk-row"><div class="tk-dot \${t.status || 'pending'}"></div><div class="tk-main"><div class="tk-title">\${esc(t.title || '')}</div><div class="tk-meta"><span class="who">\${esc(t.assignee || 'Unassigned')}</span><span>\${t.status}</span><span>#\${t.id}</span></div></div></div>\${ex}\${prog}</div>\`
+            }).join('');
+        }
+
+        function appendSys(evs) {
+            if (!evs.length) return;
+            if (!hasEvents) { actEl.innerHTML = ''; hasEvents = true }
+            const f = document.createDocumentFragment();
+            for (const ev of evs) { const d = document.createElement('div'); d.className = 'se'; d.innerHTML = \`<div class="se-dot"></div><span>\${ev.h} \xB7 just now</span>\`; f.appendChild(d) }
+            actEl.appendChild(f); while (actEl.children.length > MAX_ACT) actEl.removeChild(actEl.firstChild);
+            if (tab === 'activity') document.getElementById('scroll').scrollTop = document.getElementById('scroll').scrollHeight
+        }
+
+        // Meeting
+        let hasMsgs = false;
+        async function poll() {
+            try {
+                const r = await fetch('/meeting?since=' + cursor); if (!r.ok) return; const msgs = await r.json(); if (!msgs.length) return;
+                cursor += msgs.length; document.getElementById('nMsgs').textContent = ' \xB7 ' + cursor;
+                if (!hasEvents) { actEl.innerHTML = ''; hasEvents = true }
+                if (!hasMsgs) { mvEl.innerHTML = ''; hasMsgs = true }
+                const fA = document.createDocumentFragment(), fM = document.createDocumentFragment();
+                for (const m of msgs) {
+                    const cls = m.from === 'leader' ? 'leader' : m.from === 'hub' ? 'hub' : m.from === 'inspector' ? 'inspector' : m.from === 'master' ? 'master' : 'worker';
+                    const init = (m.from || '?')[0].toUpperCase(), ago = m.ts ? relTime(m.ts) : 'just now';
+                    const ats = (m.mentions || []).map(n => \`<span class="mg-at">@\${esc(n)}</span>\`).join(' ');
+                    const a = document.createElement('div'); a.className = 'ai';
+                    a.innerHTML = \`<div class="ai-av \${cls}">\${init}</div><div class="ai-body"><div class="ai-head"><span class="ai-name">\${esc(m.from)}</span>\${ats}<span class="ai-time">\xB7 \${ago}</span></div><div class="ai-text md">\${hlAt(renderMd(m.content || ''))}</div></div>\`;
+                    fA.appendChild(a);
+                    const mv = document.createElement('div'); mv.className = 'mg';
+                    mv.innerHTML = \`<div class="mg-av \${cls}">\${init}</div><div class="mg-body"><div class="mg-hd"><span class="mg-who \${cls}">\${esc(m.from)}</span>\${ats}<span class="mg-ts">\xB7 \${ago}</span></div><div class="mg-text md">\${hlAt(renderMd(m.content || ''))}</div></div>\`;
+                    fM.appendChild(mv)
+                }
+                actEl.appendChild(fA); mvEl.appendChild(fM);
+                while (actEl.children.length > MAX_ACT) actEl.removeChild(actEl.firstChild);
+                while (mvEl.children.length > MAX_MSG) mvEl.removeChild(mvEl.firstChild);
+                document.getElementById('scroll').scrollTop = document.getElementById('scroll').scrollHeight
+            } catch { }
+        }
+        setInterval(poll, 2000);
+
+        function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+        function hlAt(s) { return s.replace(/@([\\w-]+)/g, '<span class="hl">@$1</span>') }
+        function relTime(iso) { const d = Date.now() - new Date(iso).getTime(); if (isNaN(d) || d < 0) return 'just now'; if (d < 60000) return Math.floor(d / 1000) + 's ago'; if (d < 3600000) return Math.floor(d / 60000) + ' min ago'; return Math.floor(d / 3600000) + 'h ago' }
+
+        // Lightweight Markdown \u2192 HTML renderer (no deps)
+        function renderMd(raw) {
+            if (!raw) return '';
+            const lines = raw.split('\\n');
+            let html = '', inCode = false, codeLang = '', codeLines = [];
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // Fenced code block toggle
+                if (/^\`\`\`/.test(line.trim())) {
+                    if (!inCode) { inCode = true; codeLang = line.trim().slice(3); codeLines = []; continue }
+                    else { html += \`<pre><code>\${esc(codeLines.join('\\n'))}</code></pre>\`; inCode = false; continue }
+                }
+                if (inCode) { codeLines.push(line); continue }
+                // Blank line \u2192 paragraph break
+                if (!line.trim()) { html += '<p></p>'; continue }
+                // Headings
+                const hm = line.match(/^(#{1,6})\\s+(.*)/);
+                if (hm) { const lvl = hm[1].length; html += \`<h\${lvl}>\${inlineMd(esc(hm[2]))}</h\${lvl}>\`; continue }
+                // Unordered list
+                const ul = line.match(/^\\s*[-*]\\s+(.*)/);
+                if (ul) { html += \`<ul><li>\${inlineMd(esc(ul[1]))}</li></ul>\`; continue }
+                // Ordered list
+                const ol = line.match(/^\\s*\\d+\\.\\s+(.*)/);
+                if (ol) { html += \`<ul><li>\${inlineMd(esc(ol[1]))}</li></ul>\`; continue }
+                // Blockquote
+                if (line.trim().startsWith('>')) { html += \`<blockquote>\${inlineMd(esc(line.trim().replace(/^>\\s*/, '')))}</blockquote>\`; continue }
+                // Normal paragraph line
+                html += \`<p>\${inlineMd(esc(line))}</p>\`;
+            }
+            if (inCode && codeLines.length) html += \`<pre><code>\${esc(codeLines.join('\\n'))}</code></pre>\`;
+            // Merge adjacent <ul> / <blockquote>
+            html = html.replace(/<\\/ul><ul>/g, '').replace(/<\\/blockquote><blockquote>/g, '<br>');
+            return html;
+        }
+        function inlineMd(s) {
+            return s
+                .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
+                .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+                .replace(/\\*([^*]+)\\*/g, '<em>$1</em>')
+                .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>');
+        }
+        render()
+    </script>
+</body>
+
+</html>`;
+        } else {
+          const scriptDir = dirname4(fileURLToPath2(import.meta.url));
+          const candidates = [
+            join5(scriptDir, "dashboard.html"),
+            join5(scriptDir, "..", "dashboard.html"),
+            join5(scriptDir, "..", "..", "dashboard.html")
+          ];
+          const dashPath = candidates.find((p2) => existsSync6(p2));
+          if (!dashPath) {
+            respond(resp, 404, "text/plain", "dashboard.html not found");
+            return;
+          }
+          dashContent = await readFile5(dashPath, "utf-8");
         }
         resp.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...noStore });
-        resp.end(await readFile5(dashPath, "utf-8"));
+        resp.end(dashContent);
         return;
       }
       if (path3 === "/events") {
@@ -14906,11 +16382,11 @@ async function serve(cwd, opts) {
     if (err) log("WARN", `Could not auto-open browser: ${err.message}`);
   });
   if (goal && !dryRun) {
-    const leaderAgent = board.getAgent("leader");
+    const leaderAgent = board.getAgent(leaderName);
     if (leaderAgent) {
-      log("INFO", `Waking Leader with goal: "${goal.slice(0, 80)}"`);
-      const prompt = await buildFreshPromptForAgent(ctx, "leader");
-      wakeAgent(ctx, "leader", prompt).catch((err) => {
+      log("INFO", `Waking Leader (${leaderName}) with goal: "${goal.slice(0, 80)}"`);
+      const prompt = await buildFreshPromptForAgent(ctx, leaderName);
+      wakeAgent(ctx, leaderName, prompt).catch((err) => {
         log("ERROR", `Leader wake failed: ${err.message}`);
       });
     }
@@ -15058,17 +16534,48 @@ function respond(resp, status, data) {
   });
   resp.end(JSON.stringify(data, null, 2));
 }
+var WORKER_NAMES = [
+  "\u6668\u66E6",
+  "\u745E\u742A",
+  "\u6D77\u6D0B",
+  "\u660E\u6CFD",
+  "\u96E8\u98DE",
+  "\u601D\u8BED",
+  "\u5B50\u6DB5",
+  "\u9A8F\u8C6A",
+  "\u5929\u78CA",
+  "\u7EF4\u6797",
+  "\u5955\u8FB0",
+  "\u6653\u6728",
+  "\u51CC\u98CE",
+  "\u535A\u96C5",
+  "\u6E05\u6CB3",
+  "\u6DB5\u5B87",
+  "\u6CFD\u51EF",
+  "\u82E5\u6EAA",
+  "\u4E00\u9E23",
+  "\u8F69\u9038"
+];
+var LEADER_NAMES = ["\u5927\u5C71"];
+var INSPECTOR_NAMES = ["\u9E70\u773C"];
 function expandRoles(specs) {
   const result = [];
+  let workerIdx = 0;
   for (const spec of specs) {
     const [name, countStr] = spec.split(":");
     const count = parseInt(countStr || "1", 10);
     const role = name === "leader" ? "leader" : name === "inspector" ? "inspector" : "worker";
-    if (count <= 1) {
-      result.push({ name, role });
+    if (role === "leader") {
+      result.push({ name: LEADER_NAMES[0], role });
+    } else if (role === "inspector") {
+      result.push({ name: INSPECTOR_NAMES[0], role });
+    } else if (count <= 1) {
+      const humanName = WORKER_NAMES[workerIdx++ % WORKER_NAMES.length];
+      result.push({ name: humanName, role });
     } else {
-      for (let i2 = 1; i2 <= count; i2++) {
-        result.push({ name: `${name}-${i2}`, role });
+      for (let i2 = 0; i2 < count; i2++) {
+        const humanName = WORKER_NAMES[workerIdx++ % WORKER_NAMES.length];
+        result.push({ name: humanName, role });
       }
     }
   }

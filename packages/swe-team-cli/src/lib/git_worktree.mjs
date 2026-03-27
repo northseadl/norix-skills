@@ -57,14 +57,25 @@ export async function revParse(cwd, ref) {
     return out.split("\n")[0].trim();
 }
 
+/**
+ * Sanitize agent name for use in git branch names and filesystem paths.
+ * CJK names → safe ASCII slug via encodeURIComponent.
+ */
+function safeBranchName(name) {
+    // If already ASCII-safe, use as-is
+    if (/^[\w-]+$/.test(name)) return name;
+    return encodeURIComponent(name);
+}
+
 export async function createRoleWorktrees({ cwd, runId, baseSha, roles, worktreeRootAbs, dryRun }) {
     await ensureGitRepo(cwd);
     await mkdir(worktreeRootAbs, { recursive: true });
 
     const results = {};
     for (const role of roles) {
-        const branch = `team/${runId}/${role}`;
-        const wtPath = join(worktreeRootAbs, role);
+        const safeName = safeBranchName(role);
+        const branch = `team/${runId}/${safeName}`;
+        const wtPath = join(worktreeRootAbs, safeName);
         results[role] = { branch, worktreePath: wtPath };
         if (dryRun) continue;
 

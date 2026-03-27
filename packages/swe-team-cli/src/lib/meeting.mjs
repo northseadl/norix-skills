@@ -30,11 +30,11 @@ function makeMessage(from, content, { channel = "meeting", to = null } = {}) {
 
 /**
  * Parse @mentions from content.
- * Matches: @leader, @worker-1, @inspector, @all
+ * Matches: @大山, @晨曦, @all, @worker-1 (supports CJK + alphanumeric)
  */
 function parseMentions(content) {
     if (!content) return [];
-    const matches = content.match(/@([\w-]+)/g);
+    const matches = content.match(/@([\w\u4e00-\u9fff\u3400-\u4dbf-]+)/g);
     if (!matches) return [];
     return [...new Set(matches.map((m) => m.slice(1)))];
 }

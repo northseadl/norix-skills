@@ -107,12 +107,21 @@ export async function serve(cwd, opts) {
     }
 
     // Register leader (no worktree — leader coordinates, doesn't code)
-    await board.registerAgent("leader", { role: "leader" });
+    const leaderRole = expanded.find((r) => r.role === "leader");
+    const leaderName = leaderRole?.name || "leader";
+    if (leaderRole) await board.registerAgent(leaderName, { role: "leader" });
 
     // Register inspectors without dedicated worktrees. They inspect the integration checkout.
     const inspectorRoles = expanded.filter((r) => r.role === "inspector");
     for (const inspector of inspectorRoles) {
         await board.registerAgent(inspector.name, { role: inspector.role });
+    }
+
+    // In dry-run, workers aren't registered via worktree creation — register them here
+    if (dryRun) {
+        for (const r of workerRoles) {
+            await board.registerAgent(r.name, { role: r.role });
+        }
     }
 
     await board.setPhase("running");
@@ -375,22 +384,31 @@ export async function serve(cwd, opts) {
             // ── Dashboard ──
             if (path === "/" || path === "/index.html") {
                 // Priority: custom > bundled
+                // Priority: custom dashboard in .workshop/ → inlined at build time
                 const customPath = join(cwd, ".workshop", "dashboard.html");
-                const scriptDir = dirname(fileURLToPath(import.meta.url));
-                // Search multiple candidate paths: handles both dev (src/lib/) and bundle (scripts/) layouts
-                const candidates = [
-                    customPath,
-                    join(scriptDir, "dashboard.html"),        // same dir as script (bundle: scripts/)
-                    join(scriptDir, "..", "dashboard.html"),   // parent dir (bundle: skill root)
-                    join(scriptDir, "..", "..", "dashboard.html"), // dev: src/lib/ → src/ → skill root
-                ];
-                const dashPath = candidates.find(p => existsSync(p));
-                if (!dashPath) {
-                    respond(resp, 404, "text/plain", "dashboard.html not found");
-                    return;
+                let dashContent;
+                if (existsSync(customPath)) {
+                    dashContent = await readFile(customPath, "utf-8");
+                } else if (typeof __DASHBOARD_HTML__ !== "undefined") {
+                    // Inlined by esbuild at build time — zero file dependency
+                    dashContent = __DASHBOARD_HTML__;
+                } else {
+                    // Dev fallback: search relative to source file
+                    const scriptDir = dirname(fileURLToPath(import.meta.url));
+                    const candidates = [
+                        join(scriptDir, "dashboard.html"),
+                        join(scriptDir, "..", "dashboard.html"),
+                        join(scriptDir, "..", "..", "dashboard.html"),
+                    ];
+                    const dashPath = candidates.find(p => existsSync(p));
+                    if (!dashPath) {
+                        respond(resp, 404, "text/plain", "dashboard.html not found");
+                        return;
+                    }
+                    dashContent = await readFile(dashPath, "utf-8");
                 }
                 resp.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...noStore });
-                resp.end(await readFile(dashPath, "utf-8"));
+                resp.end(dashContent);
                 return;
             }
 
@@ -446,11 +464,11 @@ export async function serve(cwd, opts) {
 
     // ── Auto-wake Leader ──
     if (goal && !dryRun) {
-        const leaderAgent = board.getAgent("leader");
+        const leaderAgent = board.getAgent(leaderName);
         if (leaderAgent) {
-            log("INFO", `Waking Leader with goal: "${goal.slice(0, 80)}"`);
-            const prompt = await buildFreshPromptForAgent(ctx, "leader");
-            wakeAgent(ctx, "leader", prompt).catch((err) => {
+            log("INFO", `Waking Leader (${leaderName}) with goal: "${goal.slice(0, 80)}"`);
+            const prompt = await buildFreshPromptForAgent(ctx, leaderName);
+            wakeAgent(ctx, leaderName, prompt).catch((err) => {
                 log("ERROR", `Leader wake failed: ${err.message}`);
             });
         }
@@ -618,17 +636,36 @@ function respond(resp, status, data) {
     resp.end(JSON.stringify(data, null, 2));
 }
 
+// Pre-assigned human names — makes the team feel like real people.
+// Git branch uses URL-encoded names; @mention regex supports CJK.
+const WORKER_NAMES = [
+    "晨曦", "瑞琪", "海洋", "明泽", "雨飞",
+    "思语", "子涵", "骏豪", "天磊", "维林",
+    "奕辰", "晓木", "凌风", "博雅", "清河",
+    "涵宇", "泽凯", "若溪", "一鸣", "轩逸",
+];
+const LEADER_NAMES = ["大山"];
+const INSPECTOR_NAMES = ["鹰眼"];
+
 function expandRoles(specs) {
     const result = [];
+    let workerIdx = 0;
     for (const spec of specs) {
         const [name, countStr] = spec.split(":");
         const count = parseInt(countStr || "1", 10);
         const role = name === "leader" ? "leader" : name === "inspector" ? "inspector" : "worker";
-        if (count <= 1) {
-            result.push({ name, role });
+
+        if (role === "leader") {
+            result.push({ name: LEADER_NAMES[0], role });
+        } else if (role === "inspector") {
+            result.push({ name: INSPECTOR_NAMES[0], role });
+        } else if (count <= 1) {
+            const humanName = WORKER_NAMES[workerIdx++ % WORKER_NAMES.length];
+            result.push({ name: humanName, role });
         } else {
-            for (let i = 1; i <= count; i++) {
-                result.push({ name: `${name}-${i}`, role });
+            for (let i = 0; i < count; i++) {
+                const humanName = WORKER_NAMES[workerIdx++ % WORKER_NAMES.length];
+                result.push({ name: humanName, role });
             }
         }
     }

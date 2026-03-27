@@ -111,7 +111,7 @@ export function buildWorkerPrompt({ agentName, board, meetingHistory, dmHistory,
         ? completedTasks.map((t) => `✅ #${t.id} ${t.title}: ${t.summary}`).join("\n")
         : "";
 
-    return `你是全栈开发工匠 ${agentName}。你一次只处理一个任务。
+    return `你是全栈开发工匠 ${agentName}（你的名字就是 ${agentName}，队友和 Leader 会用这个名字 @你）。你一次只处理一个任务。
 
 ## ⚠️ 交付纪律（不可违反）
 
