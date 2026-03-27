@@ -73,6 +73,111 @@ ECOMMERCE_TEMPLATES = {
 
 
 # ---------------------------------------------------------------------------
+# Design Templates — UI/UX design, landing pages, thumbnails
+# ---------------------------------------------------------------------------
+
+DESIGN_TEMPLATES = {
+    "app-screen": {
+        "prefix": "Mobile app UI screenshot, clean modern interface design, "
+                  "iOS/Android style system UI, proper status bar and navigation, "
+                  "pixel-perfect layout, ",
+        "suffix": ", flat design, San Francisco / Roboto font style, consistent spacing, "
+                  "professional UI/UX, 60fps-smooth visual, device-frame ready",
+        "aspect_ratio": "9:16",
+        "image_size": "2K",
+    },
+    "landing": {
+        "prefix": "Professional website landing page design, above-the-fold hero section, "
+                  "modern SaaS aesthetic, clear visual hierarchy, call-to-action ready, ",
+        "suffix": ", clean grid layout, generous whitespace, premium typography, "
+                  "conversion-optimized design, desktop viewport",
+        "aspect_ratio": "16:9",
+        "image_size": "2K",
+    },
+    "thumbnail": {
+        "prefix": "YouTube/video thumbnail, high-contrast eye-catching design, "
+                  "bold readable text overlay space, vibrant colors, ",
+        "suffix": ", click-worthy composition, emotional hook visual, "
+                  "professional content creator quality",
+        "aspect_ratio": "16:9",
+        "image_size": "1K",
+    },
+    "story": {
+        "prefix": "Instagram/TikTok story graphic, full-screen vertical layout, "
+                  "mobile-native design, bold modern aesthetic, ",
+        "suffix": ", swipe-up ready, trendy gradient or bold color palette, "
+                  "Gen-Z visual language, vertical-first composition",
+        "aspect_ratio": "9:16",
+        "image_size": "2K",
+    },
+    "card": {
+        "prefix": "UI card component design, clean rounded corners, subtle shadow, "
+                  "modern material design aesthetic, ",
+        "suffix": ", balanced whitespace, clear information hierarchy, "
+                  "reusable component design, consistent padding",
+        "aspect_ratio": "4:3",
+        "image_size": "1K",
+    },
+    "presentation": {
+        "prefix": "Professional presentation slide design, clean corporate layout, "
+                  "business-grade visual, keynote quality, ",
+        "suffix": ", clear typography hierarchy, data visualization ready, "
+                  "16:9 widescreen format, executive boardroom quality",
+        "aspect_ratio": "16:9",
+        "image_size": "2K",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Mobile Templates — Platform-specific mobile assets
+# ---------------------------------------------------------------------------
+
+MOBILE_TEMPLATES = {
+    "app-splash": {
+        "prefix": "Mobile app splash screen / launch screen, centered brand visual, "
+                  "clean single-focus composition, premium feel, ",
+        "suffix": ", minimal design, brand-centric, works on any screen size, "
+                  "no text clutter, safe-area aware composition",
+        "aspect_ratio": "9:16",
+        "image_size": "2K",
+    },
+    "app-store": {
+        "prefix": "App Store / Google Play screenshot for app marketing, "
+                  "device mockup with app UI, compelling feature highlight, ",
+        "suffix": ", app store optimization ready, bold headline space at top, "
+                  "clean device frame, professional app marketing visual",
+        "aspect_ratio": "9:16",
+        "image_size": "2K",
+    },
+    "mobile-banner": {
+        "prefix": "Mobile in-app banner advertisement, compact horizontal layout, "
+                  "thumb-stopping visual, clear value proposition, ",
+        "suffix": ", optimized for small screens, high contrast for readability, "
+                  "wide panoramic proportion, mobile-first advertising design",
+        "aspect_ratio": "21:9",
+        "image_size": "1K",
+    },
+    "og-image": {
+        "prefix": "Social media Open Graph preview image, link card visual, "
+                  "clear readable text overlay space, brand-consistent, ",
+        "suffix": ", works as link preview on Twitter/LinkedIn/Facebook, "
+                  "balanced composition, professional social sharing image",
+        "aspect_ratio": "16:9",
+        "image_size": "1K",
+    },
+    "notification": {
+        "prefix": "Push notification rich media image, compact attention-grabbing visual, "
+                  "clear at small size, high contrast, ",
+        "suffix": ", optimized for notification tray, works at 2x and 3x density, "
+                  "concise visual message, no fine detail dependency",
+        "aspect_ratio": "1:1",
+        "image_size": "1K",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Icon Templates — Prompt wrapping optimized for downstream extraction
 # ---------------------------------------------------------------------------
 # Why "surrounding prompt" pattern:
@@ -172,10 +277,64 @@ ICON_TEMPLATES = {
         "_layout": "grid",
         "_grid": "2x2",
     },
+    "icon-set-8": {
+        # 4×2 grid: eight icons, landscape orientation
+        "prefix": (
+            "A sprite sheet of exactly 8 icons in a perfectly aligned 4×2 grid "
+            "(4 columns, 2 rows) on a pure solid white (#FFFFFF) background. "
+            "Each icon is the same size, evenly spaced with equal gutters. "
+            "No overlap, no borders, just white space separating them. "
+            "The 8 icons depict different variations of: "
+        ),
+        "suffix": (
+            ". Flat design, modern UI icon style, consistent visual weight, "
+            "same stroke width, same level of detail across all 8 icons."
+        ),
+        "aspect_ratio": "16:9",
+        "image_size": "2K",
+        "_layout": "grid",
+        "_grid": "4x2",
+    },
+    "icon-set-12": {
+        # 4×3 grid: twelve icons
+        "prefix": (
+            "A sprite sheet of exactly 12 icons in a perfectly aligned 4×3 grid "
+            "(4 columns, 3 rows) on a pure solid white (#FFFFFF) background. "
+            "Each icon is the same size, evenly spaced with equal gutters. "
+            "No overlap, no borders, just white space separating them. "
+            "The 12 icons depict different variations of: "
+        ),
+        "suffix": (
+            ". Flat design, modern UI icon style, consistent visual weight, "
+            "same stroke width, same level of detail across all 12 icons."
+        ),
+        "aspect_ratio": "4:3",
+        "image_size": "2K",
+        "_layout": "grid",
+        "_grid": "4x3",
+    },
+    "app-icon": {
+        # Single app icon: iOS/Android ready, rounded-rect safe area
+        "prefix": (
+            "A single mobile app icon design on a pure solid white (#FFFFFF) background. "
+            "The icon fills 80% of the canvas, perfectly centered. Design follows "
+            "Apple iOS / Google Material 3 app icon guidelines: bold, recognizable at "
+            "small sizes, no fine text, works at 16px to 1024px. The icon depicts: "
+        ),
+        "suffix": (
+            ". Modern app icon style, vibrant gradient or bold flat color, "
+            "subtle depth/shadow allowed, simple memorable silhouette, "
+            "no transparency needed (will be masked to rounded-rect by OS)."
+        ),
+        "aspect_ratio": "1:1",
+        "image_size": "2K",
+        "_layout": "single",
+        "_grid": "1x1",
+    },
 }
 
 # Unified template registry
-ALL_TEMPLATES = {**ECOMMERCE_TEMPLATES, **ICON_TEMPLATES}
+ALL_TEMPLATES = {**ECOMMERCE_TEMPLATES, **ICON_TEMPLATES, **DESIGN_TEMPLATES, **MOBILE_TEMPLATES}
 
 
 def build_prompt(user_prompt: str, template: str) -> str:
@@ -189,7 +348,7 @@ def build_prompt(user_prompt: str, template: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate product images and icon sets via Nano Banana API",
+        description="Generate product images, design assets, and icon sets via Nano Banana API",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 E-commerce Templates:
@@ -200,12 +359,30 @@ E-commerce Templates:
   grid         — Four-panel showcase (1:1, detail page grid visual)
   social       — Social media post (4:5, Instagram-ready visual)
 
+Design Templates:
+  app-screen   — Mobile app UI screenshot (9:16, iOS/Android style)
+  landing      — Website landing page hero section (16:9, SaaS aesthetic)
+  thumbnail    — Video thumbnail / cover image (16:9, click-worthy)
+  story        — Instagram/TikTok story graphic (9:16, vertical-first)
+  card         — UI card component design (4:3, material design)
+  presentation — Presentation slide design (16:9, keynote quality)
+
+Mobile Templates:
+  app-splash   — App splash/launch screen (9:16, brand-centric)
+  app-store    — App Store/Play Store screenshot (9:16, marketing)
+  mobile-banner— Mobile in-app banner ad (3:1, compact)
+  og-image     — Social sharing Open Graph image (16:9, link preview)
+  notification — Push notification rich media (1:1, compact)
+
 Icon Templates (extraction-optimized):
   icon         — Single icon, centered, 80% canvas fill (1:1, 1K)
   icon-set     — 3×3 grid of 9 related icons (1:1, 2K)
   icon-set-6   — 3×2 grid of 6 related icons (3:2, 2K)
   icon-set-4   — 2×2 grid of 4 related icons (1:1, 2K)
+  icon-set-8   — 4×2 grid of 8 related icons (16:9, 2K)
+  icon-set-12  — 4×3 grid of 12 related icons (4:3, 2K)
   icon-variants— 2×2 grid of same icon in 4 visual styles (1:1, 2K)
+  app-icon     — Single app icon, iOS/Android ready (1:1, 2K)
 
 Examples:
   %(prog)s "luxury leather handbag" --template hero
@@ -213,6 +390,9 @@ Examples:
   %(prog)s "e-commerce actions: cart, heart, share, search, filter, sort" --template icon-set-6
   %(prog)s "cloud computing" --template icon-variants
   %(prog)s "organic skincare set" --template banner --size 4K --model nano-banana-pro
+  %(prog)s "fitness tracker app dashboard" --template app-screen
+  %(prog)s "SaaS project management tool" --template landing
+  %(prog)s "my podcast app" --template app-icon
         """,
     )
 
@@ -285,6 +465,16 @@ Examples:
 
     # Print grid hint for icon templates (helps Agent chain to icon-extract)
     grid_hint = ALL_TEMPLATES.get(template, {}).get("_grid") if template else None
+
+    # Validate reference images
+    if args.ref_image:
+        if len(args.ref_image) > 8:
+            print("Error: Maximum 8 reference images.", file=sys.stderr)
+            sys.exit(1)
+        for fpath in args.ref_image:
+            if not os.path.exists(fpath):
+                print(f"Error: Reference image not found: {fpath}", file=sys.stderr)
+                sys.exit(1)
 
     print(f"Model: {args.model}")
     print(f"Template: {template or 'none'}")

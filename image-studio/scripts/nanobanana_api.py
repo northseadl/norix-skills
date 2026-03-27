@@ -81,8 +81,14 @@ _cred_store = CredentialStore("image-studio", str(CREDENTIALS_FILE.parent))
 
 
 def _resolve_api_key() -> str:
-    """Resolve API key from encrypted vault. No environment variables."""
-    # NX1 encrypted vault — primary source
+    """Resolve API key. Priority: env var → NX1 vault → legacy JSON."""
+    # Environment variables (Agent-preferred, zero setup)
+    for env_var in ("NANOBANANA_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        val = os.environ.get(env_var)
+        if val and val.strip():
+            return val.strip()
+
+    # NX1 encrypted vault — primary persistent source
     vault_key = _cred_store.get(_VAULT_ACCOUNT)
     if vault_key:
         return vault_key
@@ -100,6 +106,7 @@ def _resolve_api_key() -> str:
 
     print("Error: No API key found.", file=sys.stderr)
     print("Run:  ./nanobanana auth init --api-key <YOUR_KEY>", file=sys.stderr)
+    print("Or set env: export GEMINI_API_KEY=<YOUR_KEY>", file=sys.stderr)
     print("Get key at: https://aistudio.google.com/apikey", file=sys.stderr)
     sys.exit(1)
 
@@ -137,42 +144,63 @@ def resolve_model(model_input: str) -> str:
 # HTTP Engine — Google Generative Language API
 # ---------------------------------------------------------------------------
 
-def _post_json(url: str, payload: dict, api_key: str) -> dict:
-    """POST JSON to Gemini API. Returns parsed response or exits on error."""
+_DEFAULT_TIMEOUT = 120  # seconds; 4K generation can be slow
+
+
+def _post_json(url: str, payload: dict, api_key: str, *, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+    """POST JSON to Gemini API with retry on 429. Returns parsed response or exits on error."""
     data = json.dumps(payload).encode("utf-8")
     headers = {
         "x-goog-api-key": api_key,
         "Content-Type": "application/json",
     }
 
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            return result
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
+    max_retries = 3
+    for attempt in range(max_retries):
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         try:
-            err_json = json.loads(body)
-            err_msg = err_json.get("error", {}).get("message", body)
-            err_code = err_json.get("error", {}).get("code", e.code)
-        except json.JSONDecodeError:
-            err_msg = body
-            err_code = e.code
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            try:
+                err_json = json.loads(body)
+                err_msg = err_json.get("error", {}).get("message", body)
+                err_code = err_json.get("error", {}).get("code", e.code)
+            except json.JSONDecodeError:
+                err_msg = body
+                err_code = e.code
 
-        error_hints = {
-            400: f"Bad request: {err_msg}",
-            401: "Invalid API key. Get one at https://aistudio.google.com/apikey",
-            403: f"Permission denied: {err_msg}",
-            429: "Rate limit exceeded. Wait and retry.",
-            404: f"Model not found: {err_msg}",
-        }
-        display = error_hints.get(err_code, f"HTTP {err_code}: {err_msg}")
-        print(f"Error: {display}", file=sys.stderr)
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Network error: {e.reason}", file=sys.stderr)
-        sys.exit(1)
+            # Retry on 429 (rate limit) and 503 (overloaded)
+            if err_code in (429, 503) and attempt < max_retries - 1:
+                wait = 2 ** (attempt + 1)  # 2s, 4s
+                print(f"Rate limited (HTTP {err_code}). Retrying in {wait}s... ({attempt + 1}/{max_retries})",
+                      file=sys.stderr)
+                time.sleep(wait)
+                continue
+
+            error_hints = {
+                400: f"Bad request: {err_msg}",
+                401: "Invalid API key. Get one at https://aistudio.google.com/apikey",
+                403: f"Permission denied: {err_msg}",
+                429: f"Rate limit exceeded after {max_retries} retries: {err_msg}",
+                404: f"Model not found: {err_msg}",
+            }
+            display = error_hints.get(err_code, f"HTTP {err_code}: {err_msg}")
+            print(f"Error: {display}", file=sys.stderr)
+            sys.exit(1)
+        except urllib.error.URLError as e:
+            if attempt < max_retries - 1:
+                wait = 2 ** (attempt + 1)
+                print(f"Network error: {e.reason}. Retrying in {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            print(f"Network error after {max_retries} attempts: {e.reason}", file=sys.stderr)
+            sys.exit(1)
+
+    # Should not reach here, but just in case
+    print("Error: Max retries exceeded.", file=sys.stderr)
+    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +242,8 @@ def generate_image(
     model = resolve_model(model)
     model_info = MODELS[model]
 
-    # Validate inputs
+    # Normalize & validate inputs
+    image_size = image_size.upper()  # Accept "4k", "2k" etc.
     if aspect_ratio not in VALID_ASPECT_RATIOS and aspect_ratio != "auto":
         print(f"Error: Invalid aspect ratio '{aspect_ratio}'. Available: {', '.join(VALID_ASPECT_RATIOS)}", file=sys.stderr)
         sys.exit(1)

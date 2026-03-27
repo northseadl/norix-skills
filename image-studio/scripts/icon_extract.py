@@ -39,6 +39,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
@@ -163,16 +164,18 @@ def _flood_fill_labels(alpha: "np.ndarray", threshold: int = 10) -> "np.ndarray"
     labels = np.zeros((h, w), dtype=np.int32)
     current_label = 0
 
-    # Pre-compute neighbor offsets (4-connectivity for speed, sufficient for icons)
+    # BFS flood fill with 4-connectivity; cap component size to prevent memory exhaustion
+    max_component_pixels = h * w // 2  # No single icon should exceed half the image
     for y in range(h):
         for x in range(w):
             if binary[y, x] == 1 and labels[y, x] == 0:
                 current_label += 1
-                # BFS flood fill
                 queue = [(y, x)]
                 labels[y, x] = current_label
                 head = 0
                 while head < len(queue):
+                    if len(queue) > max_component_pixels:
+                        break  # Safety: skip pathologically large components
                     cy, cx = queue[head]
                     head += 1
                     for ny, nx in ((cy-1, cx), (cy+1, cx), (cy, cx-1), (cy, cx+1)):
@@ -293,6 +296,9 @@ def parse_layout(layout: str) -> tuple[str, int, int]:
             try:
                 cols, rows = int(parts[0]), int(parts[1])
                 if cols > 0 and rows > 0:
+                    if cols > 20 or rows > 20:
+                        print(f"Error: Grid too large ({cols}×{rows}). Maximum 20×20.", file=sys.stderr)
+                        sys.exit(1)
                     return ("grid", cols, rows)
             except ValueError:
                 pass
@@ -367,7 +373,7 @@ def crop_icon(
     rgba_image: "Image.Image",
     bbox: BBox,
     padding_ratio: float = DEFAULT_PADDING_RATIO,
-    output_size: int | None = DEFAULT_OUTPUT_SIZE,
+    output_size: Optional[int] = DEFAULT_OUTPUT_SIZE,
     square: bool = True,
 ) -> "Image.Image":
     """
@@ -447,7 +453,7 @@ def extract_icons(
     padding_ratio: float = DEFAULT_PADDING_RATIO,
     min_icon_size: int = DEFAULT_MIN_ICON_SIZE,
     merge_distance_ratio: float = DEFAULT_MERGE_DISTANCE_RATIO,
-    output_size: int | None = DEFAULT_OUTPUT_SIZE,
+    output_size: Optional[int] = DEFAULT_OUTPUT_SIZE,
     square: bool = True,
     keep_intermediate: bool = False,
 ) -> list[dict]:
@@ -566,6 +572,92 @@ def extract_icons(
 
 
 # ---------------------------------------------------------------------------
+# App Icon Multi-Size Export (iOS + Android standard sizes)
+# ---------------------------------------------------------------------------
+
+# Standard app icon sizes for platform submission
+APP_ICON_SIZES = {
+    "ios": [
+        (1024, "ios-appstore-1024"),    # App Store
+        (180,  "ios-iphone-60@3x"),     # iPhone @3x
+        (120,  "ios-iphone-60@2x"),     # iPhone @2x
+        (167,  "ios-ipad-pro-83.5@2x"), # iPad Pro @2x
+        (152,  "ios-ipad-76@2x"),       # iPad @2x
+        (80,   "ios-spotlight-40@2x"),   # Spotlight @2x
+        (120,  "ios-spotlight-40@3x"),   # Spotlight @3x
+        (58,   "ios-settings-29@2x"),    # Settings @2x
+        (87,   "ios-settings-29@3x"),    # Settings @3x
+        (40,   "ios-notification-20@2x"),# Notification @2x
+        (60,   "ios-notification-20@3x"),# Notification @3x
+    ],
+    "android": [
+        (512,  "android-playstore-512"), # Play Store
+        (192,  "android-xxxhdpi-192"),   # xxxhdpi
+        (144,  "android-xxhdpi-144"),    # xxhdpi
+        (96,   "android-xhdpi-96"),      # xhdpi
+        (72,   "android-hdpi-72"),       # hdpi
+        (48,   "android-mdpi-48"),       # mdpi
+    ],
+    "web": [
+        (512, "web-512"),      # PWA manifest
+        (192, "web-192"),      # PWA manifest
+        (180, "apple-touch"),  # Apple touch icon
+        (32,  "favicon-32"),   # Favicon
+        (16,  "favicon-16"),   # Favicon
+    ],
+}
+
+
+def export_app_icon_sizes(
+    icon_image: "Image.Image",
+    output_dir: str,
+    prefix: str = "app-icon",
+    platforms: Optional[list] = None,
+) -> list[dict]:
+    """Export a single icon image to all standard app icon sizes.
+
+    Args:
+        icon_image: Source RGBA image (should be square, ideally 1024px+)
+        output_dir: Output directory
+        prefix: Filename prefix
+        platforms: List of platforms to export for (default: all)
+
+    Returns list of exported file metadata.
+    """
+    from PIL import Image
+
+    if platforms is None:
+        platforms = list(APP_ICON_SIZES.keys())
+
+    results = []
+    platform_dir = os.path.join(output_dir, f"{prefix}-sizes")
+    os.makedirs(platform_dir, exist_ok=True)
+
+    for platform in platforms:
+        sizes = APP_ICON_SIZES.get(platform, [])
+        for size, name in sizes:
+            resized = icon_image.resize((size, size), Image.LANCZOS)
+            filename = f"{prefix}_{name}.png"
+            filepath = os.path.join(platform_dir, filename)
+            resized.save(filepath, "PNG")
+            results.append({
+                "path": filepath,
+                "platform": platform,
+                "size": size,
+                "name": name,
+            })
+
+    if results:
+        manifest_path = os.path.join(platform_dir, f"{prefix}_sizes_manifest.json")
+        with open(manifest_path, "w") as f:
+            json.dump({"total": len(results), "icons": results}, f, indent=2)
+        print(f"\n  App icon sizes exported: {len(results)} files → {platform_dir}/")
+        print(f"  Manifest: {manifest_path}")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -650,10 +742,18 @@ Examples:
         action="store_true",
         help="Save the background-removed intermediate image",
     )
+    parser.add_argument(
+        "--app-icon-sizes",
+        nargs="*",
+        choices=["ios", "android", "web", "all"],
+        default=None,
+        metavar="PLATFORM",
+        help="Export each icon to standard app icon sizes (ios/android/web/all)",
+    )
 
     args = parser.parse_args()
 
-    extract_icons(
+    results = extract_icons(
         input_path=args.image,
         output_dir=args.output,
         output_prefix=args.prefix,
@@ -667,6 +767,20 @@ Examples:
         square=not args.no_square,
         keep_intermediate=args.keep_intermediate,
     )
+
+    # App icon multi-size export
+    if args.app_icon_sizes and results:
+        from PIL import Image
+
+        platforms = list(APP_ICON_SIZES.keys()) if "all" in args.app_icon_sizes else args.app_icon_sizes
+        for meta in results:
+            icon_img = Image.open(meta["path"]).convert("RGBA")
+            export_app_icon_sizes(
+                icon_img,
+                args.output,
+                prefix=Path(meta["path"]).stem,
+                platforms=platforms,
+            )
 
 
 if __name__ == "__main__":
