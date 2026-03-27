@@ -10,10 +10,10 @@
  */
 
 import * as crypto from "node:crypto";
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { networkInterfaces } from "node:os";
 
 const NX1_PREFIX = "NX1$";
 const NX1_DOMAIN = "norix-skills";
@@ -23,45 +23,70 @@ const NX1_KEY_LEN = 32;
 const NX1_SALT_LEN = 16;
 const NX1_TAG_LEN = 32;
 
-function getMacAddress(): string {
-  // CRITICAL: Must match Python's uuid.getnode() output for vault compatibility.
-  // uuid.getnode() uses platform-specific methods that may return different MACs
-  // than Node.js os.networkInterfaces(). We try Python first for compatibility.
-  try {
-    const { execSync } = require("node:child_process");
-    const result = execSync(
-      'python3 -c "import uuid; print(format(uuid.getnode(), \'012x\'))"',
-      { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-    ).trim();
-    if (result && /^[0-9a-f]{12}$/.test(result)) {
-      return result;
-    }
-  } catch {
-    // Python not available, fall through
-  }
+const SEED_FILE = path.join(os.homedir(), ".agents", ".machine-seed");
 
-  // Fallback: try Node.js networkInterfaces (may differ from Python)
-  const ifaces = networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
-    for (const iface of ifaces[name] ?? []) {
-      if (!iface.internal && iface.mac && iface.mac !== "00:00:00:00:00:00") {
-        return iface.mac.replace(/:/g, "");
+/**
+ * Read hardware-bound unique ID from the OS (matches Python _platform_hwid).
+ * - macOS:   IOPlatformUUID (burned into Apple Silicon / T2 chip)
+ * - Linux:   /etc/machine-id
+ * - Windows: HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid
+ */
+function platformHwid(): string {
+  const system = os.platform();
+
+  if (system === "darwin") {
+    const stdout = execSync("ioreg -rd1 -c IOPlatformExpertDevice", {
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    const m = stdout.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
+    if (m) return m[1]!;
+  } else if (system === "linux") {
+    for (const p of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) {
+      if (fs.existsSync(p)) {
+        const mid = fs.readFileSync(p, "utf-8").trim();
+        if (mid) return mid;
       }
     }
+  } else if (system === "win32") {
+    const stdout = execSync(
+      'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+      { encoding: "utf-8", timeout: 5000 }
+    );
+    const m = stdout.match(/MachineGuid\s+REG_SZ\s+(\S+)/);
+    if (m) return m[1]!;
   }
-  // Last resort: hostname hash
-  return crypto
-    .createHash("md5")
-    .update(os.hostname())
-    .digest("hex")
-    .slice(0, 12);
+
+  throw new Error(
+    `Cannot obtain hardware ID on ${system}. ` +
+      `Create ${SEED_FILE} manually with a stable unique string.`
+  );
 }
 
+/**
+ * Derive a stable machine fingerprint — exact same logic as Python.
+ *
+ * Source of truth: ~/.agents/.machine-seed (immutable once written).
+ * On first run, initialized from platform hardware UUID and persisted.
+ *
+ * Cross-language spec:
+ *   fingerprint = SHA256("{seed}:norix-skills")
+ */
 function machineFingerprint(): Buffer {
-  const hostname = os.hostname();
-  const mac = getMacAddress();
-  const username = os.userInfo().username;
-  const identity = `${hostname}:${mac}:${username}:${NX1_DOMAIN}`;
+  let seed: string;
+
+  if (fs.existsSync(SEED_FILE)) {
+    seed = fs.readFileSync(SEED_FILE, "utf-8").trim();
+  } else {
+    seed = platformHwid();
+    const dir = path.dirname(SEED_FILE);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const tmp = SEED_FILE + ".tmp";
+    fs.writeFileSync(tmp, seed, { mode: 0o600 });
+    fs.renameSync(tmp, SEED_FILE);
+  }
+
+  const identity = `${seed}:${NX1_DOMAIN}`;
   return crypto.createHash("sha256").update(identity, "utf-8").digest();
 }
 
