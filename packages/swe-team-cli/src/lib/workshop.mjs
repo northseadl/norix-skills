@@ -376,8 +376,19 @@ export async function serve(cwd, opts) {
             if (path === "/" || path === "/index.html") {
                 // Priority: custom > bundled
                 const customPath = join(cwd, ".workshop", "dashboard.html");
-                const bundledPath = join(dirname(fileURLToPath(import.meta.url)), "..", "dashboard.html");
-                const dashPath = existsSync(customPath) ? customPath : bundledPath;
+                const scriptDir = dirname(fileURLToPath(import.meta.url));
+                // Search multiple candidate paths: handles both dev (src/lib/) and bundle (scripts/) layouts
+                const candidates = [
+                    customPath,
+                    join(scriptDir, "dashboard.html"),        // same dir as script (bundle: scripts/)
+                    join(scriptDir, "..", "dashboard.html"),   // parent dir (bundle: skill root)
+                    join(scriptDir, "..", "..", "dashboard.html"), // dev: src/lib/ → src/ → skill root
+                ];
+                const dashPath = candidates.find(p => existsSync(p));
+                if (!dashPath) {
+                    respond(resp, 404, "text/plain", "dashboard.html not found");
+                    return;
+                }
                 resp.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...noStore });
                 resp.end(await readFile(dashPath, "utf-8"));
                 return;

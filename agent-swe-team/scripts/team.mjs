@@ -13804,6 +13804,7 @@ import { join as join3, resolve as resolve3 } from "node:path";
 // src/lib/engines.mjs
 import { resolve as resolve2, dirname as dirname3 } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 // src/lib/logger.mjs
 function log(level, msg) {
@@ -13819,6 +13820,19 @@ function fatal(msg, code = 1) {
 
 // src/lib/engines.mjs
 var __dirname = dirname3(fileURLToPath(import.meta.url));
+function resolveCodexBinary() {
+  const name = process.platform === "win32" ? "codex.exe" : "codex";
+  const cmd = process.platform === "win32" ? "where" : "which";
+  try {
+    return execFileSync(cmd, [name], {
+      encoding: "utf-8",
+      timeout: 3e3,
+      stdio: ["pipe", "pipe", "pipe"]
+    }).trim().split("\n")[0];
+  } catch {
+    return null;
+  }
+}
 var CODEX_MODE_MAP = {
   suggest: { approvalPolicy: "on-request" },
   "auto-edit": { approvalPolicy: "on-failure" },
@@ -13836,11 +13850,18 @@ async function loadSdks({ needsCodex, needsClaude }, dryRun) {
   if (needsCodex && !_sdkCache.codex) {
     try {
       const mod = await Promise.resolve().then(() => (init_dist(), dist_exports));
-      _sdkCache.codex = new mod.Codex();
+      const codexPathOverride = resolveCodexBinary();
+      _sdkCache.codex = new mod.Codex(codexPathOverride ? { codexPathOverride } : {});
     } catch (err) {
+      const pathBin = resolveCodexBinary();
+      if (pathBin) {
+        fatal(
+          `Codex binary found at ${pathBin} but SDK failed to load: ${err.message}`
+        );
+      }
       fatal(
         `Cannot load @openai/codex-sdk: ${err.message}
-  Run: cd ${resolve2(__dirname, "../..")} && npm install`
+  Install: npm install -g @openai/codex`
       );
     }
   }
@@ -14822,8 +14843,21 @@ async function serve(cwd, opts) {
       }
       if (path3 === "/" || path3 === "/index.html") {
         const customPath = join5(cwd, ".workshop", "dashboard.html");
-        const bundledPath = join5(dirname4(fileURLToPath2(import.meta.url)), "..", "dashboard.html");
-        const dashPath = existsSync6(customPath) ? customPath : bundledPath;
+        const scriptDir = dirname4(fileURLToPath2(import.meta.url));
+        const candidates = [
+          customPath,
+          join5(scriptDir, "dashboard.html"),
+          // same dir as script (bundle: scripts/)
+          join5(scriptDir, "..", "dashboard.html"),
+          // parent dir (bundle: skill root)
+          join5(scriptDir, "..", "..", "dashboard.html")
+          // dev: src/lib/ → src/ → skill root
+        ];
+        const dashPath = candidates.find((p2) => existsSync6(p2));
+        if (!dashPath) {
+          respond(resp, 404, "text/plain", "dashboard.html not found");
+          return;
+        }
         resp.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...noStore });
         resp.end(await readFile5(dashPath, "utf-8"));
         return;

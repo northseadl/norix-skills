@@ -2,9 +2,27 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { log, fatal } from "./logger.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Resolve codex binary from system PATH.
+ * This decouples the bundle from node_modules — no npm install required
+ * as long as `codex` is globally installed.
+ */
+function resolveCodexBinary() {
+    const name = process.platform === "win32" ? "codex.exe" : "codex";
+    const cmd = process.platform === "win32" ? "where" : "which";
+    try {
+        return execFileSync(cmd, [name], {
+            encoding: "utf-8", timeout: 3000, stdio: ["pipe", "pipe", "pipe"],
+        }).trim().split("\n")[0];
+    } catch {
+        return null;
+    }
+}
 
 // ─── SDK Mode Mappings ───
 
@@ -31,10 +49,17 @@ export async function loadSdks({ needsCodex, needsClaude }, dryRun) {
     if (needsCodex && !_sdkCache.codex) {
         try {
             const mod = await import("@openai/codex-sdk");
-            _sdkCache.codex = new mod.Codex();
+            const codexPathOverride = resolveCodexBinary();
+            _sdkCache.codex = new mod.Codex(codexPathOverride ? { codexPathOverride } : {});
         } catch (err) {
+            const pathBin = resolveCodexBinary();
+            if (pathBin) {
+                fatal(
+                    `Codex binary found at ${pathBin} but SDK failed to load: ${err.message}`,
+                );
+            }
             fatal(
-                `Cannot load @openai/codex-sdk: ${err.message}\n  Run: cd ${resolve(__dirname, "../..")} && npm install`,
+                `Cannot load @openai/codex-sdk: ${err.message}\n  Install: npm install -g @openai/codex`,
             );
         }
     }
