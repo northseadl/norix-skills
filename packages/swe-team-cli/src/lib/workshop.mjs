@@ -639,13 +639,13 @@ function respond(resp, status, data) {
 // Pre-assigned human names — makes the team feel like real people.
 // Git branch uses URL-encoded names; @mention regex supports CJK.
 const WORKER_NAMES = [
-    "晨曦", "瑞琪", "海洋", "明泽", "雨飞",
-    "思语", "子涵", "骏豪", "天磊", "维林",
-    "奕辰", "晓木", "凌风", "博雅", "清河",
-    "涵宇", "泽凯", "若溪", "一鸣", "轩逸",
+    "长庚", "惊蛰", "扶摇", "望舒", "栖桐",
+    "临渊", "破晓", "知秋", "听雨", "逐浪",
+    "揽月", "踏雪", "凭栏", "横渠", "青崖",
+    "沧溟", "烛影", "归鸿", "淬火", "拾光",
 ];
-const LEADER_NAMES = ["大山"];
-const INSPECTOR_NAMES = ["鹰眼"];
+const LEADER_NAMES = ["司南"];     // 指南针 — 把控方向
+const INSPECTOR_NAMES = ["明鉴"]; // 明察秋毫
 
 function expandRoles(specs) {
     const result = [];

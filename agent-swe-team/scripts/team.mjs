@@ -16535,29 +16535,29 @@ function respond(resp, status, data) {
   resp.end(JSON.stringify(data, null, 2));
 }
 var WORKER_NAMES = [
-  "\u6668\u66E6",
-  "\u745E\u742A",
-  "\u6D77\u6D0B",
-  "\u660E\u6CFD",
-  "\u96E8\u98DE",
-  "\u601D\u8BED",
-  "\u5B50\u6DB5",
-  "\u9A8F\u8C6A",
-  "\u5929\u78CA",
-  "\u7EF4\u6797",
-  "\u5955\u8FB0",
-  "\u6653\u6728",
-  "\u51CC\u98CE",
-  "\u535A\u96C5",
-  "\u6E05\u6CB3",
-  "\u6DB5\u5B87",
-  "\u6CFD\u51EF",
-  "\u82E5\u6EAA",
-  "\u4E00\u9E23",
-  "\u8F69\u9038"
+  "\u957F\u5E9A",
+  "\u60CA\u86F0",
+  "\u6276\u6447",
+  "\u671B\u8212",
+  "\u6816\u6850",
+  "\u4E34\u6E0A",
+  "\u7834\u6653",
+  "\u77E5\u79CB",
+  "\u542C\u96E8",
+  "\u9010\u6D6A",
+  "\u63FD\u6708",
+  "\u8E0F\u96EA",
+  "\u51ED\u680F",
+  "\u6A2A\u6E20",
+  "\u9752\u5D16",
+  "\u6CA7\u6E9F",
+  "\u70DB\u5F71",
+  "\u5F52\u9E3F",
+  "\u6DEC\u706B",
+  "\u62FE\u5149"
 ];
-var LEADER_NAMES = ["\u5927\u5C71"];
-var INSPECTOR_NAMES = ["\u9E70\u773C"];
+var LEADER_NAMES = ["\u53F8\u5357"];
+var INSPECTOR_NAMES = ["\u660E\u9274"];
 function expandRoles(specs) {
   const result = [];
   let workerIdx = 0;
