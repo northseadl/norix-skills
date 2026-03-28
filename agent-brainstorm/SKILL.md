@@ -1,7 +1,7 @@
 ---
 name: agent-brainstorm
 metadata:
-  version: 0.1.5
+  version: 0.1.6
 description: 'Multi-agent brainstorming: async opinion collision with expert personas.
   Mixed Codex/Claude Code engine. Use when multiple AI agents need to collaboratively
   discuss, debate, and converge on solutions through structured dialog. Triggers:
@@ -52,16 +52,11 @@ description: 'Multi-agent brainstorming: async opinion collision with expert per
 
 ## 前置条件
 
-运行需要 **Node.js ≥18.0.0** 和至少一个引擎已认证。
-
-```bash
-# 安装依赖（在技能目录下）
-cd <SKILLS_DIR>/agent-brainstorm && npm install
-```
+运行需要 **Node.js ≥18.0.0** 和至少一个引擎已认证。脚本已打包为零依赖单文件，**无需 `npm install`**。
 
 **引擎认证** (至少完成一个):
 - **Claude**: 在终端运行 `claude` 完成交互登录，或 `export ANTHROPIC_API_KEY='sk-ant-...'`
-- **Codex**: 运行 `codex login`，或 `export OPENAI_API_KEY='sk-...'`
+- **Codex**: 确保 `codex` 在 PATH 中（`npm install -g @openai/codex`），或 `export OPENAI_API_KEY='sk-...'`
 
 ## 工具
 
@@ -134,7 +129,7 @@ node <SKILLS_DIR>/agent-brainstorm/scripts/brainstorm.mjs --clean --cwd <project
 - 每个 agent 可通过 `"engine": "codex"` 或 `"engine": "claude"` 指定引擎
 - 未指定则继承 CLI 的 `--engine` 参数（默认 codex）
 - 支持混合模式：同一场讨论中不同 agent 使用不同引擎
-- **引擎降级**：若指定引擎不可用，自动切换所有受影响 Agent 到可用引擎（而非阻断）
+- **引擎要求**：每个引擎的 binary 必须可用（Codex 在 PATH、Claude `cli.js` 在 scripts/），否则 fatal
 
 **Agent 数量建议**: 3-5 个。太少缺乏碰撞，太多产生噪声。
 
@@ -257,7 +252,7 @@ concluded  → 所有 Agent 完成或超时
 |:---|:---|:---|
 | 全局超时 | `--timeout` (默认 30min) | 强制 concluded |
 | SIGINT 保护 | 3 次 Ctrl+C | 讨论中 Ctrl+C 被拦截，3 次强制退出（保存状态） |
-| 引擎降级 | 自动 | 一个引擎不可用时自动切换到另一可用引擎 |
+| 引擎降级 | 自动 | 一个引擎 binary 不在 PATH 时 fatal（需全局安装） |
 | Agent session 上限 | SDK 内部控制 | Agent 自然结束 |
 | 最终产出 | synthesis.md | 即使讨论不完美也有记录 |
 
@@ -265,12 +260,10 @@ concluded  → 所有 Agent 完成或超时
 
 | 症状 | 原因 | 解决 |
 |:---|:---|:---|
-| `Cannot find module` | npm 依赖未安装 | `cd <SKILLS_DIR>/agent-brainstorm && npm install` |
-| `Preflight failed` | CLI 未安装或未认证 | 见"前置条件"完成认证 |
 | Agent 长时间 0 posts | 模型不兼容标准工具集 | 确认 Claude Code 使用官方模型（非第三方代理模型） |
 | `API Error 400` | Agent 使用了不存在的工具 | 同上，模型兼容性问题 |
 | SIGINT 被拦截 | 讨论中 Ctrl+C 保护 | 连按 3 次 Ctrl+C 强制退出 |
-| 引擎降级日志 | 指定引擎不可用 | 正常行为，已自动切换 |
+| 引擎加载失败 | Codex 不在 PATH 或 Claude SDK 缺失 | 确认 `which codex` 可用 / `cli.js` 存在于 scripts/ |
 
 ## 参考文档
 

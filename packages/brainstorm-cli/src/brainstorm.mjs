@@ -20,7 +20,7 @@ import { join, dirname, resolve, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
-import { exec } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1014,6 +1014,23 @@ async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
 
 // ─── Engine Resolution ───
 
+/**
+ * Resolve codex binary from system PATH.
+ * Bundled deployment has no node_modules — the SDK's internal findCodexPath()
+ * would fail. We resolve from PATH and pass codexPathOverride instead.
+ */
+function resolveCodexBinary() {
+  const name = process.platform === "win32" ? "codex.exe" : "codex";
+  const cmd = process.platform === "win32" ? "where" : "which";
+  try {
+    return execFileSync(cmd, [name], {
+      encoding: "utf-8", timeout: 3000, stdio: ["pipe", "pipe", "pipe"],
+    }).trim().split("\n")[0];
+  } catch {
+    return null;
+  }
+}
+
 function resolveAgentEngines(agents, defaultEngine) {
   const valid = new Set(["codex", "claude"]);
   for (const a of agents) {
@@ -1025,24 +1042,29 @@ function resolveAgentEngines(agents, defaultEngine) {
   return { needsCodex: codexCount > 0, needsClaude: claudeCount > 0, codexCount, claudeCount };
 }
 
+const _sdkCache = { codex: null, claude: null };
+
 async function loadSdks({ needsCodex, needsClaude }, dryRun) {
   const sdks = { codex: null, claude: null };
   if (dryRun) return sdks;
-  if (needsCodex) {
+  if (needsCodex && !_sdkCache.codex) {
     try {
       const mod = await import("@openai/codex-sdk");
-      sdks.codex = new mod.Codex();
+      const codexPathOverride = resolveCodexBinary();
+      _sdkCache.codex = new mod.Codex(codexPathOverride ? { codexPathOverride } : {});
     } catch (err) {
-      fatal(`Cannot load @openai/codex-sdk: ${err.message}\n  Run: cd ${resolve(__dirname, "..")} && npm install`);
+      fatal(`Cannot load @openai/codex-sdk: ${err.message}\n  Install: npm install -g @openai/codex`);
     }
   }
-  if (needsClaude) {
+  if (needsClaude && !_sdkCache.claude) {
     try {
-      sdks.claude = await import("@anthropic-ai/claude-agent-sdk");
+      _sdkCache.claude = await import("@anthropic-ai/claude-agent-sdk");
     } catch (err) {
-      fatal(`Cannot load @anthropic-ai/claude-agent-sdk: ${err.message}\n  Run: cd ${resolve(__dirname, "..")} && npm install`);
+      fatal(`Cannot load @anthropic-ai/claude-agent-sdk: ${err.message}\n  Ensure cli.js exists alongside the bundled script.`);
     }
   }
+  sdks.codex = _sdkCache.codex;
+  sdks.claude = _sdkCache.claude;
   return sdks;
 }
 

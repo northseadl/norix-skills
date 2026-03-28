@@ -13208,7 +13208,7 @@ import { join, dirname, resolve, basename } from "node:path";
 import { existsSync as existsSync2 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
-import { exec } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var AGENT_COLORS = [
   { id: "amber", hex: "#e5a63e" },
@@ -14094,6 +14094,19 @@ async function spawnClaudeAgent(sdk, agent, prompt, config, space) {
     }
   }
 }
+function resolveCodexBinary() {
+  const name = process.platform === "win32" ? "codex.exe" : "codex";
+  const cmd = process.platform === "win32" ? "where" : "which";
+  try {
+    return execFileSync(cmd, [name], {
+      encoding: "utf-8",
+      timeout: 3e3,
+      stdio: ["pipe", "pipe", "pipe"]
+    }).trim().split("\n")[0];
+  } catch {
+    return null;
+  }
+}
 function resolveAgentEngines(agents, defaultEngine) {
   const valid = /* @__PURE__ */ new Set(["codex", "claude"]);
   for (const a2 of agents) {
@@ -14104,26 +14117,30 @@ function resolveAgentEngines(agents, defaultEngine) {
   const claudeCount = agents.filter((a2) => a2.engine === "claude").length;
   return { needsCodex: codexCount > 0, needsClaude: claudeCount > 0, codexCount, claudeCount };
 }
+var _sdkCache = { codex: null, claude: null };
 async function loadSdks({ needsCodex, needsClaude }, dryRun) {
   const sdks = { codex: null, claude: null };
   if (dryRun) return sdks;
-  if (needsCodex) {
+  if (needsCodex && !_sdkCache.codex) {
     try {
       const mod = await Promise.resolve().then(() => (init_dist(), dist_exports));
-      sdks.codex = new mod.Codex();
+      const codexPathOverride = resolveCodexBinary();
+      _sdkCache.codex = new mod.Codex(codexPathOverride ? { codexPathOverride } : {});
     } catch (err) {
       fatal(`Cannot load @openai/codex-sdk: ${err.message}
-  Run: cd ${resolve(__dirname, "..")} && npm install`);
+  Install: npm install -g @openai/codex`);
     }
   }
-  if (needsClaude) {
+  if (needsClaude && !_sdkCache.claude) {
     try {
-      sdks.claude = await Promise.resolve().then(() => (init_sdk(), sdk_exports));
+      _sdkCache.claude = await Promise.resolve().then(() => (init_sdk(), sdk_exports));
     } catch (err) {
       fatal(`Cannot load @anthropic-ai/claude-agent-sdk: ${err.message}
-  Run: cd ${resolve(__dirname, "..")} && npm install`);
+  Ensure cli.js exists alongside the bundled script.`);
     }
   }
+  sdks.codex = _sdkCache.codex;
+  sdks.claude = _sdkCache.claude;
   return sdks;
 }
 async function spawnAgent(sdks, agent, prompt, config, space) {
