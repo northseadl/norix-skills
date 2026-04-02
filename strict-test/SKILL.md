@@ -4,7 +4,7 @@ description: |
   测试认识论与流程规范：认知质量标准、各平台强制工作流、验证门禁。
   编写/运行/验证测试时使用，约束测试思维与流程而非教写代码。
 metadata:
-  version: 0.1.0
+  version: 0.1.1
 ---
 
 # Strict Test — Epistemology & Process Specification

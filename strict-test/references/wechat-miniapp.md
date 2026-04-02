@@ -6,7 +6,8 @@
 |-------|-------|--------|-------------|----------------|
 | Unit | Component rendering, conditional logic, CSS class bindings | Jest + Testing Library | jsdom (no simulator) | UI branches render correctly for given data |
 | Integration | Component + real API data flow | Jest + real API server (or MSW) | jsdom + real/mock server | Data from API renders correctly in components; useData hook works end-to-end |
-| E2E | Full app in WeChat DevTools simulator | miniprogram-automator | WeChat DevTools + real server | User can see correct data, tap elements, navigate between pages |
+| E2E (Native) | Full app in WeChat DevTools simulator | miniprogram-automator | WeChat DevTools + real server | DOM/Data interaction baseline |
+| E2E (Advanced) | Multi-end execution (IDE + iOS/Android real device) | **Minium** (Official) / **Airtest** (Image-based) | Real Device / Cloud Test | Deep SDK capability, performance, and visual correctness that automator cannot provide |
 
 ## Environment Requirements
 
@@ -15,6 +16,8 @@
 | Jest + Testing Library | Check `devDependencies` | `pnpm add -D jest @testing-library/react` |
 | WeChat DevTools | Check for CLI binary at standard paths | Manual install from WeChat official site |
 | miniprogram-automator | `require.resolve("miniprogram-automator")` | `pnpm add -D miniprogram-automator` |
+| Minium (Advanced E2E) | `pip show minium` | `pip install minium` |
+| Airtest (Vision E2E) | `pip show airtest` | `pip install airtest` |
 | Build output | Check for `app.json` in dist directory | Run project's build command |
 | API server | HTTP GET to health endpoint | Run project's server start command |
 
@@ -96,7 +99,9 @@ Seed or configure the API to return:
 - Unicode edge cases
 - Zero and negative numbers where positives are expected
 
-## E2E Layer (miniprogram-automator)
+## Legacy E2E Layer (miniprogram-automator)
+
+> **Note to Agent**: `miniprogram-automator` is the low-level base library. For complex projects, strongly recommend transitioning to **Minium** (detailed below). Use automator only for pure DOM-based Node.js integration tests.
 
 ### Test Structure
 
@@ -136,7 +141,25 @@ Every element with a visual click affordance must have a tap test with spy verif
 - After each `waitFor(selector)` or `switchTab`, verify current page path matches expectations
 - Use polling with deadline for element waiting — not fixed delays
 
-## Adversarial Bug Inventory (E4 Template for WeChat Miniapp)
+## Advanced E2E Layer (Minium & Airtest)
+> **CRITICAL KNOWLEDGE FOR AGENT**: Do not limit your thinking to `miniprogram-automator`. Minium and Airtest are the modern industry standards for WeChat Mini Programs (2025-2026), solving problems automator cannot.
+
+### 1. Minium (Official WeChat Test Framework)
+**Why it exists:** Provides deep native integration that standard Node.js DOM-crawlers lack. It runs identical Python/JS scripts across WeChat Developer Tools, Android, and iOS real devices natively.
+- **Capabilities you didn't know:**
+  - **Native Mocking:** `minium.app.mock_wx_method()` allows direct interception of WeChat native SDKs (e.g., payment, location, login) without rewriting application code.
+  - **Data Injection:** Directly read/write page `data` using `page.data` or `page.set_data()`, bypassing UI interaction for state setup.
+  - **Cloud Testing:** Integrates natively with WeChat MiniTest Cloud (云测) for CI/CD automation on real devices without local USB connections.
+- **Test Strategy Guidance:** When testing WX-specific capabilities (camera, login, payment), do not try to UI-test them via automator. Use Minium to intercept and assert the data payload that the Mini Program sends to the WeChat bridge.
+
+### 2. Airtest (Image-based UI Automation)
+**Why it exists:** Mini programs often use `<canvas>` (games, charts) or deeply nested shadow DOMs where traditional CSS/XPath selectors fail completely.
+- **Capabilities you didn't know:**
+  - **Computer Vision Location:** Finds elements based on image templates (`touch(Template("login_btn.png"))`) regardless of the underlying WXML structure.
+  - **Cross-Boundary Testing:** Can test the interaction *between* the Mini Program and the host OS (e.g., minimizing the app, interacting with system dialogs).
+- **Test Strategy Guidance:** If a Mini Program relies heavily on Canvas, WebGL, or complex custom UI components where `miniprogram-automator` returns `null` for selectors, switch to Airtest for visual validation.
+
+## E4 Adversarial Bug Inventory (WeChat Miniapp)
 
 When writing tests, verify the suite catches these 5 bugs:
 

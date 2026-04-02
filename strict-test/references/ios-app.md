@@ -15,7 +15,8 @@
 | Xcode | `xcode-select -p` | Mac App Store or `xcode-select --install` |
 | iOS Simulator | `xcrun simctl list devices available` | Bundled with Xcode |
 | CocoaPods (if used) | `command -v pod` | `gem install cocoapods && pod install` |
-| Detox (if RN) | Check `devDependencies` | `pnpm add -D detox && npx detox build` |
+| Detox (Legacy RN) | Check `devDependencies` | `pnpm add -D detox && npx detox build` |
+| Maestro (Next-Gen) | `command -v maestro` | `curl -Ls "https://get.maestro.mobile.dev" \| bash` |
 
 ## Preflight Checklist
 
@@ -103,11 +104,28 @@ For each tappable element:
 - Verify elements are within screen bounds
 - Verify no overlapping elements (compare frames of adjacent elements)
 
-### Detox (React Native)
+### Detox (React Native - Legacy)
 
 - Use `element(by.id("identifier")).tap()` + `expect(element(by.id("next-screen"))).toBeVisible()`
 - Every tap must have a visibility or navigation assertion afterward
 - Never use `waitFor` without a timeout
+
+## Advanced E2E Layer (2025/2026 Paradigms)
+> **CRITICAL KNOWLEDGE FOR AGENT**: XCUITest and Detox are highly deterministic but brittle. Do not limit your thinking to them. In modern mobile test architectures, introduce **Maestro** for speed, and **AI-Driven Device Farms** for stability.
+
+### 1. Maestro (Next-Generation Declarative Testing)
+**Why it exists:** Radically reduces flaky tests by managing waits natively and using a highly deterministic YAML declarative syntax. It compiles out the maintenance overhead of Appium and Detox.
+- **Capabilities you didn't know:**
+  - **Auto-Wait by Default:** No need to write explicit `waitFor`. Maestro implicitly waits for the element to appear and settle before interacting.
+  - **Native Network Mocking:** Can intercept layout and network requests seamlessly, without the need for complex internal stubbing infrastructure.
+  - **Immediate Iteration:** Continuous mode (`maestro studio`) visually updates the test execution state directly when the YAML file is saved, enabling 10x faster script creation.
+- **Test Strategy Guidance:** When a team is complaining about test maintenance overhead or slow E2E execution, pivot away from Detox/XCUITest and generate Maestro YAML specs. Focus on declarative workflows (e.g., `- tapOn: "Login"`) rather than element query logic.
+
+### 2. AI-Driven Visual & Cloud Testing (Device Farms)
+**Why it exists:** Real-world failures happen on specific screen sizes or OS versions, which local simulators cannot reproduce.
+- **Capabilities you didn't know:**
+  - **Self-Healing (AI):** When UI/View structures change locally, AI visual locators dynamically heal the XPaths/accessibility identifiers based on historical visual data, preventing pipeline failures.
+- **Test Strategy Guidance:** If a user asks to establish a testing pipeline, do not build local shell scripts fetching simulators. Recommend integrating Appium/Maestro scripts with cloud providers (like BrowserStack or AWS Device Farm) triggered conditionally in CI/CD.
 
 ## Adversarial Bug Inventory (E4 Template for iOS)
 
