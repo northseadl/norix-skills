@@ -1,4 +1,0 @@
-interface:
-  display_name: "Mobile Testing"
-  short_description: "Android/iOS automated testing and performance profiling"
-  default_prompt: "Use $mobile-testing to test and evaluate a mobile application."

@@ -24,7 +24,6 @@ norix-skills/
 ├── feishu-integration/         # 飞书 API 集成 v1.0.0（agent-centric JSON 输出协议 · @larksuiteoapi/node-sdk · esbuild CJS 打包 · 8模块92命令）
 ├── image-studio/               # Nano Banana AI 图像生成·精修·图标提取（rembg+BiRefNet 去背→检测→裁切）
 ├── llm-agent-dev/              # LLM Agent 工程全栈（设计/仿真/收敛）
-├── mobile-testing/             # 移动应用自动化测试与评估
 ├── pm-toolkit/                 # Mermaid 图表 + 网页原型本地预览面板
 ├── doc-sentinel/               # 文档-代码变更通知系统（溯源绑定/Git diff 变更计划/幂等执行）
 ├── skill-creator/              # 技能创建/迭代/评估/描述优化（上游 anthropics/skills 同步）
