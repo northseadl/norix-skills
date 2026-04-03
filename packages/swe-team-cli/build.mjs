@@ -19,7 +19,7 @@ const common = {
     platform: "node",
     target: "node18",
     format: "esm",
-    external: ["node:*"],
+    external: ["node:*", "@opencode-ai/sdk"],
     minify: false,
     sourcemap: false,
 };

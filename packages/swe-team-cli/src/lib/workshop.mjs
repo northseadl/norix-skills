@@ -58,7 +58,7 @@ export async function serve(cwd, opts) {
     await board.init(runId, goal);
 
     // Load engine SDK
-    const engineInfo = { needsCodex: engine === "codex", needsClaude: engine === "claude" };
+    const engineInfo = { needsCodex: engine === "codex", needsClaude: engine === "claude", needsOpencode: engine === "opencode" };
     const sdks = await loadSdks(engineInfo, dryRun);
 
     // Create integration branch + dedicated worktree for merge operations
@@ -394,11 +394,14 @@ export async function serve(cwd, opts) {
                     dashContent = __DASHBOARD_HTML__;
                 } else {
                     // Dev fallback: search relative to source file
+                    // Source is at packages/swe-team-cli/src/lib/ → dashboard is at agent-swe-team/dashboard.html
                     const scriptDir = dirname(fileURLToPath(import.meta.url));
                     const candidates = [
                         join(scriptDir, "dashboard.html"),
                         join(scriptDir, "..", "dashboard.html"),
                         join(scriptDir, "..", "..", "dashboard.html"),
+                        join(scriptDir, "..", "..", "..", "..", "agent-swe-team", "dashboard.html"),
+                        join(scriptDir, "..", "..", "..", "..", "agent-swe-team", "scripts", "dashboard.html"),
                     ];
                     const dashPath = candidates.find(p => existsSync(p));
                     if (!dashPath) {

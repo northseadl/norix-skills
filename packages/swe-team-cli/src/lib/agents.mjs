@@ -16,8 +16,12 @@ import { existsSync } from "node:fs";
 import { readFile, appendFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
-    runCodexSession, resumeCodexSession,
-    runClaudeSession, resumeClaudeSession,
+    runCodexSession,
+    resumeCodexSession,
+    runClaudeSession,
+    resumeClaudeSession,
+    runOpencodeSession,
+    resumeOpencodeSession,
 } from "./engines.mjs";
 import { log } from "./logger.mjs";
 import { writeTextAtomic } from "./atomic.mjs";
@@ -54,8 +58,8 @@ export async function wakeAgent(ctx, agentName, prompt) {
 
     let result;
     try {
-        const sdk = ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex;
-        const runFn = ctx.engine === "claude" ? runClaudeSession : runCodexSession;
+        const sdk = ctx.engine === "opencode" ? ctx.sdks.opencode : (ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex);
+        const runFn = ctx.engine === "opencode" ? runOpencodeSession : (ctx.engine === "claude" ? runClaudeSession : runCodexSession);
         result = await runFn(sdk, prompt, engineOpts);
     } catch (err) {
         const msg = err.message || String(err);
@@ -119,14 +123,17 @@ export async function resumeAgent(ctx, agentName, prompt) {
 
     let result;
     try {
-        const sdk = ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex;
+        const sdk = ctx.engine === "opencode" ? ctx.sdks.opencode : (ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex);
+        
         const threadId = agent.threadId;
 
         if (threadId && ctx.engine === "codex") {
             result = await resumeCodexSession(sdk, threadId, prompt, engineOpts);
+        } else if (threadId && ctx.engine === "opencode") {
+            result = await resumeOpencodeSession(sdk, threadId, prompt, engineOpts);
         } else {
             // Claude doesn't support thread resume; start new session with context
-            const runFn = ctx.engine === "claude" ? runClaudeSession : runCodexSession;
+            const runFn = ctx.engine === "opencode" ? runOpencodeSession : (ctx.engine === "claude" ? runClaudeSession : runCodexSession);
             result = await runFn(sdk, prompt, engineOpts);
         }
     } catch (err) {

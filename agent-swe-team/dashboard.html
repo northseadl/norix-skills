@@ -1349,7 +1349,7 @@
                     if (a.status === 'running') { act = task ? `#${task.id} ${task.title}` : a.role === 'leader' ? 'Coordinating…' : 'Working…'; cls = ' live' }
                     else if (a.status === 'done') act = 'Done';
                     const ago = a.lastSeen ? relTime(a.lastSeen) : '';
-                    return `<div class="ag"><div class="ag-d ${a.status || 'idle'}"></div><div class="ag-info"><div class="ag-n">${esc(n)}</div><div class="ag-a${cls}">${esc(act)}</div></div><div class="ag-t">${ago}</div></div>`
+                    return `<div class="ag"><div class="ag-d ${a.status || 'idle'}"></div><div class="ag-info"><div class="ag-n">${esc(n)} <span style="color:var(--t3);font-weight:normal;font-size:0.85em">(${esc(a.role)})</span></div><div class="ag-a${cls}">${esc(act)}</div></div><div class="ag-t">${ago}</div></div>`
                 }).join('');
             }
 
@@ -1357,7 +1357,7 @@
             const running = agents.find(([, a]) => a.status === 'running');
             if (running) {
                 const [n, a] = running; const task = a.currentTaskId ? tasks.find(t => t.id === a.currentTaskId) : null;
-                document.getElementById('spotWrap').innerHTML = `<div class="spot"><div class="spot-hd"><div class="spot-dot" style="background:${ROLE_CLR[a.role]};box-shadow:0 0 4px ${ROLE_CLR[a.role]}"></div><span class="spot-name">${esc(n)}</span></div><div class="spot-body">${task ? `<div class="spot-line">Working on <b>#${task.id}</b></div><div class="spot-line"><code>${esc(task.title)}</code></div>` : `<div class="spot-line">${a.role === 'leader' ? 'Coordinating…' : 'Processing…'}</div>`}<div class="spot-status"><div class="spot-spin"></div>Working</div></div></div>`
+                document.getElementById('spotWrap').innerHTML = `<div class="spot"><div class="spot-hd"><div class="spot-dot" style="background:${ROLE_CLR[a.role]};box-shadow:0 0 4px ${ROLE_CLR[a.role]}"></div><span class="spot-name">${esc(n)} <span style="opacity:0.6;font-size:0.85em;font-weight:normal;">(${esc(a.role)})</span></span></div><div class="spot-body">${task ? `<div class="spot-line">Working on <b>#${task.id}</b></div><div class="spot-line"><code>${esc(task.title)}</code></div>` : `<div class="spot-line">${a.role === 'leader' ? 'Coordinating…' : 'Processing…'}</div>`}<div class="spot-status"><div class="spot-spin"></div>Working</div></div></div>`
             } else document.getElementById('spotWrap').innerHTML = '';
 
             // Tasks view
@@ -1368,7 +1368,9 @@
                 let ex = ''; if (t.notes) ex += `<div class="tk-notes">${esc(t.notes)}</div>`;
                 if (t.summary && (t.status === 'done' || t.status === 'merged')) ex += `<div class="tk-summary">${esc(t.summary)}</div>`;
                 let prog = ''; if (t.status === 'active' || pv > 0) prog = `<div class="tk-prog"><div class="tpb"><div class="tpf ${cls}" style="width:${pv}%"></div></div><span class="tp-pct">${pv}%</span></div>`;
-                return `<div class="tk glass-light"><div class="tk-row"><div class="tk-dot ${t.status || 'pending'}"></div><div class="tk-main"><div class="tk-title">${esc(t.title || '')}</div><div class="tk-meta"><span class="who">${esc(t.assignee || 'Unassigned')}</span><span>${t.status}</span><span>#${t.id}</span></div></div></div>${ex}${prog}</div>`
+                const assignedAgent = (t.assignee && board.agents) ? board.agents[t.assignee] : null;
+                const assigneeText = assignedAgent ? `${esc(t.assignee)} <span style="font-weight:normal;opacity:0.7">(${esc(assignedAgent.role)})</span>` : esc(t.assignee || 'Unassigned');
+                return `<div class="tk glass-light"><div class="tk-row"><div class="tk-dot ${t.status || 'pending'}"></div><div class="tk-main"><div class="tk-title">${esc(t.title || '')}</div><div class="tk-meta"><span class="who">${assigneeText}</span><span>${t.status}</span><span>#${t.id}</span></div></div></div>${ex}${prog}</div>`
             }).join('');
         }
 
@@ -1394,11 +1396,13 @@
                     const cls = m.from === 'leader' ? 'leader' : m.from === 'hub' ? 'hub' : m.from === 'inspector' ? 'inspector' : m.from === 'master' ? 'master' : 'worker';
                     const init = (m.from || '?')[0].toUpperCase(), ago = m.ts ? relTime(m.ts) : 'just now';
                     const ats = (m.mentions || []).map(n => `<span class="mg-at">@${esc(n)}</span>`).join(' ');
+                    const agent = (board.agents && board.agents[m.from]) || null;
+                    const roleLabel = agent ? ` <span style="color:var(--t3);font-weight:normal;font-size:0.85em">(${esc(agent.role)})</span>` : '';
                     const a = document.createElement('div'); a.className = 'ai';
-                    a.innerHTML = `<div class="ai-av ${cls}">${init}</div><div class="ai-body"><div class="ai-head"><span class="ai-name">${esc(m.from)}</span>${ats}<span class="ai-time">· ${ago}</span></div><div class="ai-text md">${hlAt(renderMd(m.content || ''))}</div></div>`;
+                    a.innerHTML = `<div class="ai-av ${cls}">${init}</div><div class="ai-body"><div class="ai-head"><span class="ai-name">${esc(m.from)}${roleLabel}</span>${ats}<span class="ai-time">· ${ago}</span></div><div class="ai-text md">${hlAt(renderMd(m.content || ''))}</div></div>`;
                     fA.appendChild(a);
                     const mv = document.createElement('div'); mv.className = 'mg';
-                    mv.innerHTML = `<div class="mg-av ${cls}">${init}</div><div class="mg-body"><div class="mg-hd"><span class="mg-who ${cls}">${esc(m.from)}</span>${ats}<span class="mg-ts">· ${ago}</span></div><div class="mg-text md">${hlAt(renderMd(m.content || ''))}</div></div>`;
+                    mv.innerHTML = `<div class="mg-av ${cls}">${init}</div><div class="mg-body"><div class="mg-hd"><span class="mg-who ${cls}">${esc(m.from)}${roleLabel}</span>${ats}<span class="mg-ts">· ${ago}</span></div><div class="mg-text md">${hlAt(renderMd(m.content || ''))}</div></div>`;
                     fM.appendChild(mv)
                 }
                 actEl.appendChild(fA); mvEl.appendChild(fM);

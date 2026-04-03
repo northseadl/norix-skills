@@ -40,10 +40,10 @@ export const CLAUDE_MODE_MAP = {
 
 // ─── Lazy SDK Loading ───
 
-const _sdkCache = { codex: null, claude: null };
+const _sdkCache = { codex: null, claude: null, opencode: null };
 
-export async function loadSdks({ needsCodex, needsClaude }, dryRun) {
-    const sdks = { codex: null, claude: null };
+export async function loadSdks({ needsCodex, needsClaude, needsOpencode }, dryRun) {
+    const sdks = { codex: null, claude: null, opencode: null };
     if (dryRun) return sdks;
 
     if (needsCodex && !_sdkCache.codex) {
@@ -72,8 +72,26 @@ export async function loadSdks({ needsCodex, needsClaude }, dryRun) {
             );
         }
     }
+    if (needsOpencode && !_sdkCache.opencode) {
+        try {
+            const mod = await import("@opencode-ai/sdk");
+            // Connect to existing OpenCode server — do NOT start a new one.
+            // createOpencode() spawns a server and conflicts if OpenCode is already running.
+            const baseUrl = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
+            const client = mod.createOpencodeClient({ baseUrl });
+            // Verify connectivity
+            await client.session.list();
+            _sdkCache.opencode = client;
+            log("INFO", `OpenCode client connected to ${baseUrl}`);
+        } catch (err) {
+            fatal(
+                `Cannot connect to OpenCode: ${err.message}\n  Ensure OpenCode is running (opencode) and accessible at ${process.env.OPENCODE_URL || "http://127.0.0.1:4096"}`,
+            );
+        }
+    }
     sdks.codex = _sdkCache.codex;
     sdks.claude = _sdkCache.claude;
+    sdks.opencode = _sdkCache.opencode;
     return sdks;
 }
 
@@ -237,6 +255,134 @@ export async function runClaudeSession(sdk, prompt, { approvalMode, workingDirec
 // For BLOCKED→Reply, we start a new session with the full context.
 export async function resumeClaudeSession(sdk, _threadId, prompt, opts) {
     return runClaudeSession(sdk, prompt, opts);
+}
+
+// ─── OpenCode Session ───
+// Architecture notes (verified empirically):
+//   - prompt() (sync) returns after the FIRST step — does NOT wait for the full agentic loop
+//   - promptAsync() triggers inference + tool execution correctly
+//   - session.status() is broken (always returns {})
+//   - Completion signal: poll messages() until last assistant message has info.finish === "stop"
+//   - Multi-step sessions produce multiple assistant messages (finish: "tool-calls" → ... → "stop")
+
+export async function runOpencodeSession(client, prompt, { workingDirectory, onEvent }) {
+    if (onEvent) onEvent({ kind: "init", text: `init model=opencode` });
+
+    const sessionRes = await client.session.create({ query: { directory: workingDirectory } });
+    if (sessionRes.error) throw new Error("OpenCode session.create failed: " + JSON.stringify(sessionRes.error));
+    const sessionId = sessionRes.data.id;
+    log("INFO", `OpenCode session created: ${sessionId}`);
+
+    return _executeOpencodePrompt(client, sessionId, prompt, workingDirectory, onEvent);
+}
+
+export async function resumeOpencodeSession(client, threadId, prompt, { workingDirectory, onEvent }) {
+    if (onEvent) onEvent({ kind: "init", text: `resume opencode session=${threadId.slice(0, 20)}` });
+    return _executeOpencodePrompt(client, threadId, prompt, workingDirectory, onEvent);
+}
+
+const OPENCODE_POLL_INTERVAL = 3_000;  // 3s between polls
+const OPENCODE_TIMEOUT = 10 * 60_000;  // 10 min max per prompt
+
+async function _executeOpencodePrompt(client, sessionId, prompt, workingDirectory, onEvent) {
+    // Fire promptAsync — triggers inference + tool execution
+    const res = await client.session.promptAsync({
+        path: { id: sessionId },
+        query: { directory: workingDirectory },
+        body: { parts: [{ type: "text", text: prompt }] },
+    });
+    if (res.error) throw new Error("OpenCode promptAsync failed: " + JSON.stringify(res.error));
+
+    // Poll messages until the agentic loop completes (last assistant finish === "stop")
+    const start = Date.now();
+    let lastReportedMsgCount = 0;
+
+    while (Date.now() - start < OPENCODE_TIMEOUT) {
+        await new Promise(r => setTimeout(r, OPENCODE_POLL_INTERVAL));
+
+        let msgs;
+        try {
+            const msgsRes = await client.session.messages({ path: { id: sessionId } });
+            msgs = msgsRes.data || [];
+        } catch {
+            continue; // transient error, retry
+        }
+
+        // Report new tool activity to the event log
+        if (onEvent && msgs.length > lastReportedMsgCount) {
+            for (const msg of msgs.slice(lastReportedMsgCount)) {
+                if (msg.info?.role !== "assistant") continue;
+                for (const p of (msg.parts || [])) {
+                    if (p.type === "tool" && p.state?.status === "completed") {
+                        const toolName = p.tool || "tool";
+                        const input = JSON.stringify(p.state?.input || {}).slice(0, 100);
+                        onEvent({ kind: "cmd", text: `${toolName}: ${input}` });
+                    }
+                    if (p.type === "text" && p.text) {
+                        onEvent({ kind: "msg", text: p.text.slice(0, 200).replace(/\n/g, " ") });
+                    }
+                }
+            }
+            lastReportedMsgCount = msgs.length;
+        }
+
+        // Check if the last assistant message has finish === "stop"
+        const assistantMsgs = msgs.filter(m => m.info?.role === "assistant");
+        if (assistantMsgs.length === 0) continue;
+
+        const lastAssistant = assistantMsgs[assistantMsgs.length - 1];
+        if (lastAssistant.info?.finish === "stop") {
+            // Agentic loop complete — extract final response from ALL assistant messages
+            let finalResponse = "";
+            const totalUsage = { input_tokens: 0, output_tokens: 0, cached_input_tokens: 0 };
+
+            for (const msg of assistantMsgs) {
+                const parts = msg.parts || [];
+                // Primary: non-empty text parts
+                const textParts = parts.filter(p => p.type === "text" && p.text);
+                if (textParts.length > 0) {
+                    finalResponse += textParts.map(p => p.text).join("\n") + "\n";
+                } else {
+                    // Fallback: reasoning parts (model often puts responses here)
+                    const reasoning = parts.filter(p => p.type === "reasoning" && p.text);
+                    if (reasoning.length > 0) {
+                        finalResponse += reasoning.map(p => p.text).join("\n") + "\n";
+                    }
+                }
+                const tokens = msg.info?.tokens || {};
+                totalUsage.input_tokens += tokens.input || 0;
+                totalUsage.output_tokens += tokens.output || 0;
+                totalUsage.cached_input_tokens += tokens.cache?.read || 0;
+            }
+
+            finalResponse = finalResponse.trim();
+
+            if (onEvent) {
+                onEvent({ kind: "usage", text: `tokens in=${totalUsage.input_tokens} cached=${totalUsage.cached_input_tokens} out=${totalUsage.output_tokens}` });
+            }
+
+            log("INFO", `OpenCode session ${sessionId} completed: ${assistantMsgs.length} steps, ${totalUsage.output_tokens} output tokens`);
+            return { finalResponse, usage: totalUsage, threadId: sessionId };
+        }
+    }
+
+    // Timeout — extract whatever we have
+    log("WARN", `OpenCode session ${sessionId} timed out after ${OPENCODE_TIMEOUT / 1000}s`);
+    const msgsRes = await client.session.messages({ path: { id: sessionId } });
+    const msgs = msgsRes.data || [];
+    const assistantMsgs = msgs.filter(m => m.info?.role === "assistant");
+    let finalResponse = "";
+    for (const msg of assistantMsgs) {
+        const parts = msg.parts || [];
+        const textParts = parts.filter(p => p.type === "text" && p.text);
+        if (textParts.length > 0) {
+            finalResponse += textParts.map(p => p.text).join("\n") + "\n";
+        } else {
+            const reasoning = parts.filter(p => p.type === "reasoning" && p.text);
+            if (reasoning.length > 0) finalResponse += reasoning.map(p => p.text).join("\n") + "\n";
+        }
+    }
+    return { finalResponse: finalResponse.trim(), usage: { input_tokens: 0, output_tokens: 0 }, threadId: sessionId };
 }
 
 // ─── Event Formatting ───

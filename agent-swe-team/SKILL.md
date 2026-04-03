@@ -1,11 +1,11 @@
 ---
 name: agent-swe-team
 metadata:
-  version: 0.5.12
+  version: 0.5.13
 description: >-
   Multi-agent SWE team built on the Workshop model. Full-stack vertical workers,
   meeting room with @mention notification, private pipes, shared task board.
-  Git worktree isolation, Leader-driven coordination. Mixed Codex/Claude Code engine.
+  Git worktree isolation, Leader-driven coordination. Mixed Codex/Claude/OpenCode engine.
   Use when a task needs engineering depth beyond a single agent.
   NOT for simple task parallelism (use agent-task-orchestration)
   or design discussions (use agent-brainstorm).
@@ -139,7 +139,7 @@ node scripts/team.mjs status [--cwd <DIR>]
 | `--goal` | 必需 | 目标描述 |
 | `--cwd` | cwd | 项目目录 |
 | `--roles` | `leader,worker:2,inspector` | 团队组成 |
-| `--engine` | `codex` | `codex`(thread resume) / `claude`(new session) |
+| `--engine` | `codex` | `codex` / `claude` / `opencode` |
 | `--base` | `HEAD` | 基准 commit |
 | `--port` | 自动 | 端口号 |
 | `--dry-run` | false | 模拟（不启动 Agent） |

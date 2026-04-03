@@ -3,7 +3,7 @@
 import { resolve } from "node:path";
 
 export const DEFAULT_ROLES = ["leader", "worker:2", "inspector"];
-export const VALID_ENGINES = ["codex", "claude"];
+export const VALID_ENGINES = ["codex", "claude", "opencode"];
 
 export function parseGlobalArgs(argv, fatal) {
     const args = argv.slice(2);
@@ -75,7 +75,7 @@ Usage:
 
 Global options:
   --cwd <path>          Working directory (default: cwd)
-  --engine <codex|claude>  Engine (default: codex)
+  --engine <codex|claude|opencode>  Engine (default: codex)
   --port <N>            Server port (default: auto)
   --max-pulses <N>      Max pulses per agent turn (default: 3)
   --dry-run             Simulate without running agents

@@ -13204,7 +13204,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 // src/lib/cli.mjs
 import { resolve } from "node:path";
 var DEFAULT_ROLES = ["leader", "worker:2", "inspector"];
-var VALID_ENGINES = ["codex", "claude"];
+var VALID_ENGINES = ["codex", "claude", "opencode"];
 function parseGlobalArgs(argv, fatal2) {
   const args = argv.slice(2);
   const config = {
@@ -13290,7 +13290,7 @@ Usage:
 
 Global options:
   --cwd <path>          Working directory (default: cwd)
-  --engine <codex|claude>  Engine (default: codex)
+  --engine <codex|claude|opencode>  Engine (default: codex)
   --port <N>            Server port (default: auto)
   --max-pulses <N>      Max pulses per agent turn (default: 3)
   --dry-run             Simulate without running agents
@@ -13843,9 +13843,9 @@ var CLAUDE_MODE_MAP = {
   "auto-edit": "acceptEdits",
   "full-auto": "bypassPermissions"
 };
-var _sdkCache = { codex: null, claude: null };
-async function loadSdks({ needsCodex, needsClaude }, dryRun) {
-  const sdks = { codex: null, claude: null };
+var _sdkCache = { codex: null, claude: null, opencode: null };
+async function loadSdks({ needsCodex, needsClaude, needsOpencode }, dryRun) {
+  const sdks = { codex: null, claude: null, opencode: null };
   if (dryRun) return sdks;
   if (needsCodex && !_sdkCache.codex) {
     try {
@@ -13875,8 +13875,24 @@ async function loadSdks({ needsCodex, needsClaude }, dryRun) {
       );
     }
   }
+  if (needsOpencode && !_sdkCache.opencode) {
+    try {
+      const mod = await import("@opencode-ai/sdk");
+      const baseUrl = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
+      const client = mod.createOpencodeClient({ baseUrl });
+      await client.session.list();
+      _sdkCache.opencode = client;
+      log("INFO", `OpenCode client connected to ${baseUrl}`);
+    } catch (err) {
+      fatal(
+        `Cannot connect to OpenCode: ${err.message}
+  Ensure OpenCode is running (opencode) and accessible at ${process.env.OPENCODE_URL || "http://127.0.0.1:4096"}`
+      );
+    }
+  }
   sdks.codex = _sdkCache.codex;
   sdks.claude = _sdkCache.claude;
+  sdks.opencode = _sdkCache.opencode;
   return sdks;
 }
 async function runCodexSession(codex, prompt, { approvalMode, sandboxMode, workingDirectory, onEvent }) {
@@ -14004,6 +14020,101 @@ async function runClaudeSession(sdk, prompt, { approvalMode, workingDirectory, o
   }
   return { finalResponse, usage, threadId: sessionId };
 }
+async function runOpencodeSession(client, prompt, { workingDirectory, onEvent }) {
+  if (onEvent) onEvent({ kind: "init", text: `init model=opencode` });
+  const sessionRes = await client.session.create({ query: { directory: workingDirectory } });
+  if (sessionRes.error) throw new Error("OpenCode session.create failed: " + JSON.stringify(sessionRes.error));
+  const sessionId = sessionRes.data.id;
+  log("INFO", `OpenCode session created: ${sessionId}`);
+  return _executeOpencodePrompt(client, sessionId, prompt, workingDirectory, onEvent);
+}
+async function resumeOpencodeSession(client, threadId, prompt, { workingDirectory, onEvent }) {
+  if (onEvent) onEvent({ kind: "init", text: `resume opencode session=${threadId.slice(0, 20)}` });
+  return _executeOpencodePrompt(client, threadId, prompt, workingDirectory, onEvent);
+}
+var OPENCODE_POLL_INTERVAL = 3e3;
+var OPENCODE_TIMEOUT = 10 * 6e4;
+async function _executeOpencodePrompt(client, sessionId, prompt, workingDirectory, onEvent) {
+  const res = await client.session.promptAsync({
+    path: { id: sessionId },
+    query: { directory: workingDirectory },
+    body: { parts: [{ type: "text", text: prompt }] }
+  });
+  if (res.error) throw new Error("OpenCode promptAsync failed: " + JSON.stringify(res.error));
+  const start = Date.now();
+  let lastReportedMsgCount = 0;
+  while (Date.now() - start < OPENCODE_TIMEOUT) {
+    await new Promise((r) => setTimeout(r, OPENCODE_POLL_INTERVAL));
+    let msgs2;
+    try {
+      const msgsRes2 = await client.session.messages({ path: { id: sessionId } });
+      msgs2 = msgsRes2.data || [];
+    } catch {
+      continue;
+    }
+    if (onEvent && msgs2.length > lastReportedMsgCount) {
+      for (const msg of msgs2.slice(lastReportedMsgCount)) {
+        if (msg.info?.role !== "assistant") continue;
+        for (const p2 of msg.parts || []) {
+          if (p2.type === "tool" && p2.state?.status === "completed") {
+            const toolName = p2.tool || "tool";
+            const input = JSON.stringify(p2.state?.input || {}).slice(0, 100);
+            onEvent({ kind: "cmd", text: `${toolName}: ${input}` });
+          }
+          if (p2.type === "text" && p2.text) {
+            onEvent({ kind: "msg", text: p2.text.slice(0, 200).replace(/\n/g, " ") });
+          }
+        }
+      }
+      lastReportedMsgCount = msgs2.length;
+    }
+    const assistantMsgs2 = msgs2.filter((m2) => m2.info?.role === "assistant");
+    if (assistantMsgs2.length === 0) continue;
+    const lastAssistant = assistantMsgs2[assistantMsgs2.length - 1];
+    if (lastAssistant.info?.finish === "stop") {
+      let finalResponse2 = "";
+      const totalUsage = { input_tokens: 0, output_tokens: 0, cached_input_tokens: 0 };
+      for (const msg of assistantMsgs2) {
+        const parts = msg.parts || [];
+        const textParts = parts.filter((p2) => p2.type === "text" && p2.text);
+        if (textParts.length > 0) {
+          finalResponse2 += textParts.map((p2) => p2.text).join("\n") + "\n";
+        } else {
+          const reasoning = parts.filter((p2) => p2.type === "reasoning" && p2.text);
+          if (reasoning.length > 0) {
+            finalResponse2 += reasoning.map((p2) => p2.text).join("\n") + "\n";
+          }
+        }
+        const tokens = msg.info?.tokens || {};
+        totalUsage.input_tokens += tokens.input || 0;
+        totalUsage.output_tokens += tokens.output || 0;
+        totalUsage.cached_input_tokens += tokens.cache?.read || 0;
+      }
+      finalResponse2 = finalResponse2.trim();
+      if (onEvent) {
+        onEvent({ kind: "usage", text: `tokens in=${totalUsage.input_tokens} cached=${totalUsage.cached_input_tokens} out=${totalUsage.output_tokens}` });
+      }
+      log("INFO", `OpenCode session ${sessionId} completed: ${assistantMsgs2.length} steps, ${totalUsage.output_tokens} output tokens`);
+      return { finalResponse: finalResponse2, usage: totalUsage, threadId: sessionId };
+    }
+  }
+  log("WARN", `OpenCode session ${sessionId} timed out after ${OPENCODE_TIMEOUT / 1e3}s`);
+  const msgsRes = await client.session.messages({ path: { id: sessionId } });
+  const msgs = msgsRes.data || [];
+  const assistantMsgs = msgs.filter((m2) => m2.info?.role === "assistant");
+  let finalResponse = "";
+  for (const msg of assistantMsgs) {
+    const parts = msg.parts || [];
+    const textParts = parts.filter((p2) => p2.type === "text" && p2.text);
+    if (textParts.length > 0) {
+      finalResponse += textParts.map((p2) => p2.text).join("\n") + "\n";
+    } else {
+      const reasoning = parts.filter((p2) => p2.type === "reasoning" && p2.text);
+      if (reasoning.length > 0) finalResponse += reasoning.map((p2) => p2.text).join("\n") + "\n";
+    }
+  }
+  return { finalResponse: finalResponse.trim(), usage: { input_tokens: 0, output_tokens: 0 }, threadId: sessionId };
+}
 function formatCodexEvent(event) {
   if (!event || !event.type) return null;
   switch (event.type) {
@@ -14065,8 +14176,8 @@ async function wakeAgent(ctx, agentName, prompt) {
   };
   let result;
   try {
-    const sdk = ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex;
-    const runFn = ctx.engine === "claude" ? runClaudeSession : runCodexSession;
+    const sdk = ctx.engine === "opencode" ? ctx.sdks.opencode : ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex;
+    const runFn = ctx.engine === "opencode" ? runOpencodeSession : ctx.engine === "claude" ? runClaudeSession : runCodexSession;
     result = await runFn(sdk, prompt, engineOpts);
   } catch (err) {
     const msg = err.message || String(err);
@@ -14113,12 +14224,14 @@ async function resumeAgent(ctx, agentName, prompt) {
   };
   let result;
   try {
-    const sdk = ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex;
+    const sdk = ctx.engine === "opencode" ? ctx.sdks.opencode : ctx.engine === "claude" ? ctx.sdks.claude : ctx.sdks.codex;
     const threadId2 = agent.threadId;
     if (threadId2 && ctx.engine === "codex") {
       result = await resumeCodexSession(sdk, threadId2, prompt, engineOpts);
+    } else if (threadId2 && ctx.engine === "opencode") {
+      result = await resumeOpencodeSession(sdk, threadId2, prompt, engineOpts);
     } else {
-      const runFn = ctx.engine === "claude" ? runClaudeSession : runCodexSession;
+      const runFn = ctx.engine === "opencode" ? runOpencodeSession : ctx.engine === "claude" ? runClaudeSession : runCodexSession;
       result = await runFn(sdk, prompt, engineOpts);
     }
   } catch (err) {
@@ -14600,7 +14713,7 @@ async function serve(cwd, opts) {
   const board = new Board(workshopDir);
   await meeting.init();
   await board.init(runId, goal);
-  const engineInfo = { needsCodex: engine === "codex", needsClaude: engine === "claude" };
+  const engineInfo = { needsCodex: engine === "codex", needsClaude: engine === "claude", needsOpencode: engine === "opencode" };
   const sdks = await loadSdks(engineInfo, dryRun);
   const worktreeRoot = join5(cwd, ".workshop", "worktrees", runId);
   let integrationWorktreePath = null;
@@ -16325,7 +16438,9 @@ async function serve(cwd, opts) {
           const candidates = [
             join5(scriptDir, "dashboard.html"),
             join5(scriptDir, "..", "dashboard.html"),
-            join5(scriptDir, "..", "..", "dashboard.html")
+            join5(scriptDir, "..", "..", "dashboard.html"),
+            join5(scriptDir, "..", "..", "..", "..", "agent-swe-team", "dashboard.html"),
+            join5(scriptDir, "..", "..", "..", "..", "agent-swe-team", "scripts", "dashboard.html")
           ];
           const dashPath = candidates.find((p2) => existsSync6(p2));
           if (!dashPath) {
