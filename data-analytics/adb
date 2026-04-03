@@ -9,7 +9,7 @@
 #   schema   Schema documentation generator
 
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "$0")/scripts" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")/adb_scripts" && pwd)"
 
 module="${1:-help}"; shift 2>/dev/null || true
 

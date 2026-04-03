@@ -1,4 +1,0 @@
-interface:
-  display_name: "Doc Sentinel"
-  short_description: "Doc-code binding, staleness detection, change plans"
-  default_prompt: "Check documentation health and generate change plans"

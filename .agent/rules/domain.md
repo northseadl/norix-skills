@@ -13,19 +13,15 @@ norix-skills/
 │   ├── brainstorm-cli/         # agent-brainstorm CLI 源码
 │   ├── swe-team-cli/           # agent-swe-team CLI 源码（team + ws + lib/）
 │   └── dispatch-cli/           # agent-task-orchestration CLI 源码（dispatch + lib/）
-├── adb-mysql/                  # ADB for MySQL 只读数据分析
+├── data-analytics/             # 统一数据分析技能 (涵盖 ADB MySQL 与 ES 分析)
 ├── agent-brainstorm/           # 多 Agent 异步观点碰撞（scripts/ 仅含打包产物 + panel.html）
 ├── agent-front-design/         # 前端审美判断力 + 精工度 + 自我批评循环（v1.0 精简重构）
 ├── agent-swe-team/             # 角色化 SWE 团队协作（scripts/ 仅含打包产物 + dashboard.html）
 ├── agent-task-orchestration/   # 编排专用引擎（scripts/ 仅含打包产物 + dashboard.html）
-├── cnb-cool-integration/       # cnb.cool 云原生构建集成
-├── coding-net-integration/     # Coding.net DevOps API 集成
-├── es-analytics/               # Elasticsearch / SLS ES 只读分析
 ├── feishu-integration/         # 飞书 API 集成 v1.0.0（agent-centric JSON 输出协议 · @larksuiteoapi/node-sdk · esbuild CJS 打包 · 8模块92命令）
 ├── image-studio/               # Nano Banana AI 图像生成·精修·图标提取（rembg+BiRefNet 去背→检测→裁切）
 ├── llm-agent-dev/              # LLM Agent 工程全栈（设计/仿真/收敛）
 ├── pm-toolkit/                 # Mermaid 图表 + 网页原型本地预览面板
-├── doc-sentinel/               # 文档-代码变更通知系统（溯源绑定/Git diff 变更计划/幂等执行）
 ├── skill-creator/              # 技能创建/迭代/评估/描述优化（上游 anthropics/skills 同步）
 ├── web-scraper/                # SPA 网页抓取与 Markdown 转换
 └── scripts/

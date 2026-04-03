@@ -1,4 +1,0 @@
-interface:
-  display_name: "ES 数据分析"
-  short_description: "Elasticsearch/SLS read-only analytics and log search"
-  default_prompt: "Use $es-analytics to query and analyze Elasticsearch data."

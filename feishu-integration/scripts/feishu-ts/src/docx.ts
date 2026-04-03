@@ -178,7 +178,7 @@ export function markdownToBlocks(
       continue;
     }
 
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { blocks.push({ block_type: BT_DIVIDER }); i++; continue; }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { blocks.push({ block_type: BT_DIVIDER, divider: {} }); i++; continue; }
 
     if (line.startsWith("> ")) { blocks.push({ block_type: BT_QUOTE, quote: { elements: parseInlineMd(line.slice(2)) } }); i++; continue; }
 
@@ -280,13 +280,15 @@ export async function flushBlocks(
 
   const flushBatch = async () => {
     if (!batch.length) return;
-    const result = await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children`, { children: batch, index: currentIndex });
+    const payload: Record<string, unknown> = { children: batch };
+    if (currentIndex >= 0) payload.index = currentIndex;
+    const result = await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children`, payload);
     if ((result.code as number) !== 0) {
       Log.error(`Block write failed at index ${currentIndex}: ${result.msg ?? "?"}`);
       totalFailed += batch.length;
     } else {
       totalWritten += batch.length;
-      if (currentIndex !== -1) currentIndex += batch.length;
+      if (currentIndex >= 0) currentIndex += batch.length;
     }
     batch = [];
     await sleep(200);
@@ -296,7 +298,7 @@ export async function flushBlocks(
     const block = blocks[i]!;
     if (block.block_type !== BT_TABLE) {
       batch.push(block);
-      if (batch.length >= 50) await flushBatch();
+      if (batch.length >= 1) await flushBatch();
     } else {
       await flushBatch();
 
@@ -308,11 +310,13 @@ export async function flushBlocks(
       const tableDef = { property: { column_size: colCount, row_size: Math.min(rowCount, 9), column_width: td.widths, header_row: true } };
       const tableBlock: BlockData = { block_type: BT_TABLE, table: tableDef };
 
-      const createResult = await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children`, { children: [tableBlock], index: currentIndex });
+      const tablePayload: Record<string, unknown> = { children: [tableBlock] };
+      if (currentIndex >= 0) tablePayload.index = currentIndex;
+      const createResult = await userRequest(client, "POST", `/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children`, tablePayload);
       if ((createResult.code as number) !== 0) { Log.error(`Table create failed: ${createResult.msg ?? "?"}`); totalFailed++; continue; }
 
       totalWritten++;
-      if (currentIndex !== -1) currentIndex += 1;
+      if (currentIndex >= 0) currentIndex += 1;
 
       const createdBlocks = ((createResult.data as Record<string, unknown>)?.children ?? []) as Record<string, unknown>[];
       if (!createdBlocks.length) continue;
@@ -371,9 +375,32 @@ export async function flushBlocks(
   }
 }
 
-// ── Image Upload ────────────────────────────────────────────────────────────
+// ── Image Upload & Insert (3-step per Feishu API) ───────────────────────────
 
-async function uploadImage(documentId: string, filePath: string): Promise<string> {
+function readImageDimensions(buf: Buffer): { width: number; height: number } {
+  // PNG: bytes 16-23 contain width(4) and height(4) in big-endian
+  if (buf.length > 24 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  }
+  // JPEG: scan for SOF0/SOF2 marker (0xFF 0xC0 or 0xFF 0xC2)
+  if (buf.length > 2 && buf[0] === 0xFF && buf[1] === 0xD8) {
+    let offset = 2;
+    while (offset < buf.length - 9) {
+      if (buf[offset] !== 0xFF) break;
+      const marker = buf[offset + 1]!;
+      if (marker === 0xC0 || marker === 0xC2) {
+        return { height: buf.readUInt16BE(offset + 5), width: buf.readUInt16BE(offset + 7) };
+      }
+      const segLen = buf.readUInt16BE(offset + 2);
+      offset += 2 + segLen;
+    }
+  }
+  return { width: 800, height: 600 }; // fallback
+}
+
+async function uploadImageToBlock(
+  blockId: string, filePath: string
+): Promise<string> {
   const token = await resolveUserToken();
   if (!fs.existsSync(filePath)) fail(`File not found: ${filePath}`);
 
@@ -385,7 +412,7 @@ async function uploadImage(documentId: string, filePath: string): Promise<string
   formData.append("file", blob, filename);
   formData.append("file_name", filename);
   formData.append("parent_type", "docx_image");
-  formData.append("parent_node", documentId);
+  formData.append("parent_node", blockId);
   formData.append("size", String(fileBuffer.length));
 
   const res = await fetch(`${API_BASE}/drive/v1/medias/upload_all`, {
@@ -399,6 +426,56 @@ async function uploadImage(documentId: string, filePath: string): Promise<string
   const fileToken = ((result.data as Record<string, unknown>)?.file_token ?? "") as string;
   if (!fileToken) fail("Upload returned no file_token");
   return fileToken;
+}
+
+/**
+ * Insert image into document: 3-step Feishu API flow.
+ * 1. Create empty image block → get block_id
+ * 2. Upload file with parent_node = block_id → get file_token
+ * 3. PATCH block with replace_image { token, width, height }
+ */
+async function insertImage(
+  client: lark.Client, documentId: string, filePath: string, insertIndex: number
+): Promise<void> {
+  if (!fs.existsSync(filePath)) fail(`File not found: ${filePath}`);
+  const fileBuffer = fs.readFileSync(filePath);
+  const dims = readImageDimensions(fileBuffer);
+  Log.info(`Image dimensions: ${dims.width}x${dims.height}`);
+
+  // Step 1: Create empty image block
+  const createPayload: Record<string, unknown> = {
+    children: [{ block_type: BT_IMAGE, image: {} }],
+  };
+  if (insertIndex >= 0) createPayload.index = insertIndex;
+  const createResult = await userRequest(client, "POST",
+    `/docx/v1/documents/${documentId}/blocks/${documentId}/children`, createPayload);
+  if ((createResult.code as number) !== 0) fail(`Create image block failed: ${createResult.msg ?? "?"}`);
+
+  const createdBlocks = ((createResult.data as Record<string, unknown>)?.children ?? []) as Record<string, unknown>[];
+  if (!createdBlocks.length) fail("No block returned after image block creation");
+  const blockId = (createdBlocks[0]!.block_id ?? "") as string;
+  if (!blockId) fail("No block_id in created image block");
+  Log.info(`Created empty image block: ${blockId}`);
+
+  await sleep(300);
+
+  // Step 2: Upload image with parent_node = blockId
+  Log.info(`Uploading image: ${filePath}`);
+  const fileToken = await uploadImageToBlock(blockId, filePath);
+  Log.ok(`Uploaded: ${fileToken}`);
+
+  await sleep(300);
+
+  // Step 3: PATCH block with replace_image
+  const patchResult = await userRequest(client, "PATCH",
+    `/docx/v1/documents/${documentId}/blocks/${blockId}`, {
+      replace_image: { token: fileToken, width: dims.width, height: dims.height },
+    });
+  if ((patchResult.code as number) !== 0) {
+    Log.error(`PATCH replace_image failed: ${patchResult.msg ?? "?"}`);
+  } else {
+    Log.ok(`Image inserted successfully`);
+  }
 }
 
 // ── Block-to-Markdown Renderer ──────────────────────────────────────────────
@@ -759,9 +836,14 @@ export async function docMain(argv: string[]): Promise<void> {
       const parsed = markdownToBlocks(mdText);
       blocks = parsed.blocks; tableData = parsed.tableData;
     } else if (args.image) {
-      Log.info(`Uploading image: ${args.image}`);
-      const fileToken = await uploadImage(docId, args.image);
-      blocks = [{ block_type: BT_IMAGE, image: { token: fileToken } }];
+      // Image uses dedicated 3-step flow (create block → upload → patch)
+      await insertImage(client, docId, args.image, insertIndex);
+      respond({
+        document_id: docId,
+        blocks_count: 1,
+        index: insertIndex,
+      }, `Image inserted at index ${insertIndex === -1 ? "end" : insertIndex}`);
+      return;
     } else if (args.text) {
       blocks = [{ block_type: BT_TEXT, text: { elements: [{ text_run: { content: args.text } }] } }];
     } else if (args.heading) {
@@ -774,7 +856,7 @@ export async function docMain(argv: string[]): Promise<void> {
       const langCode = LANG_MAP[lang.toLowerCase()] ?? 1;
       blocks = [{ block_type: BT_CODE, code: { language: langCode, elements: [{ text_run: { content: args.code } }] } }];
     } else if (args.divider) {
-      blocks = [{ block_type: BT_DIVIDER }];
+      blocks = [{ block_type: BT_DIVIDER, divider: {} }];
     } else {
       fail("Specify content: --text, --heading, --code, --file, --markdown, --image, or --divider");
     }
