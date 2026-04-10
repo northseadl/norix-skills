@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Sync norix-skills repository into global skill directories.
 
-Supports three targets with different sync strategies:
+Supports four targets with different sync strategies:
   - Antigravity: full rsync (physical copy) — symlinks not followed by scanner
   - Codex: SKILL.md materialized + other entries symlinked — for fast dev iteration
   - Claude: SKILL.md materialized + other entries symlinked — Claude Code global skills
+  - Trae: SKILL.md materialized + other entries symlinked — Trae IDE global skills
 
 Design goals:
   1. SAFETY — Only manage skills that originate from norix-skills.
@@ -22,6 +23,7 @@ Usage:
   python3 scripts/sync_global_skills.py --target antigravity
   python3 scripts/sync_global_skills.py --target codex
   python3 scripts/sync_global_skills.py --target claude
+  python3 scripts/sync_global_skills.py --target trae
   python3 scripts/sync_global_skills.py --target all --force
 """
 
@@ -398,6 +400,14 @@ def default_claude_dir() -> Path:
     return Path.home() / ".claude" / "skills"
 
 
+def default_trae_dir() -> Path:
+    return Path.home() / ".trae" / "skills"
+
+
+def default_qoder_dir() -> Path:
+    return Path.home() / ".qoder" / "skills"
+
+
 # ─── Target Configuration ───────────────────────────────────────────
 
 @dataclass
@@ -409,6 +419,7 @@ class TargetConfig:
 
 def resolve_targets(
     target_choice: str, ag_dir: Path, codex_dir: Path, claude_dir: Path,
+    trae_dir: Path, qoder_dir: Path,
 ) -> list[TargetConfig]:
     targets = []
     if target_choice in ("antigravity", "all"):
@@ -417,6 +428,10 @@ def resolve_targets(
         targets.append(TargetConfig("codex", codex_dir, "symlink"))
     if target_choice in ("claude", "all"):
         targets.append(TargetConfig("claude", claude_dir, "symlink"))
+    if target_choice in ("trae", "all"):
+        targets.append(TargetConfig("trae", trae_dir, "symlink"))
+    if target_choice in ("qoder", "all"):
+        targets.append(TargetConfig("qoder", qoder_dir, "symlink"))
     return targets
 
 
@@ -434,7 +449,7 @@ def build_parser(default_repo: Path) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--target",
-        choices=["antigravity", "codex", "claude", "all"],
+        choices=["antigravity", "codex", "claude", "trae", "qoder", "all"],
         default="all",
         help="Sync destination (default: all)",
     )
@@ -461,6 +476,18 @@ def build_parser(default_repo: Path) -> argparse.ArgumentParser:
         type=Path,
         default=default_claude_dir(),
         help="Claude Code global skills directory",
+    )
+    parser.add_argument(
+        "--trae-dir",
+        type=Path,
+        default=default_trae_dir(),
+        help="Trae IDE global skills directory",
+    )
+    parser.add_argument(
+        "--qoder-dir",
+        type=Path,
+        default=default_qoder_dir(),
+        help="Qoder global skills directory",
     )
     parser.add_argument(
         "--force",
@@ -554,7 +581,9 @@ def main() -> int:
     ag_dir = resolve_path(args.antigravity_dir)
     codex_dir = resolve_path(args.codex_dir)
     claude_dir = resolve_path(args.claude_dir)
-    targets = resolve_targets(args.target, ag_dir, codex_dir, claude_dir)
+    trae_dir = resolve_path(args.trae_dir)
+    qoder_dir = resolve_path(args.qoder_dir)
+    targets = resolve_targets(args.target, ag_dir, codex_dir, claude_dir, trae_dir, qoder_dir)
 
     if args.status:
         return show_status(targets)
